@@ -1,36 +1,60 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# MTG Collection Value Tracker
 
-## Getting Started
+A free, self-hosted web app for tracking the value of a Magic: The Gathering
+collection over time, plus per-card price history.
 
-First, run the development server:
+## Status
+
+Pre-alpha. Phase 0 (project scaffolding) only.
+
+## Features (v1 scope)
+
+- **Portfolio tracking** — add printings to a collection (quantity, finish,
+  condition, date added) and chart total collection value over time.
+- **Card price history** — look up any single printing and view its price chart.
+
+Single-user, USD-only, no account system.
+
+## Data sources
+
+- [Scryfall](https://scryfall.com/docs/api) bulk data — card metadata and the
+  ongoing daily price snapshot (`prices.usd` / `prices.usd_foil`, sourced from
+  TCGplayer).
+- [MTGJSON](https://mtgjson.com/) `AllPrices` — one-time 90-day historical
+  backfill, `tcgplayer` retail series only, joined to Scryfall IDs through
+  `AllIdentifiers`.
+
+This project is not affiliated with, endorsed, or sponsored by Wizards of the
+Coast, Scryfall, MTGJSON, or TCGplayer.
+
+## Stack
+
+Next.js (TypeScript, App Router) · SQLite via Drizzle ORM · Recharts · node-cron
+· Docker Compose
+
+## Development
 
 ```bash
+npm install
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## License
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+Copyright (C) 2026 Nathan Manske
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+This program is free software: you can redistribute it and/or modify it under
+the terms of the GNU Affero General Public License as published by the Free
+Software Foundation, either version 3 of the License, or (at your option) any
+later version.
 
-## Learn More
+This program is distributed in the hope that it will be useful, but WITHOUT ANY
+WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A
+PARTICULAR PURPOSE. See the GNU Affero General Public License for more details.
 
-To learn more about Next.js, take a look at the following resources:
+You should have received a copy of the GNU Affero General Public License along
+with this program. If not, see <https://www.gnu.org/licenses/>.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+AGPLv3 is deliberate: anyone who runs a modified version of this as a network
+service must also offer its source to users interacting with it over the
+network. See [`LICENSE`](LICENSE) for the full text.
