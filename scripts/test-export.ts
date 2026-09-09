@@ -192,6 +192,30 @@ const priceRow = Object.fromEntries(
 );
 // Ordered newest first.
 assert.equal(priceRow.date, "2026-01-02");
+
+// The time series carries no card names: those belong to the card, not the
+// day, and repeating them per date was 20% of the real file. It joins to the
+// collection export on these two columns instead.
+assert.ok(!prices.header.includes("name"), "no name column");
+assert.ok(!prices.header.includes("set_code"), "no set_code column");
+assert.ok(!prices.header.includes("collector_number"), "no collector_number column");
+assert.ok(prices.header.includes("scryfall_id"), "the join key must be present");
+assert.ok(prices.header.includes("finish"), "the join key must be present");
+
+// The join actually resolves: every series in the history is in the collection.
+const collectionKeys = new Set(
+  collection.rows.map(
+    (row) =>
+      `${row[collection.header.indexOf("scryfall_id")]}|${row[collection.header.indexOf("finish")]}`,
+  ),
+);
+for (const row of prices.rows) {
+  const key = `${row[prices.header.indexOf("scryfall_id")]}|${row[prices.header.indexOf("finish")]}`;
+  assert.ok(
+    collectionKeys.has(key),
+    `price history row ${key} must join to the collection export`,
+  );
+}
 assert.equal(priceRow.tracked_price_usd, "12.00");
 assert.equal(priceRow.cardkingdom_buylist_usd, "7.00");
 assert.equal(priceRow.estimated, "false");

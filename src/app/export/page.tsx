@@ -9,7 +9,7 @@ export const dynamic = "force-dynamic";
 
 /** A rough file size, so a 31 MB download is not a surprise. */
 function estimateBytes(id: string, rows: number): number {
-  const perRow = id === "price-history" ? 95 : id === "collection" ? 160 : 60;
+  const perRow = id === "price-history" ? 72 : id === "collection" ? 160 : 60;
   return rows * perRow;
 }
 
@@ -86,13 +86,31 @@ export default async function ExportPage() {
         })}
       </ul>
 
-      <p className="mt-8 text-xs text-neutral-500">
-        Prices are decimal dollars except the Cardmarket columns, which are
-        euros and are labelled as such — nothing here converts between
-        currencies. Vendor prices appear as columns rather than extra rows,
-        which is what keeps the price history to a third of a million rows
-        instead of roughly three million.
-      </p>
+      <div className="mt-8 flex flex-col gap-2 text-xs text-neutral-500">
+        <p>
+          The two card exports are meant to be used together and share no
+          duplicated columns.{" "}
+          <strong className="font-medium">Collection</strong> describes each
+          card once — name, set, quantity, today&apos;s prices.{" "}
+          <strong className="font-medium">Price history</strong> is the time
+          series alone, identified by{" "}
+          <code className="font-mono">scryfall_id</code> and{" "}
+          <code className="font-mono">finish</code>. Join on those two columns
+          to put names against the history.
+        </p>
+        <p>
+          Card names are deliberately absent from the history: repeating them
+          once per date wrote the same 3,724 names 89 times, which was a fifth
+          of the file.
+        </p>
+        <p>
+          Prices are decimal dollars except the Cardmarket columns, which are
+          euros and labelled as such — nothing here converts between
+          currencies. Vendor prices are columns rather than extra rows, which
+          keeps the history to a third of a million rows instead of roughly
+          three million.
+        </p>
+      </div>
     </main>
   );
 }

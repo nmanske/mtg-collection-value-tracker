@@ -15,7 +15,9 @@ Pre-alpha. Phase 0 (project scaffolding) only.
 - **Export** — three CSVs at `/export`: your collection with every vendor's
   current price beside it, the dashboard's value history, and daily price
   history for the cards you hold. Each is bounded by the size of your
-  collection rather than the price tables, which hold 15.7 million rows.
+  collection rather than the price tables, which hold 15.7 million rows. The
+  collection and price-history files carry no duplicated columns and join on
+  `scryfall_id` + `finish`.
 - **Vendor comparison** — what TCGplayer, Card Kingdom, Cardmarket and Mana
   Pool ask for your cards, and what Card Kingdom would pay for them. Scoped to
   your collection: every vendor and side for every printing measures at roughly

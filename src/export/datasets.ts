@@ -203,12 +203,18 @@ const valueHistory: ExportSpec = {
  * Scoped to held printings and pivoted so each date is a single row. Exporting
  * the tables as stored would be roughly 3.1 million rows across two files; this
  * is 331,170 rows in one.
+ *
+ * Deliberately carries no card names, set codes or collector numbers. Those
+ * belong to the card, not to the day, so repeating them once per date wrote
+ * 8.3 MB of the 42 MB file to say the same 3,724 things 89 times. This file is
+ * the time series and nothing else; join it to the collection export on
+ * (scryfall_id, finish) to get names back.
  */
 const priceHistory: ExportSpec = {
   id: "price-history",
   title: "Price history",
   description:
-    "One row per card, finish and date, for cards in your collection, with every vendor and the buylist as columns. The largest export by far.",
+    "One row per card, finish and date, with every vendor and the buylist as columns. Identified by scryfall_id and finish — join it to the collection export on those two columns for names and set codes. The largest export by far.",
   rows: (db) =>
     count(
       db,
@@ -225,9 +231,7 @@ const priceHistory: ExportSpec = {
     yield UTF8_BOM +
       csvRow([
         "date",
-        "name",
-        "set_code",
-        "collector_number",
+        // The join key back to the collection export.
         "scryfall_id",
         "finish",
         "tracked_price_usd",
@@ -246,7 +250,7 @@ const priceHistory: ExportSpec = {
     // read along their primary keys, and grouped so a date is one row.
     const statement = client(db).prepare(`
       with held as (select distinct printing_key, finish from holdings)
-      select d.date, p.name, p.set_code, p.collector_number, p.scryfall_id,
+      select d.date, p.scryfall_id,
              d.finish, ps.price_cents as tracked, ps.source, ps.estimated,
              ${vendorSelects}
         from (
@@ -266,7 +270,7 @@ const priceHistory: ExportSpec = {
           on vp.printing_key = d.printing_key and vp.finish = d.finish
          and vp.date = d.date
        group by d.printing_key, d.finish, d.date
-       order by d.date desc, p.name, p.set_code
+       order by d.date desc, p.scryfall_id, d.finish
     `);
 
     for (const row of statement.iterate() as Iterable<
@@ -274,9 +278,6 @@ const priceHistory: ExportSpec = {
     >) {
       yield csvRow([
         row.date,
-        row.name,
-        row.set_code,
-        row.collector_number,
         row.scryfall_id,
         row.finish,
         moneyCell(row.tracked as number | null),
