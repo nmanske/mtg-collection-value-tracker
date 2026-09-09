@@ -106,7 +106,14 @@ export default async function SearchPage(props: PageProps<"/search">) {
                 )}
 
                 <div className="min-w-0 flex-1">
-                  <h2 className="font-medium">{printing.name}</h2>
+                  <h2 className="font-medium">
+                    <Link
+                      href={`/cards/${printing.scryfallId}`}
+                      className="underline-offset-4 hover:underline"
+                    >
+                      {printing.name}
+                    </Link>
+                  </h2>
                   <p className="text-sm text-neutral-500">
                     {printing.setName} ·{" "}
                     <span className="font-mono text-xs">

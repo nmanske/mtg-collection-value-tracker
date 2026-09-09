@@ -222,6 +222,22 @@ export function addHolding(
   return { id: inserted.id, merged: false };
 }
 
+/** Every holding of one printing, for the card page's "you own this" line. */
+export function holdingsForPrinting(db: Db, printingKey: number) {
+  return db
+    .select({
+      id: holdings.id,
+      quantity: holdings.quantity,
+      finish: holdings.finish,
+      condition: holdings.condition,
+      dateAdded: holdings.dateAdded,
+    })
+    .from(holdings)
+    .where(eq(holdings.printingKey, printingKey))
+    .orderBy(asc(holdings.dateAdded))
+    .all();
+}
+
 export function removeHolding(db: Db, id: number): boolean {
   return db.delete(holdings).where(eq(holdings.id, id)).run().changes > 0;
 }

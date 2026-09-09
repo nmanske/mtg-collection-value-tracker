@@ -103,7 +103,14 @@ export default async function CollectionPage(props: PageProps<"/">) {
                     className="border-b border-neutral-100 dark:border-neutral-900"
                   >
                     <td className="py-2 pr-3">
-                      <div className="font-medium">{row.name}</div>
+                      <div className="font-medium">
+                        <Link
+                          href={`/cards/${row.scryfallId}?finish=${row.finish}`}
+                          className="underline-offset-4 hover:underline"
+                        >
+                          {row.name}
+                        </Link>
+                      </div>
                       <div className="font-mono text-xs text-neutral-500">
                         {printingCode(row.setCode, row.collectorNumber)}
                       </div>

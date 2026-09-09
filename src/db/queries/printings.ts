@@ -21,6 +21,8 @@ export interface PrintingPrice {
 export interface PrintingSearchResult {
   id: number;
   scryfallId: string;
+  /** Groups printings of the same card; used to cross-link a card page. */
+  oracleId: string;
   name: string;
   setCode: string;
   setName: string;
@@ -89,6 +91,7 @@ function withPrices(
 const PRINTING_COLUMNS = {
   id: printings.id,
   scryfallId: printings.scryfallId,
+  oracleId: printings.oracleId,
   name: printings.name,
   setCode: printings.setCode,
   setName: printings.setName,
@@ -152,6 +155,48 @@ export function searchPrintings(
   return withPrices(db, rows);
 }
 
+/**
+ * One printing by its Scryfall id, with its latest prices.
+ *
+ * Card pages are addressed by Scryfall id rather than the integer key: the
+ * integer is an autoincrement that changes if the database is rebuilt from the
+ * ingest, which would break every saved link. The Scryfall id is stable.
+ */
+export function getPrintingByScryfallId(
+  db: Db,
+  scryfallId: string,
+): PrintingSearchResult | null {
+  const row = db
+    .select(PRINTING_COLUMNS)
+    .from(printings)
+    .where(eq(printings.scryfallId, scryfallId))
+    .get();
+  if (!row) return null;
+  return withPrices(db, [row])[0];
+}
+
+/** Other printings of the same card, for cross-linking from a card page. */
+export function otherPrintings(
+  db: Db,
+  oracleId: string,
+  excludeScryfallId: string,
+  limit = 24,
+): PrintingSearchResult[] {
+  const rows = db
+    .select(PRINTING_COLUMNS)
+    .from(printings)
+    .where(
+      and(
+        eq(printings.oracleId, oracleId),
+        sql`${printings.scryfallId} <> ${excludeScryfallId}`,
+      ),
+    )
+    .orderBy(asc(printings.setCode), asc(printings.collectorNumber))
+    .limit(limit)
+    .all();
+  return withPrices(db, rows);
+}
+
 /** One printing by its integer key, with its latest prices. */
 export function getPrinting(db: Db, id: number): PrintingSearchResult | null {
   const row = db.select(PRINTING_COLUMNS).from(printings).where(eq(printings.id, id)).get();
@@ -164,11 +209,25 @@ export function countPrintings(db: Db): number {
   return db.select({ n: sql<number>`count(*)` }).from(printings).get()?.n ?? 0;
 }
 
+export interface PricePoint {
+  date: string;
+  priceCents: number;
+  source: string;
+  /** True for synthetic points; rendered visually distinct from tracked data. */
+  estimated: boolean;
+}
+
 /**
  * Full price history for one printing and finish, oldest first.
- * Feature 2's chart reads this directly.
+ *
+ * Reads along the price table's primary key, (printing_key, finish, date), so
+ * one card's history is a contiguous range scan rather than a lookup per day.
  */
-export function priceHistory(db: Db, printingKey: number, finish: Finish) {
+export function priceHistory(
+  db: Db,
+  printingKey: number,
+  finish: Finish,
+): PricePoint[] {
   return db
     .select({
       date: priceSnapshots.date,
@@ -185,4 +244,61 @@ export function priceHistory(db: Db, printingKey: number, finish: Finish) {
     )
     .orderBy(asc(priceSnapshots.date))
     .all();
+}
+
+export interface PriceStats {
+  currentCents: number | null;
+  currentDate: string | null;
+  lowCents: number | null;
+  lowDate: string | null;
+  highCents: number | null;
+  highDate: string | null;
+  /** Change against the point N entries back, or null if history is shorter. */
+  changeCents: number | null;
+  changeRatio: number | null;
+  changeFromDate: string | null;
+}
+
+/** Headline numbers for one card's price series. */
+export function priceStats(points: PricePoint[], lookback = 30): PriceStats {
+  if (points.length === 0) {
+    return {
+      currentCents: null,
+      currentDate: null,
+      lowCents: null,
+      lowDate: null,
+      highCents: null,
+      highDate: null,
+      changeCents: null,
+      changeRatio: null,
+      changeFromDate: null,
+    };
+  }
+
+  const last = points[points.length - 1];
+  let low = points[0];
+  let high = points[0];
+  for (const point of points) {
+    if (point.priceCents < low.priceCents) low = point;
+    if (point.priceCents > high.priceCents) high = point;
+  }
+
+  const index = points.length - 1 - lookback;
+  const base = index >= 0 ? points[index] : null;
+
+  return {
+    currentCents: last.priceCents,
+    currentDate: last.date,
+    lowCents: low.priceCents,
+    lowDate: low.date,
+    highCents: high.priceCents,
+    highDate: high.date,
+    changeCents: base ? last.priceCents - base.priceCents : null,
+    // A ratio against zero is not meaningful; the absolute change still is.
+    changeRatio:
+      base && base.priceCents !== 0
+        ? (last.priceCents - base.priceCents) / base.priceCents
+        : null,
+    changeFromDate: base?.date ?? null,
+  };
 }
