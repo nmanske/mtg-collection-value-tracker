@@ -36,6 +36,12 @@ export default async function CollectionPage() {
             <div className="text-xs text-neutral-500">current value</div>
           </div>
           <Link
+            href="/import"
+            className="rounded-md border border-neutral-300 px-4 py-2 text-sm font-medium hover:bg-neutral-50 dark:border-neutral-700 dark:hover:bg-neutral-900"
+          >
+            Import CSV
+          </Link>
+          <Link
             href="/search"
             className="rounded-md bg-neutral-900 px-4 py-2 text-sm font-medium text-white hover:bg-neutral-700 dark:bg-neutral-100 dark:text-neutral-900 dark:hover:bg-neutral-300"
           >
@@ -60,7 +66,11 @@ export default async function CollectionPage() {
             <Link href="/search" className="underline underline-offset-4">
               Search for a card
             </Link>{" "}
-            to add your first holding.
+            or{" "}
+            <Link href="/import" className="underline underline-offset-4">
+              import a Moxfield CSV
+            </Link>
+            .
           </p>
         </div>
       ) : (
