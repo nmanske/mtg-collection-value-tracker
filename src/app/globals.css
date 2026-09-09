@@ -12,8 +12,10 @@
   --font-mono: var(--font-geist-mono);
 }
 
+/* Guarded like the chart tokens, so data-theme="light" forces light mode
+   everywhere rather than leaving the page dark and the chart light. */
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root:not([data-theme="light"]) {
     --background: #0a0a0a;
     --foreground: #ededed;
   }
@@ -23,4 +25,40 @@ body {
   background: var(--background);
   color: var(--foreground);
   font-family: var(--font-geist-sans), system-ui, sans-serif;
+}
+
+/*
+ * Chart tokens. Both modes are selected rather than flipped: each series step
+ * was validated against its own surface (light #fcfcfb, dark #1a1a19) with the
+ * dataviz palette validator — lightness band, chroma floor and >=3:1 contrast
+ * all pass in both.
+ */
+.viz-root {
+  --viz-surface: #fcfcfb;
+  --viz-text: #0b0b0b;
+  --viz-muted: #52514e;
+  --viz-grid: #e6e5e1;
+  --viz-series: #2a78d6;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .viz-root {
+    --viz-surface: #1a1a19;
+    --viz-text: #ffffff;
+    --viz-muted: #c3c2b7;
+    --viz-grid: #33322f;
+    --viz-series: #3987e5;
+  }
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border-width: 0;
 }
