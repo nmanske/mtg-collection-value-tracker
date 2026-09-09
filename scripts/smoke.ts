@@ -12,6 +12,7 @@ import { migrate } from "drizzle-orm/better-sqlite3/migrator";
 import { openDatabase } from "@/db/client";
 import {
   holdings,
+  mtgjsonIds,
   priceSnapshots,
   printings,
   syncMeta,
@@ -19,19 +20,31 @@ import {
 } from "@/db/schema";
 
 const PATH = "./data/smoke.db";
-rmSync(PATH, { force: true });
-rmSync(`${PATH}-wal`, { force: true });
-rmSync(`${PATH}-shm`, { force: true });
+const cleanup = () => {
+  for (const suffix of ["", "-wal", "-shm"]) {
+    rmSync(`${PATH}${suffix}`, { force: true });
+  }
+};
+
+cleanup();
 mkdirSync("./data", { recursive: true });
 
 const sqlite = openDatabase(PATH);
 const db = drizzle(sqlite);
 migrate(db, { migrationsFolder: "./drizzle" });
 
+// The size of the price history rests on this table being WITHOUT ROWID, and
+// that clause is hand-added to the migration — assert it rather than trust it.
+const createSql = sqlite
+  .prepare("select sql from sqlite_master where name = 'price_snapshots'")
+  .get() as { sql: string };
+assert.match(createSql.sql, /WITHOUT ROWID/i);
+
 const SCRYFALL_ID = "0000a54c-a511-4925-92dc-01b937f9ef21";
 const now = new Date();
 
-db.insert(printings)
+const [printing] = db
+  .insert(printings)
   .values({
     scryfallId: SCRYFALL_ID,
     oracleId: "56719f6a-1a6c-4c0a-8d21-18f7d7350b68",
@@ -43,16 +56,39 @@ db.insert(printings)
     finishes: ["nonfoil"],
     updatedAt: now,
   })
-  .run();
+  .returning({ id: printings.id })
+  .all();
+
+const printingKey = printing.id;
 
 // JSON round-trips as a real array, not a string.
-const printing = db.select().from(printings).get()!;
-assert.deepEqual(printing.finishes, ["nonfoil"]);
-assert.equal(printing.name, "Black Lotus");
+const stored = db.select().from(printings).get()!;
+assert.deepEqual(stored.finishes, ["nonfoil"]);
+assert.equal(stored.name, "Black Lotus");
+assert.equal(stored.id, printingKey);
+
+// scryfall_id stays unique, which is what ingest upserts on.
+assert.throws(
+  () =>
+    db
+      .insert(printings)
+      .values({
+        scryfallId: SCRYFALL_ID,
+        oracleId: "other",
+        name: "Duplicate",
+        setCode: "xxx",
+        setName: "Duplicate",
+        collectorNumber: "1",
+        finishes: ["nonfoil"],
+        updatedAt: now,
+      })
+      .run(),
+  /UNIQUE constraint failed/,
+);
 
 db.insert(holdings)
   .values({
-    printingId: SCRYFALL_ID,
+    printingKey,
     quantity: 2,
     finish: "nonfoil",
     condition: "NM",
@@ -67,7 +103,7 @@ assert.equal(holding.priceOverrideCents, null);
 
 db.insert(priceSnapshots)
   .values({
-    printingId: SCRYFALL_ID,
+    printingKey,
     finish: "nonfoil",
     date: "2026-01-15",
     priceCents: 1_234_500,
@@ -81,14 +117,14 @@ const snapshot = db.select().from(priceSnapshots).get()!;
 assert.equal(snapshot.estimated, false);
 assert.equal(snapshot.priceCents, 1_234_500);
 
-// Idempotent ingest: re-inserting the same (printing, finish, date) is
-// rejected, and onConflictDoUpdate overwrites in place rather than duplicating.
+// Idempotent ingest: the composite primary key rejects a second row for the
+// same (printing, finish, date)...
 assert.throws(
   () =>
     db
       .insert(priceSnapshots)
       .values({
-        printingId: SCRYFALL_ID,
+        printingKey,
         finish: "nonfoil",
         date: "2026-01-15",
         priceCents: 999,
@@ -98,16 +134,21 @@ assert.throws(
   /UNIQUE constraint failed/,
 );
 
+// ...onConflictDoUpdate overwrites in place, as the daily Scryfall pull does...
 db.insert(priceSnapshots)
   .values({
-    printingId: SCRYFALL_ID,
+    printingKey,
     finish: "nonfoil",
     date: "2026-01-15",
     priceCents: 1_300_000,
     source: "scryfall",
   })
   .onConflictDoUpdate({
-    target: [priceSnapshots.printingId, priceSnapshots.finish, priceSnapshots.date],
+    target: [
+      priceSnapshots.printingKey,
+      priceSnapshots.finish,
+      priceSnapshots.date,
+    ],
     set: { priceCents: 1_300_000 },
   })
   .run();
@@ -115,10 +156,33 @@ db.insert(priceSnapshots)
 assert.equal(db.select().from(priceSnapshots).all().length, 1);
 assert.equal(db.select().from(priceSnapshots).get()!.priceCents, 1_300_000);
 
+// ...while onConflictDoNothing leaves the existing price alone, which is what
+// keeps the MTGJSON backfill from overwriting a day Scryfall already wrote.
+const kept = db
+  .insert(priceSnapshots)
+  .values({
+    printingKey,
+    finish: "nonfoil",
+    date: "2026-01-15",
+    priceCents: 1,
+    source: "mtgjson",
+  })
+  .onConflictDoNothing({
+    target: [
+      priceSnapshots.printingKey,
+      priceSnapshots.finish,
+      priceSnapshots.date,
+    ],
+  })
+  .run();
+assert.equal(kept.changes, 0);
+assert.equal(db.select().from(priceSnapshots).get()!.priceCents, 1_300_000);
+assert.equal(db.select().from(priceSnapshots).get()!.source, "scryfall");
+
 // Same printing and date but a different finish is a distinct price.
 db.insert(priceSnapshots)
   .values({
-    printingId: SCRYFALL_ID,
+    printingKey,
     finish: "foil",
     date: "2026-01-15",
     priceCents: 5_000_000,
@@ -133,7 +197,7 @@ assert.throws(
     db
       .insert(holdings)
       .values({
-        printingId: "does-not-exist",
+        printingKey: 999_999,
         quantity: 1,
         finish: "nonfoil",
         condition: "NM",
@@ -146,15 +210,30 @@ assert.throws(
 
 db.insert(unpricedPrintings)
   .values({
-    printingId: SCRYFALL_ID,
+    printingKey,
     finish: "etched",
     reason: "no usd_etched price from any source",
     lastCheckedAt: now,
   })
   .run();
 
+db.insert(mtgjsonIds)
+  .values({ uuid: "3dfaad31-d6a0-57f5-807e-dc4084caffbf", scryfallId: SCRYFALL_ID })
+  .run();
+
+// The same Scryfall id legitimately carries more than one MTGJSON uuid, so
+// this must not be constrained to one row per printing.
+db.insert(mtgjsonIds)
+  .values({ uuid: "27a8cbe8-fcc1-58dc-be8f-abf88a0000bd", scryfallId: SCRYFALL_ID })
+  .run();
+assert.equal(db.select().from(mtgjsonIds).all().length, 2);
+
 db.insert(syncMeta)
-  .values({ key: "scryfall_bulk_updated_at", value: now.toISOString(), updatedAt: now })
+  .values({
+    key: "scryfall_bulk_updated_at",
+    value: now.toISOString(),
+    updatedAt: now,
+  })
   .run();
 
 const meta = db
@@ -170,7 +249,7 @@ const price = db
   .from(priceSnapshots)
   .where(
     and(
-      eq(priceSnapshots.printingId, SCRYFALL_ID),
+      eq(priceSnapshots.printingKey, printingKey),
       eq(priceSnapshots.finish, "nonfoil"),
       eq(priceSnapshots.date, "2026-01-15"),
     ),
@@ -179,8 +258,6 @@ const price = db
 assert.equal(price.priceCents, 1_300_000);
 
 sqlite.close();
-rmSync(PATH, { force: true });
-rmSync(`${PATH}-wal`, { force: true });
-rmSync(`${PATH}-shm`, { force: true });
+cleanup();
 
 console.log("Schema smoke test passed.");

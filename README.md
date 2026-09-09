@@ -36,8 +36,29 @@ Next.js (TypeScript, App Router) · SQLite via Drizzle ORM · Recharts · node-c
 
 ```bash
 npm install
+npm run db:migrate         # create/upgrade ./data/mtg.db
+npm run ingest:scryfall    # printing metadata + today's prices (~20s)
+npm run backfill:mtgjson   # ~90 days of history for cards you hold
 npm run dev
 ```
+
+### Data pipeline
+
+| Command | What it does |
+| --- | --- |
+| `npm run ingest:scryfall` | Streams Scryfall's gzipped JSONL `default_cards` bulk file. Upserts printings and writes one day of price snapshots. Idempotent, and skips entirely if that build was already ingested (`--force` overrides). This is what the daily cron will run. |
+| `npm run backfill:mtgjson` | One-time historical fill from MTGJSON's `AllPrices`, TCGplayer retail only, joined to Scryfall ids through MTGJSON's `uuid`. Scoped to held printings by default; `--all` covers every printing. Never overwrites a day already recorded. |
+| `npm run db:smoke` | Round-trips every table and asserts the constraints the app depends on. |
+| `npm run test:ingest` | Unit tests for price conversion and snapshot dating. |
+
+Both ingests cache their downloads under `data/cache/` and take
+`--dry-run` / `--limit N` for measurement.
+
+Snapshots are dated by the **upstream build date**, not the wall clock, so a
+stale file can never overwrite a later day's prices. Prices are stored as
+integer cents so that summing a collection is exact. A missing price is stored
+as absence, never as zero — Alpha Black Lotus, for instance, has no TCGplayer
+USD listing at all.
 
 ## License
 

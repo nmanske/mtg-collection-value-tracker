@@ -23,3 +23,18 @@ export function centsToPriceString(cents: number): string {
   const abs = Math.abs(cents);
   return `${sign}${Math.floor(abs / 100)}.${String(abs % 100).padStart(2, "0")}`;
 }
+
+/**
+ * Converts a JSON number of dollars to whole cents.
+ *
+ * MTGJSON reports prices as numbers rather than strings, so the float has
+ * already happened upstream and cannot be avoided — 4.6 * 100 is
+ * 460.00000000000006. Rounding is correct at these magnitudes (card prices run
+ * to five figures, far inside the range where a double represents cents
+ * exactly), but the input is validated so that NaN or Infinity becomes null
+ * rather than a nonsense integer.
+ */
+export function priceNumberToCents(value: unknown): number | null {
+  if (typeof value !== "number" || !Number.isFinite(value)) return null;
+  return Math.round(value * 100);
+}

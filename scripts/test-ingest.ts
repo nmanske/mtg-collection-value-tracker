@@ -7,7 +7,11 @@
  */
 import assert from "node:assert/strict";
 
-import { centsToPriceString, priceStringToCents } from "@/ingest/money";
+import {
+  centsToPriceString,
+  priceNumberToCents,
+  priceStringToCents,
+} from "@/ingest/money";
 import { snapshotDateFor } from "@/ingest/scryfall";
 
 // Exact conversion: 0.35 * 100 is 34.999... in floating point, so the parser
@@ -47,5 +51,28 @@ assert.equal(snapshotDateFor("2026-09-09T23:58:00.000+00:00"), "2026-09-09");
 // ...and an offset timestamp is normalised to UTC rather than taken at face
 // value: 20:05 on the 9th at -05:00 is 01:05 on the 10th UTC.
 assert.equal(snapshotDateFor("2026-09-09T20:05:00.000-05:00"), "2026-09-10");
+
+
+
+// MTGJSON reports prices as JSON numbers, so the float has already happened
+// upstream; rounding must still land on the right cent.
+assert.equal(priceNumberToCents(4.6), 460);
+assert.equal(priceNumberToCents(8.49), 849);
+assert.equal(priceNumberToCents(0.35), 35);
+assert.equal(priceNumberToCents(0), 0);
+assert.equal(priceNumberToCents(24500), 2_450_000);
+
+// A half-cent input rounds down, because 1.005 is really 1.00499999999999989
+// as a double. Pinned deliberately: MTGJSON quotes two decimals, so this does
+// not arise in practice, but the behaviour should not change silently.
+assert.equal(priceNumberToCents(1.005), 100);
+
+// Bad input is absence, never a nonsense integer.
+assert.equal(priceNumberToCents(Number.NaN), null);
+assert.equal(priceNumberToCents(Number.POSITIVE_INFINITY), null);
+assert.equal(priceNumberToCents(null), null);
+assert.equal(priceNumberToCents("4.60"), null);
+
+console.log("MTGJSON price conversion tests passed.");
 
 console.log("Ingest unit tests passed.");

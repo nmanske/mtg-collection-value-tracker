@@ -1,0 +1,12 @@
+# Normalise to LF in the repository and on checkout. Without this, every commit
+# from a Windows checkout reports "LF will be replaced by CRLF" for each file.
+* text=auto eol=lf
+
+# Binary and generated artefacts that must not be line-ending normalised.
+*.png binary
+*.jpg binary
+*.ico binary
+*.db binary
+*.sqlite binary
+*.gz binary
+package-lock.json -diff linguist-generated

@@ -2,9 +2,9 @@ import { sql } from "drizzle-orm";
 import {
   index,
   integer,
+  primaryKey,
   sqliteTable,
   text,
-  uniqueIndex,
 } from "drizzle-orm/sqlite-core";
 
 /**
@@ -13,7 +13,8 @@ import {
  * field (`prices.usd`, `usd_foil`, `usd_etched`).
  *
  * Note this is `nonfoil`, not `normal` — Scryfall's `finishes` array uses the
- * former. Moxfield's CSV uses an empty string for it, mapped on import.
+ * former. MTGJSON says `normal` and Moxfield's CSV uses an empty string; both
+ * are mapped at their own boundary.
  */
 export const FINISHES = ["nonfoil", "foil", "etched"] as const;
 export type Finish = (typeof FINISHES)[number];
@@ -34,21 +35,27 @@ export const PRICE_SOURCES = ["scryfall", "mtgjson", "manual"] as const;
 export type PriceSource = (typeof PRICE_SOURCES)[number];
 
 /**
- * One row per Scryfall printing. Prices vary by printing, so `scryfallId` — not
- * `oracleId` — is the identity used everywhere else in the schema.
+ * One row per Scryfall printing.
+ *
+ * Carries a surrogate integer `id` alongside the natural `scryfallId` key.
+ * Everything that references a printing does so by the integer: price history
+ * runs to ~13 million rows, and repeating a 36-character UUID there — in the
+ * row and again in its primary-key index — costs more than the price data
+ * itself. `scryfallId` stays unique, so ingest still upserts on it.
  */
 export const printings = sqliteTable(
   "printings",
   {
-    /** Scryfall `id`. */
-    scryfallId: text("scryfall_id").primaryKey(),
-    /** Scryfall `oracle_id`. Groups printings of the same card; never a price key. */
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    /** Scryfall `id`. The natural key, and what upstream data joins on. */
+    scryfallId: text("scryfall_id").notNull().unique(),
+    /** Scryfall `oracle_id`. Groups printings of a card; never a price key. */
     oracleId: text("oracle_id").notNull(),
     name: text("name").notNull(),
     setCode: text("set_code").notNull(),
     setName: text("set_name").notNull(),
     collectorNumber: text("collector_number").notNull(),
-    /** Scryfall `image_uris.normal`. Null for cards whose images are per-face. */
+    /** Scryfall `image_uris.normal`, or the front face's for split layouts. */
     imageUri: text("image_uri"),
     /** Scryfall `finishes`, as a JSON array of {@link Finish}. */
     finishes: text("finishes", { mode: "json" })
@@ -75,9 +82,9 @@ export const holdings = sqliteTable(
   "holdings",
   {
     id: integer("id").primaryKey({ autoIncrement: true }),
-    printingId: text("printing_id")
+    printingKey: integer("printing_key")
       .notNull()
-      .references(() => printings.scryfallId, { onDelete: "restrict" }),
+      .references(() => printings.id, { onDelete: "restrict" }),
     quantity: integer("quantity").notNull(),
     finish: text("finish").$type<Finish>().notNull(),
     condition: text("condition").$type<Condition>().notNull(),
@@ -101,24 +108,33 @@ export const holdings = sqliteTable(
     createdAt: integer("created_at", { mode: "timestamp" }).notNull(),
   },
   (t) => [
-    index("holdings_printing_idx").on(t.printingId),
+    index("holdings_printing_idx").on(t.printingKey),
     // The valuation query walks holdings by date_added.
     index("holdings_date_added_idx").on(t.dateAdded),
   ],
 );
 
 /**
- * Daily price per printing and finish. The unique index over
- * (printing, finish, date) is what makes ingestion idempotent and enforces the
- * "never re-fetch a price already stored for that day" rule.
+ * Daily price per printing and finish — the largest table by a wide margin,
+ * so its shape is chosen for size.
+ *
+ * `(printing_key, finish, date)` is the primary key rather than a uniqueness
+ * constraint bolted onto an autoincrement id. That drops a redundant column
+ * and a second index over the same three values, and it is what makes
+ * ingestion idempotent: the "never re-fetch a price already stored for that
+ * day" rule is enforced by the key itself.
+ *
+ * Declared WITHOUT ROWID in the migration (see the note there): for a table
+ * that is nothing but its key plus three small values, storing rows in the
+ * primary-key B-tree rather than in a separate rowid table roughly halves the
+ * footprint.
  */
 export const priceSnapshots = sqliteTable(
   "price_snapshots",
   {
-    id: integer("id").primaryKey({ autoIncrement: true }),
-    printingId: text("printing_id")
+    printingKey: integer("printing_key")
       .notNull()
-      .references(() => printings.scryfallId, { onDelete: "cascade" }),
+      .references(() => printings.id, { onDelete: "cascade" }),
     finish: text("finish").$type<Finish>().notNull(),
     /** `YYYY-MM-DD`, UTC. */
     date: text("date").notNull(),
@@ -138,13 +154,10 @@ export const priceSnapshots = sqliteTable(
       .default(false),
   },
   (t) => [
-    uniqueIndex("price_snapshots_unique_idx").on(
-      t.printingId,
-      t.finish,
-      t.date,
-    ),
-    // Serves both the single-card history chart and the per-date portfolio
-    // valuation lookup.
+    primaryKey({ columns: [t.printingKey, t.finish, t.date] }),
+    // Serves the per-date portfolio valuation, which sweeps every held
+    // printing for one date. The primary key covers the other direction —
+    // one printing's history — on its own.
     index("price_snapshots_date_idx").on(t.date),
   ],
 );
@@ -152,20 +165,51 @@ export const priceSnapshots = sqliteTable(
 /**
  * Printings with no usable price from any source, so they can be surfaced in
  * the UI as "price unavailable" instead of being silently valued at zero.
+ *
+ * Written for held printings only. Recording all ~10,000 unpriced printings
+ * would be noise; what matters is the ones a valuation has to account for.
  */
-export const unpricedPrintings = sqliteTable("unpriced_printings", {
-  printingId: text("printing_id")
-    .primaryKey()
-    .references(() => printings.scryfallId, { onDelete: "cascade" }),
-  finish: text("finish").$type<Finish>().notNull(),
-  reason: text("reason").notNull(),
-  lastCheckedAt: integer("last_checked_at", { mode: "timestamp" }).notNull(),
-});
+export const unpricedPrintings = sqliteTable(
+  "unpriced_printings",
+  {
+    printingKey: integer("printing_key")
+      .notNull()
+      .references(() => printings.id, { onDelete: "cascade" }),
+    finish: text("finish").$type<Finish>().notNull(),
+    reason: text("reason").notNull(),
+    lastCheckedAt: integer("last_checked_at", { mode: "timestamp" }).notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.printingKey, t.finish] })],
+);
+
+/**
+ * MTGJSON's `uuid` to Scryfall `id` map, copied from its `AllPrintings.sqlite`
+ * `cardIdentifiers` table.
+ *
+ * MTGJSON keys its price data on its own uuid, so historical backfill has to
+ * join through this to reach a printing. Persisted rather than rebuilt per run
+ * so a re-run does not re-download a 243 MB file, and so the join is
+ * inspectable after the fact.
+ *
+ * Deliberately keyed on `scryfall_id` text rather than `printings.id`: this is
+ * a verbatim copy of an upstream table, including rows for printings Scryfall's
+ * `default_cards` file leaves out. `scryfall_id` is not unique here either —
+ * 2,420 of them carry more than one uuid, usually a separate foil and non-foil
+ * entry for the same printing.
+ */
+export const mtgjsonIds = sqliteTable(
+  "mtgjson_ids",
+  {
+    uuid: text("uuid").primaryKey(),
+    scryfallId: text("scryfall_id").notNull(),
+  },
+  (t) => [index("mtgjson_ids_scryfall_idx").on(t.scryfallId)],
+);
 
 /**
  * Key/value bookkeeping for the ingest jobs: the Scryfall bulk file's
- * `updated_at`, MTGJSON's `Meta.json` build date, last successful run, etc.
- * Lets a job skip work when the upstream file has not changed.
+ * `updated_at`, MTGJSON's build version, and so on. Lets a job skip work when
+ * the upstream file has not changed.
  */
 export const syncMeta = sqliteTable("sync_meta", {
   key: text("key").primaryKey(),

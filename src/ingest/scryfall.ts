@@ -212,15 +212,25 @@ export async function ingestScryfallBulk(
   const path = await downloadBulkFile(entry.jsonl_download_uri, cacheDir, log);
 
   const printingBuffer: NewPrinting[] = [];
-  const snapshotBuffer: NewPriceSnapshot[] = [];
+  // Snapshots are buffered against the Scryfall id, because the integer
+  // printing key is only known once the printing rows have been written.
+  const snapshotBuffer: (Omit<NewPriceSnapshot, "printingKey"> & {
+    scryfallId: string;
+  })[] = [];
   const startedAt = Date.now();
 
   // better-sqlite3 transactions are synchronous, so one cannot be held open
   // across the async read. Each flush is instead its own transaction over a
   // batch, which also keeps the WAL from growing without bound.
   const flush = sqlite.transaction(() => {
+    // RETURNING gives back the integer key for both inserted and updated rows,
+    // which is what the buffered snapshots need. Doing it here rather than with
+    // a follow-up SELECT keeps the whole batch to two statements.
+    const keyByScryfallId = new Map<string, number>();
+
     if (printingBuffer.length > 0) {
-      db.insert(printings)
+      const written = db
+        .insert(printings)
         .values(printingBuffer)
         .onConflictDoUpdate({
           target: printings.scryfallId,
@@ -235,18 +245,42 @@ export async function ingestScryfallBulk(
             updatedAt: sql`excluded.updated_at`,
           },
         })
-        .run();
+        .returning({ id: printings.id, scryfallId: printings.scryfallId })
+        .all();
+
+      for (const row of written) keyByScryfallId.set(row.scryfallId, row.id);
       result.printingsUpserted += printingBuffer.length;
     }
 
     if (snapshotBuffer.length > 0) {
+      const rows: NewPriceSnapshot[] = [];
+      for (const pending of snapshotBuffer) {
+        const printingKey = keyByScryfallId.get(pending.scryfallId);
+        // Every snapshot is buffered alongside the printing it came from in
+        // the same batch, so a miss means the upsert did not return that row —
+        // worth failing on rather than dropping a price silently.
+        if (printingKey === undefined) {
+          throw new Error(
+            `No printing key returned for ${pending.scryfallId}; cannot attach its price`,
+          );
+        }
+        rows.push({
+          printingKey,
+          finish: pending.finish,
+          date: pending.date,
+          priceCents: pending.priceCents,
+          source: pending.source,
+          estimated: pending.estimated,
+        });
+      }
+
       // Re-running the same build is a no-op; a corrected price for a day
       // already stored overwrites in place rather than duplicating.
       db.insert(priceSnapshots)
-        .values(snapshotBuffer)
+        .values(rows)
         .onConflictDoUpdate({
           target: [
-            priceSnapshots.printingId,
+            priceSnapshots.printingKey,
             priceSnapshots.finish,
             priceSnapshots.date,
           ],
@@ -257,7 +291,7 @@ export async function ingestScryfallBulk(
           },
         })
         .run();
-      result.snapshotsWritten += snapshotBuffer.length;
+      result.snapshotsWritten += rows.length;
     }
 
     printingBuffer.length = 0;
@@ -340,7 +374,7 @@ export async function ingestScryfallBulk(
         if (cents == null) continue;
         priced = true;
         snapshotBuffer.push({
-          printingId: card.id,
+          scryfallId: card.id,
           finish,
           date: snapshotDate,
           priceCents: cents,

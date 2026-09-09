@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "3f9a3c55-9d1e-496c-b309-3e31260bc81e",
+  "id": "1928b541-7507-4e80-aa0b-15b17e1b7b49",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "holdings": {
@@ -14,9 +14,9 @@
           "notNull": true,
           "autoincrement": true
         },
-        "printing_id": {
-          "name": "printing_id",
-          "type": "text",
+        "printing_key": {
+          "name": "printing_key",
+          "type": "integer",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
@@ -75,7 +75,7 @@
         "holdings_printing_idx": {
           "name": "holdings_printing_idx",
           "columns": [
-            "printing_id"
+            "printing_key"
           ],
           "isUnique": false
         },
@@ -88,15 +88,15 @@
         }
       },
       "foreignKeys": {
-        "holdings_printing_id_printings_scryfall_id_fk": {
-          "name": "holdings_printing_id_printings_scryfall_id_fk",
+        "holdings_printing_key_printings_id_fk": {
+          "name": "holdings_printing_key_printings_id_fk",
           "tableFrom": "holdings",
           "tableTo": "printings",
           "columnsFrom": [
-            "printing_id"
+            "printing_key"
           ],
           "columnsTo": [
-            "scryfall_id"
+            "id"
           ],
           "onDelete": "restrict",
           "onUpdate": "no action"
@@ -106,19 +106,44 @@
       "uniqueConstraints": {},
       "checkConstraints": {}
     },
+    "mtgjson_ids": {
+      "name": "mtgjson_ids",
+      "columns": {
+        "uuid": {
+          "name": "uuid",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "scryfall_id": {
+          "name": "scryfall_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "mtgjson_ids_scryfall_idx": {
+          "name": "mtgjson_ids_scryfall_idx",
+          "columns": [
+            "scryfall_id"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
     "price_snapshots": {
       "name": "price_snapshots",
       "columns": {
-        "id": {
-          "name": "id",
+        "printing_key": {
+          "name": "printing_key",
           "type": "integer",
-          "primaryKey": true,
-          "notNull": true,
-          "autoincrement": true
-        },
-        "printing_id": {
-          "name": "printing_id",
-          "type": "text",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
@@ -161,15 +186,6 @@
         }
       },
       "indexes": {
-        "price_snapshots_unique_idx": {
-          "name": "price_snapshots_unique_idx",
-          "columns": [
-            "printing_id",
-            "finish",
-            "date"
-          ],
-          "isUnique": true
-        },
         "price_snapshots_date_idx": {
           "name": "price_snapshots_date_idx",
           "columns": [
@@ -179,31 +195,47 @@
         }
       },
       "foreignKeys": {
-        "price_snapshots_printing_id_printings_scryfall_id_fk": {
-          "name": "price_snapshots_printing_id_printings_scryfall_id_fk",
+        "price_snapshots_printing_key_printings_id_fk": {
+          "name": "price_snapshots_printing_key_printings_id_fk",
           "tableFrom": "price_snapshots",
           "tableTo": "printings",
           "columnsFrom": [
-            "printing_id"
+            "printing_key"
           ],
           "columnsTo": [
-            "scryfall_id"
+            "id"
           ],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
       },
-      "compositePrimaryKeys": {},
+      "compositePrimaryKeys": {
+        "price_snapshots_printing_key_finish_date_pk": {
+          "columns": [
+            "printing_key",
+            "finish",
+            "date"
+          ],
+          "name": "price_snapshots_printing_key_finish_date_pk"
+        }
+      },
       "uniqueConstraints": {},
       "checkConstraints": {}
     },
     "printings": {
       "name": "printings",
       "columns": {
+        "id": {
+          "name": "id",
+          "type": "integer",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": true
+        },
         "scryfall_id": {
           "name": "scryfall_id",
           "type": "text",
-          "primaryKey": true,
+          "primaryKey": false,
           "notNull": true,
           "autoincrement": false
         },
@@ -266,6 +298,13 @@
         }
       },
       "indexes": {
+        "printings_scryfall_id_unique": {
+          "name": "printings_scryfall_id_unique",
+          "columns": [
+            "scryfall_id"
+          ],
+          "isUnique": true
+        },
         "printings_name_idx": {
           "name": "printings_name_idx",
           "columns": [
@@ -328,10 +367,10 @@
     "unpriced_printings": {
       "name": "unpriced_printings",
       "columns": {
-        "printing_id": {
-          "name": "printing_id",
-          "type": "text",
-          "primaryKey": true,
+        "printing_key": {
+          "name": "printing_key",
+          "type": "integer",
+          "primaryKey": false,
           "notNull": true,
           "autoincrement": false
         },
@@ -359,21 +398,29 @@
       },
       "indexes": {},
       "foreignKeys": {
-        "unpriced_printings_printing_id_printings_scryfall_id_fk": {
-          "name": "unpriced_printings_printing_id_printings_scryfall_id_fk",
+        "unpriced_printings_printing_key_printings_id_fk": {
+          "name": "unpriced_printings_printing_key_printings_id_fk",
           "tableFrom": "unpriced_printings",
           "tableTo": "printings",
           "columnsFrom": [
-            "printing_id"
+            "printing_key"
           ],
           "columnsTo": [
-            "scryfall_id"
+            "id"
           ],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
       },
-      "compositePrimaryKeys": {},
+      "compositePrimaryKeys": {
+        "unpriced_printings_printing_key_finish_pk": {
+          "columns": [
+            "printing_key",
+            "finish"
+          ],
+          "name": "unpriced_printings_printing_key_finish_pk"
+        }
+      },
       "uniqueConstraints": {},
       "checkConstraints": {}
     }
