@@ -32,6 +32,8 @@ yarn-error.log*
 
 # env files (can opt-in for committing if needed)
 .env*
+# ...but the sample config must ship: the README tells self-hosters to copy it.
+!.env.example
 
 # vercel
 .vercel

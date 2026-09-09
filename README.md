@@ -60,6 +60,55 @@ integer cents so that summing a collection is exact. A missing price is stored
 as absence, never as zero — Alpha Black Lotus, for instance, has no TCGplayer
 USD listing at all.
 
+## Self-hosting with Docker
+
+```bash
+cp .env.example .env      # optional; the defaults work
+docker compose up -d
+```
+
+Then open <http://localhost:3000>.
+
+The first start is slow on purpose: with no card data yet, the container
+downloads Scryfall's bulk file and ingests ~108,000 printings before the app is
+useful. Watch it with `docker compose logs -f`. After that, a cron inside the
+container refreshes prices once a day (10:15 UTC by default, an hour after
+Scryfall rebuilds its bulk data), and re-running against an unchanged upstream
+build is a no-op.
+
+The database is a single SQLite file bind-mounted at `./data/mtg.db`. Backing up
+the collection is copying that file. Migrations run automatically on every
+start, so pulling a newer image upgrades the schema rather than failing.
+
+### Backfilling history and importing a collection
+
+The daily job only records prices from the day it first runs, so a new install
+has one day of history. The MTGJSON backfill fills in roughly 90 days before
+that.
+
+Both the backfill and the Moxfield import are development CLIs — they run under
+`tsx`, which is a dev dependency and is deliberately not in the production
+image. Run them from a checkout, against the same file the container uses:
+
+```bash
+DATABASE_PATH=./data/mtg.db npm run backfill:mtgjson -- --all
+DATABASE_PATH=./data/mtg.db npm run import:moxfield -- collection.csv --dry-run
+```
+
+SQLite is in WAL mode, so these are safe to run while the container is serving.
+CSV import is also available in the app itself at `/import`, which needs no
+checkout.
+
+### Configuration
+
+| Variable | Default | What it does |
+| --- | --- | --- |
+| `DATABASE_PATH` | `./data/mtg.db` | SQLite file location |
+| `CRON_ENABLED` | on in production | Runs the daily price refresh in-process |
+| `CRON_SCHEDULE` | `15 10 * * *` | Standard five-field cron expression |
+| `CRON_TIMEZONE` | `UTC` | Timezone the schedule is read in |
+| `PORT` | `3000` | Host port the container publishes |
+
 ## License
 
 Copyright (C) 2026 Nathan Manske

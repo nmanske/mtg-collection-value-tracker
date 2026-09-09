@@ -1,0 +1,13 @@
+node_modules
+.next
+.git
+.gitignore
+data
+shot
+*.log
+README.md
+CLAUDE.md
+AGENTS.md
+mtg-tracker-prompt.md
+.env
+.env.local

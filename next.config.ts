@@ -1,6 +1,9 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  // Emits .next/standalone with only the files the server actually needs,
+  // which is what keeps the Docker image small — no full node_modules copy.
+  output: "standalone",
   experimental: {
     serverActions: {
       // A Moxfield export runs roughly 100 bytes per row, so the 1 MB default

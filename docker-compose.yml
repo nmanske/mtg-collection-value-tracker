@@ -1,0 +1,35 @@
+services:
+  app:
+    build: .
+    image: mtg-collection-value-tracker
+    restart: unless-stopped
+    ports:
+      - "${PORT:-3000}:3000"
+    environment:
+      # The SQLite file. Keep it inside the mounted volume or the collection is
+      # lost when the container is replaced.
+      DATABASE_PATH: /app/data/mtg.db
+      # Daily Scryfall refresh. Their bulk file is rebuilt once a day at around
+      # 09:00 UTC, so this leaves an hour of slack.
+      CRON_ENABLED: "true"
+      CRON_SCHEDULE: "${CRON_SCHEDULE:-15 10 * * *}"
+      CRON_TIMEZONE: "${CRON_TIMEZONE:-UTC}"
+    volumes:
+      # A bind mount rather than a named volume: the whole point of SQLite here
+      # is that backing up the collection is copying one file, which is a lot
+      # easier when you can see it.
+      - ./data:/app/data
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:3000/').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 1m
+      timeout: 10s
+      # The first run downloads and ingests ~108,000 printings, which takes a
+      # couple of minutes; do not report unhealthy while that is happening.
+      start_period: 5m
+      retries: 3
