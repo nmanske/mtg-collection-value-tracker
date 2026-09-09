@@ -8,16 +8,22 @@ import {
 } from "drizzle-orm/sqlite-core";
 
 /**
- * Finish of a specific physical card. Scryfall reports prices per finish
- * (`prices.usd` vs `prices.usd_foil`), so finish is part of the identity of a
- * price, not a property of a holding alone.
+ * Finish of a specific physical card, using Scryfall's own vocabulary so that
+ * ingest needs no translation layer: each finish maps directly onto a price
+ * field (`prices.usd`, `usd_foil`, `usd_etched`).
  *
- * `etched` is carried because Scryfall lists it in `finishes`, but v1 has no
- * price source for it (Scryfall exposes `usd_etched` only sometimes) — treat
- * etched holdings as "price unavailable" until that is handled.
+ * Note this is `nonfoil`, not `normal` — Scryfall's `finishes` array uses the
+ * former. Moxfield's CSV uses an empty string for it, mapped on import.
  */
-export const FINISHES = ["normal", "foil", "etched"] as const;
+export const FINISHES = ["nonfoil", "foil", "etched"] as const;
 export type Finish = (typeof FINISHES)[number];
+
+/** The `prices` field on a Scryfall card object that carries each finish. */
+export const FINISH_PRICE_FIELD = {
+  nonfoil: "usd",
+  foil: "usd_foil",
+  etched: "usd_etched",
+} as const satisfies Record<Finish, string>;
 
 /** Card condition, mapped from Moxfield's CSV export values on import. */
 export const CONDITIONS = ["NM", "LP", "MP", "HP", "DMG"] as const;
@@ -48,7 +54,7 @@ export const printings = sqliteTable(
     finishes: text("finishes", { mode: "json" })
       .$type<Finish[]>()
       .notNull()
-      .default(sql`'["normal"]'`),
+      .default(sql`'["nonfoil"]'`),
     /** When this row was last written by the Scryfall bulk ingest. */
     updatedAt: integer("updated_at", { mode: "timestamp" }).notNull(),
   },

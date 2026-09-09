@@ -40,21 +40,21 @@ db.insert(printings)
     setName: "Limited Edition Alpha",
     collectorNumber: "232",
     imageUri: "https://example.invalid/lotus.jpg",
-    finishes: ["normal"],
+    finishes: ["nonfoil"],
     updatedAt: now,
   })
   .run();
 
 // JSON round-trips as a real array, not a string.
 const printing = db.select().from(printings).get()!;
-assert.deepEqual(printing.finishes, ["normal"]);
+assert.deepEqual(printing.finishes, ["nonfoil"]);
 assert.equal(printing.name, "Black Lotus");
 
 db.insert(holdings)
   .values({
     printingId: SCRYFALL_ID,
     quantity: 2,
-    finish: "normal",
+    finish: "nonfoil",
     condition: "NM",
     dateAdded: "2026-01-15",
     createdAt: now,
@@ -68,7 +68,7 @@ assert.equal(holding.priceOverrideCents, null);
 db.insert(priceSnapshots)
   .values({
     printingId: SCRYFALL_ID,
-    finish: "normal",
+    finish: "nonfoil",
     date: "2026-01-15",
     priceCents: 1_234_500,
     source: "scryfall",
@@ -89,7 +89,7 @@ assert.throws(
       .insert(priceSnapshots)
       .values({
         printingId: SCRYFALL_ID,
-        finish: "normal",
+        finish: "nonfoil",
         date: "2026-01-15",
         priceCents: 999,
         source: "mtgjson",
@@ -101,7 +101,7 @@ assert.throws(
 db.insert(priceSnapshots)
   .values({
     printingId: SCRYFALL_ID,
-    finish: "normal",
+    finish: "nonfoil",
     date: "2026-01-15",
     priceCents: 1_300_000,
     source: "scryfall",
@@ -135,7 +135,7 @@ assert.throws(
       .values({
         printingId: "does-not-exist",
         quantity: 1,
-        finish: "normal",
+        finish: "nonfoil",
         condition: "NM",
         dateAdded: "2026-01-15",
         createdAt: now,
@@ -171,7 +171,7 @@ const price = db
   .where(
     and(
       eq(priceSnapshots.printingId, SCRYFALL_ID),
-      eq(priceSnapshots.finish, "normal"),
+      eq(priceSnapshots.finish, "nonfoil"),
       eq(priceSnapshots.date, "2026-01-15"),
     ),
   )

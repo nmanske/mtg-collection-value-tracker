@@ -34,7 +34,7 @@ CREATE TABLE `printings` (
 	`set_name` text NOT NULL,
 	`collector_number` text NOT NULL,
 	`image_uri` text,
-	`finishes` text DEFAULT '["normal"]' NOT NULL,
+	`finishes` text DEFAULT '["nonfoil"]' NOT NULL,
 	`updated_at` integer NOT NULL
 );
 --> statement-breakpoint

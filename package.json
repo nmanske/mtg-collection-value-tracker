@@ -10,7 +10,9 @@
     "db:generate": "drizzle-kit generate",
     "db:migrate": "tsx scripts/migrate.ts",
     "db:studio": "drizzle-kit studio",
-    "db:smoke": "tsx scripts/smoke.ts"
+    "db:smoke": "tsx scripts/smoke.ts",
+    "ingest:scryfall": "tsx scripts/ingest-scryfall.ts",
+    "test:ingest": "tsx scripts/test-ingest.ts"
   },
   "dependencies": {
     "better-sqlite3": "^13.0.3",

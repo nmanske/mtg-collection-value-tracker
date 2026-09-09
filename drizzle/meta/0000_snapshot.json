@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "16b6275c-7be8-45c9-a9d4-4cf641a5a817",
+  "id": "3f9a3c55-9d1e-496c-b309-3e31260bc81e",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "holdings": {
@@ -255,7 +255,7 @@
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false,
-          "default": "'[\"normal\"]'"
+          "default": "'[\"nonfoil\"]'"
         },
         "updated_at": {
           "name": "updated_at",
