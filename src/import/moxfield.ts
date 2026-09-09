@@ -1,8 +1,15 @@
 import { and, eq, sql } from "drizzle-orm";
 
-import { addHolding } from "@/db/queries/holdings";
+import {
+  addHolding,
+  adoptHoldings,
+  type DesiredHolding,
+  previewReconcile,
+  type ReconcileResult,
+  reconcileHoldings,
+} from "@/db/queries/holdings";
 import type { Db } from "@/db/queries/printings";
-import { type Condition, type Finish, printings } from "@/db/schema";
+import { type Condition, type Finish, holdings, printings } from "@/db/schema";
 
 import { columnIndex, parseCsvTable } from "./csv";
 
@@ -112,6 +119,11 @@ export interface ImportReport {
   importedRows: number;
   /** Rows merged into an existing holding rather than creating one. */
   mergedRows: number;
+  mode: ImportMode;
+  /** What reconciling the file against the stored collection did. */
+  reconciled: ReconcileResult | null;
+  /** Holdings claimed by --adopt, if it was used. */
+  adopted: number;
   /** Sum of `Count` across imported rows. */
   importedCards: number;
   /** Rows resolved by name and set because the collector number did not match. */
@@ -157,11 +169,32 @@ export interface ImportReport {
  */
 export type DateSource = "modified" | "import";
 
+/**
+ * How the file relates to what is already stored.
+ *
+ * `replace` treats the export as a snapshot of the whole collection, which is
+ * what it is: quantities are set from the file, and holdings the file no
+ * longer mentions are removed. Only rows the importer owns are touched.
+ *
+ * `add` merges the file in without removing anything, for a partial list.
+ * It is not the default because re-importing the same file under it doubles
+ * every holding.
+ */
+export type ImportMode = "replace" | "add";
+
 export interface ImportOptions {
   /** Parse and report without writing. */
   dryRun?: boolean;
   /** Defaults to `modified`. See {@link DateSource}. */
   dateSource?: DateSource;
+  /** Defaults to `replace`. See {@link ImportMode}. */
+  mode?: ImportMode;
+  /**
+   * Claim every existing holding of unknown provenance before reconciling.
+   * A one-time migration step for collections imported before holdings
+   * recorded their source.
+   */
+  adopt?: boolean;
   /**
    * Forces one acquisition date on every row, overriding `dateSource`.
    * Otherwise the import date is used as the fallback for rows whose
@@ -285,6 +318,9 @@ export function importMoxfieldCsv(
     dataRows: table.rows.length,
     importedRows: 0,
     mergedRows: 0,
+    mode: options.mode ?? "replace",
+    reconciled: null,
+    adopted: 0,
     importedCards: 0,
     resolvedByName: [],
     problems: [],
@@ -298,6 +334,7 @@ export function importMoxfieldCsv(
     fileErrors: table.errors,
   };
 
+  const desired: DesiredHolding[] = [];
   const conditionCounts = new Map<string, number>();
   const finishCounts = new Map<string, number>();
   const languageCounts = new Map<string, number>();
@@ -415,27 +452,56 @@ export function importMoxfieldCsv(
         report.latestDate = dateAdded;
       }
 
-      if (!dryRun) {
-        const { merged } = addHolding(db, {
-          printingKey: resolved.printing.id,
-          quantity: count,
-          finish,
-          condition,
-          dateAdded,
-          createdAt: new Date(),
-        });
-        if (merged) report.mergedRows += 1;
-      }
+      desired.push({
+        printingKey: resolved.printing.id,
+        quantity: count,
+        finish,
+        condition,
+        dateAdded,
+      });
 
       report.importedRows += 1;
       report.importedCards += count;
     });
   };
 
+  const mode = options.mode ?? "replace";
+
   // One transaction for the whole file: a partial import that stops halfway
-  // leaves a collection nobody can reason about.
-  if (dryRun) apply();
-  else db.transaction(apply);
+  // leaves a collection nobody can reason about, and reconciliation deletes
+  // as well as inserts.
+  if (dryRun) {
+    apply();
+    report.reconciled =
+      mode === "replace"
+        ? previewReconcile(db, desired, "moxfield", options.adopt ?? false)
+        : null;
+    if (options.adopt) {
+      report.adopted = db
+        .select({ id: holdings.id })
+        .from(holdings)
+        .where(eq(holdings.source, "manual"))
+        .all().length;
+    }
+  } else {
+    db.transaction(() => {
+      apply();
+      if (options.adopt) report.adopted = adoptHoldings(db, "moxfield");
+      if (mode === "replace") {
+        report.reconciled = reconcileHoldings(db, desired, "moxfield");
+      } else {
+        // Append mode adds to what is stored and never removes anything.
+        for (const holding of desired) {
+          const { merged } = addHolding(db, {
+            ...holding,
+            source: "moxfield",
+            createdAt: new Date(),
+          });
+          if (merged) report.mergedRows += 1;
+        }
+      }
+    });
+  }
 
   report.conditionsSeen = tally(
     conditionCounts,

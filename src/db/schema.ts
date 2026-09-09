@@ -30,6 +30,17 @@ export const FINISH_PRICE_FIELD = {
 export const CONDITIONS = ["NM", "LP", "MP", "HP", "DMG"] as const;
 export type Condition = (typeof CONDITIONS)[number];
 
+/**
+ * Where a holding came from.
+ *
+ * A CSV export is a snapshot of an entire collection, so importing one has to
+ * reconcile — add what is new, update what changed, remove what is gone. That
+ * is only safe if the importer can tell which holdings it owns; hand-added
+ * cards must survive an import that does not mention them.
+ */
+export const HOLDING_SOURCES = ["manual", "moxfield"] as const;
+export type HoldingSource = (typeof HOLDING_SOURCES)[number];
+
 /** Where a price snapshot came from. Used to reason about continuity. */
 export const PRICE_SOURCES = ["scryfall", "mtgjson", "manual"] as const;
 export type PriceSource = (typeof PRICE_SOURCES)[number];
@@ -105,10 +116,21 @@ export const holdings = sqliteTable(
      */
     priceOverrideCents: integer("price_override_cents"),
     note: text("note"),
+    /**
+     * Which path created this holding. Defaults to `manual` so that a row of
+     * unknown provenance is never deleted by an import; see the importer's
+     * --adopt flag for claiming pre-existing rows.
+     */
+    source: text("source")
+      .$type<HoldingSource>()
+      .notNull()
+      .default("manual"),
     createdAt: integer("created_at", { mode: "timestamp" }).notNull(),
   },
   (t) => [
     index("holdings_printing_idx").on(t.printingKey),
+    // The importer reconciles against its own rows only.
+    index("holdings_source_idx").on(t.source),
     // The valuation query walks holdings by date_added.
     index("holdings_date_added_idx").on(t.dateAdded),
   ],

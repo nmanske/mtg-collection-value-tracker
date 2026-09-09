@@ -5,6 +5,7 @@ import {
   type Condition,
   type Finish,
   holdings,
+  type HoldingSource,
   type NewHolding,
   printings,
 } from "@/db/schema";
@@ -220,6 +221,190 @@ export function addHolding(
     .all();
 
   return { id: inserted.id, merged: false };
+}
+
+/**
+ * One desired holding from an import, before it is reconciled against what is
+ * already stored.
+ */
+export interface DesiredHolding {
+  printingKey: number;
+  quantity: number;
+  finish: Finish;
+  condition: Condition;
+  dateAdded: string;
+}
+
+export interface ReconcileResult {
+  added: number;
+  updated: number;
+  unchanged: number;
+  removed: number;
+  /** Cards removed, for a report that talks in cards rather than rows. */
+  cardsRemoved: number;
+}
+
+/** What makes two holdings the same holding for reconciliation purposes. */
+const identity = (holding: DesiredHolding | HoldingRow) =>
+  `${holding.printingKey}|${holding.finish}|${holding.condition}|${holding.dateAdded}`;
+
+/**
+ * Makes the holdings owned by `source` match `desired` exactly.
+ *
+ * A CSV export is a snapshot of a whole collection, not a batch to append, so
+ * importing one has to add what is new, correct quantities that changed, and
+ * remove what is no longer there. Appending instead means re-importing the same
+ * file doubles the collection.
+ *
+ * Only rows belonging to `source` are touched, so hand-added cards survive an
+ * import that does not mention them. Quantity is *set*, never accumulated —
+ * the file is authoritative. A surviving row keeps its id, and with it any
+ * price override or note, rather than being deleted and recreated.
+ */
+export function reconcileHoldings(
+  db: Db,
+  desired: DesiredHolding[],
+  source: HoldingSource,
+  now = new Date(),
+): ReconcileResult {
+  const wanted = new Map<string, DesiredHolding>();
+  for (const holding of desired) {
+    const key = identity(holding);
+    const existing = wanted.get(key);
+    // Two rows of the same card in one file are one holding of their sum;
+    // that is a real thing Moxfield exports.
+    if (existing) existing.quantity += holding.quantity;
+    else wanted.set(key, { ...holding });
+  }
+
+  const current = db
+    .select({
+      id: holdings.id,
+      printingKey: holdings.printingKey,
+      quantity: holdings.quantity,
+      finish: holdings.finish,
+      condition: holdings.condition,
+      dateAdded: holdings.dateAdded,
+    })
+    .from(holdings)
+    .where(eq(holdings.source, source))
+    .all();
+
+  const result: ReconcileResult = {
+    added: 0,
+    updated: 0,
+    unchanged: 0,
+    removed: 0,
+    cardsRemoved: 0,
+  };
+
+  const seen = new Set<string>();
+  for (const row of current) {
+    const key = identity(row);
+    seen.add(key);
+    const target = wanted.get(key);
+
+    if (!target) {
+      db.delete(holdings).where(eq(holdings.id, row.id)).run();
+      result.removed += 1;
+      result.cardsRemoved += row.quantity;
+      continue;
+    }
+
+    if (target.quantity !== row.quantity) {
+      db.update(holdings)
+        .set({ quantity: target.quantity })
+        .where(eq(holdings.id, row.id))
+        .run();
+      result.updated += 1;
+    } else {
+      result.unchanged += 1;
+    }
+  }
+
+  const fresh = [...wanted.entries()]
+    .filter(([key]) => !seen.has(key))
+    .map(([, holding]) => ({ ...holding, source, createdAt: now }));
+
+  for (let i = 0; i < fresh.length; i += 500) {
+    db.insert(holdings).values(fresh.slice(i, i + 500)).run();
+  }
+  result.added = fresh.length;
+
+  return result;
+}
+
+/**
+ * Computes what {@link reconcileHoldings} would do, without writing. Used by
+ * the importer's dry run, which must report removals before performing them.
+ */
+export function previewReconcile(
+  db: Db,
+  desired: DesiredHolding[],
+  source: HoldingSource,
+  /** Preview as though --adopt had claimed every unowned holding first. */
+  adopt = false,
+): ReconcileResult {
+  const wanted = new Map<string, number>();
+  for (const holding of desired) {
+    const key = identity(holding);
+    wanted.set(key, (wanted.get(key) ?? 0) + holding.quantity);
+  }
+
+  const current = db
+    .select({
+      printingKey: holdings.printingKey,
+      quantity: holdings.quantity,
+      finish: holdings.finish,
+      condition: holdings.condition,
+      dateAdded: holdings.dateAdded,
+    })
+    .from(holdings)
+    .where(adopt ? undefined : eq(holdings.source, source))
+    .all();
+
+  const result: ReconcileResult = {
+    added: 0,
+    updated: 0,
+    unchanged: 0,
+    removed: 0,
+    cardsRemoved: 0,
+  };
+
+  const seen = new Set<string>();
+  for (const row of current) {
+    const key = identity(row);
+    seen.add(key);
+    const target = wanted.get(key);
+    if (target === undefined) {
+      result.removed += 1;
+      result.cardsRemoved += row.quantity;
+    } else if (target !== row.quantity) {
+      result.updated += 1;
+    } else {
+      result.unchanged += 1;
+    }
+  }
+
+  for (const key of wanted.keys()) if (!seen.has(key)) result.added += 1;
+
+  return result;
+}
+
+/**
+ * Marks every holding of unknown provenance as owned by `source`.
+ *
+ * A one-time step for databases that were imported before holdings recorded
+ * where they came from. Without it those rows read as hand-added, and the
+ * first reconciling import would insert a second copy of the whole collection
+ * beside them.
+ */
+export function adoptHoldings(db: Db, source: HoldingSource): number {
+  return db
+    .update(holdings)
+    .set({ source })
+    .where(eq(holdings.source, "manual"))
+    .run().changes;
 }
 
 /** Every holding of one printing, for the card page's "you own this" line. */

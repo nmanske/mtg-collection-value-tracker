@@ -31,6 +31,13 @@ export default function ImportPage() {
         back to today, and any date can be corrected per holding afterwards.
       </p>
 
+      <p className="mb-6 text-sm text-neutral-500">
+        The export is treated as your whole collection: quantities are set from
+        the file, and cards it no longer lists are removed. Re-importing the
+        same file therefore changes nothing. Cards you added by hand are left
+        alone. Preview first to see exactly what would change.
+      </p>
+
       <ImportForm />
     </main>
   );

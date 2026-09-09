@@ -4,6 +4,12 @@
  *   npm run import:moxfield -- <file.csv> [--dry-run] [--date YYYY-MM-DD]
  *
  *   --dry-run       parse and report without writing anything
+ *   --add           merge the file in without removing anything. The default
+ *                   treats the export as a snapshot of the whole collection
+ *                   and removes holdings it no longer mentions
+ *   --adopt         one-time: claim existing holdings of unknown provenance
+ *                   before reconciling, for a collection imported before
+ *                   holdings recorded their source
  *   --import-dates  stamp every row with today instead of reading the
  *                   Last Modified column
  *   --date          force one acquisition date on every row
@@ -21,6 +27,8 @@ const args = process.argv.slice(2);
 const file = args.find((arg) => !arg.startsWith("--"));
 const dryRun = args.includes("--dry-run");
 const dateSource = args.includes("--import-dates") ? "import" : "modified";
+const mode = args.includes("--add") ? "add" : "replace";
+const adopt = args.includes("--adopt");
 
 const dateFlagIndex = args.indexOf("--date");
 const dateAdded =
@@ -41,7 +49,7 @@ if (dateAdded && !/^\d{4}-\d{2}-\d{2}$/.test(dateAdded)) {
 function printReport(report: ImportReport) {
   console.log("");
   console.table({
-    mode: report.dryRun ? "dry run (nothing written)" : "imported",
+    run: report.dryRun ? "dry run (nothing written)" : "imported",
     "acquisition dates":
       report.dateSource === "modified"
         ? "from Last Modified"
@@ -56,9 +64,34 @@ function printReport(report: ImportReport) {
     "cards imported": report.importedCards,
     "proxy rows skipped": report.proxyRowsSkipped,
     "  proxy cards skipped": report.proxyCardsSkipped,
+    mode:
+      report.mode === "replace"
+        ? "replace (file is the whole collection)"
+        : "add (nothing removed)",
     "rows with problems": report.problems.length,
     "resolved by name": report.resolvedByName.length,
   });
+
+  if (report.adopted > 0) {
+    console.log(
+      `\nClaimed ${report.adopted.toLocaleString()} existing holdings as import-owned (--adopt).`,
+    );
+  }
+
+  if (report.reconciled) {
+    const r = report.reconciled;
+    console.log(
+      report.dryRun
+        ? "\nWhat this import would change:"
+        : "\nChanges to your collection:",
+    );
+    console.log(`  ${String(r.added).padStart(6)}  holdings added`);
+    console.log(`  ${String(r.updated).padStart(6)}  quantities changed`);
+    console.log(`  ${String(r.unchanged).padStart(6)}  unchanged`);
+    console.log(
+      `  ${String(r.removed).padStart(6)}  removed (${r.cardsRemoved.toLocaleString()} cards not in this export)`,
+    );
+  }
 
   // The mapping tables are the point of the dry run: they turn the two
   // assumptions in this importer into something checkable.
@@ -151,6 +184,8 @@ try {
     dryRun,
     dateAdded,
     dateSource,
+    mode,
+    adopt,
   });
   printReport(report);
 

@@ -48,8 +48,10 @@ npm run dev
 | --- | --- |
 | `npm run ingest:scryfall` | Streams Scryfall's gzipped JSONL `default_cards` bulk file. Upserts printings and writes one day of price snapshots. Idempotent, and skips entirely if that build was already ingested (`--force` overrides). This is what the daily cron will run. |
 | `npm run backfill:mtgjson` | One-time historical fill from MTGJSON's `AllPrices`, TCGplayer retail only, joined to Scryfall ids through MTGJSON's `uuid`. Scoped to held printings by default; `--all` covers every printing. Never overwrites a day already recorded. |
+| `npm run import:moxfield` | Imports a Moxfield collection CSV. The export is treated as a snapshot of the whole collection: quantities are set from the file and holdings it no longer lists are removed, so re-importing the same file changes nothing. Only rows the importer owns are touched, so hand-added cards survive. `--add` merges without removing; `--adopt` claims pre-existing rows once. |
 | `npm run db:smoke` | Round-trips every table and asserts the constraints the app depends on. |
 | `npm run test:ingest` | Unit tests for price conversion and snapshot dating. |
+| `npm test` | Every suite: ingest, holdings, import, valuation, chart axes, schema. |
 
 Both ingests cache their downloads under `data/cache/` and take
 `--dry-run` / `--limit N` for measurement.

@@ -10,6 +10,7 @@ import { migrate } from "drizzle-orm/better-sqlite3/migrator";
 
 import { openDatabase } from "@/db/client";
 import { listHoldings } from "@/db/queries/holdings";
+import { eq } from "drizzle-orm";
 import { holdings, printings } from "@/db/schema";
 import { parseCsv, parseCsvTable } from "@/import/csv";
 import { importMoxfieldCsv } from "@/import/moxfield";
@@ -192,15 +193,17 @@ assert.equal(after.totalCards, 8);
 // date and Last Modified is its own edit timestamp.
 assert.ok(after.rows.every((holding) => holding.dateAdded === "2026-09-09"));
 
-// Duplicate rows in the same file merge rather than creating two holdings.
-const dupe = importMoxfieldCsv(
+// An import replaces the collection rather than adding to it, so a file
+// listing one card leaves exactly that card. The reconciliation section below
+// covers this properly; this asserts the default is replace, not append.
+const narrower = importMoxfieldCsv(
   db,
   [HEADER, row("3", "Forest", "blb", "Near Mint", "", "280")].join("\n"),
   { dateAdded: "2026-09-09" },
 );
-assert.equal(dupe.mergedRows, 1);
-assert.equal(listHoldings(db).rows.length, 4);
-assert.equal(listHoldings(db).totalCards, 11);
+assert.equal(narrower.reconciled?.removed, 3);
+assert.equal(listHoldings(db).rows.length, 1);
+assert.equal(listHoldings(db).totalCards, 3);
 
 // ------------------------------------------------------------------- dates ---
 
@@ -347,6 +350,160 @@ const oddProxy = importMoxfieldCsv(
 assert.equal(oddProxy.importedRows, 1);
 assert.equal(oddProxy.proxyRowsSkipped, 0);
 assert.match(oddProxy.problems[0].reason, /Unrecognised Proxy value "maybe"/);
+
+// ----------------------------------------------------------- reconciliation ---
+
+// The bug this whole mechanism exists for: an export is a snapshot of a whole
+// collection, not a batch to append. Re-importing the same file used to double
+// every holding.
+db.delete(holdings).run();
+
+const snapshot = [
+  HEADER,
+  lmRow("4", "Forest", "blb", "280", "2026-01-01 10:00:00.000"),
+  lmRow("2", "Jace, the Mind Sculptor", "wwk", "31", "2026-02-02 10:00:00.000"),
+].join("\n");
+
+const first = importMoxfieldCsv(db, snapshot, {});
+assert.equal(first.mode, "replace");
+assert.equal(listHoldings(db).totalCards, 6);
+assert.equal(first.reconciled?.added, 2);
+
+// Importing the identical file again changes nothing at all.
+const again = importMoxfieldCsv(db, snapshot, {});
+assert.equal(listHoldings(db).totalCards, 6, "re-import must not double the collection");
+assert.equal(again.reconciled?.added, 0);
+assert.equal(again.reconciled?.updated, 0);
+assert.equal(again.reconciled?.unchanged, 2);
+assert.equal(again.reconciled?.removed, 0);
+
+// A quantity change in the export is applied, not added to.
+const fewer = importMoxfieldCsv(
+  db,
+  [
+    HEADER,
+    lmRow("1", "Forest", "blb", "280", "2026-01-01 10:00:00.000"),
+    lmRow("2", "Jace, the Mind Sculptor", "wwk", "31", "2026-02-02 10:00:00.000"),
+  ].join("\n"),
+  {},
+);
+assert.equal(fewer.reconciled?.updated, 1);
+assert.equal(listHoldings(db).totalCards, 3);
+
+// A card dropped from the export is removed here too.
+const dropped = importMoxfieldCsv(
+  db,
+  [HEADER, lmRow("1", "Forest", "blb", "280", "2026-01-01 10:00:00.000")].join("\n"),
+  {},
+);
+assert.equal(dropped.reconciled?.removed, 1);
+assert.equal(dropped.reconciled?.cardsRemoved, 2);
+assert.equal(listHoldings(db).rows.length, 1);
+
+// Hand-added cards are not the importer's to delete.
+const manual = db
+  .insert(holdings)
+  .values({
+    printingKey: db.select({ id: printings.id }).from(printings).all()[1].id,
+    quantity: 3,
+    finish: "nonfoil",
+    condition: "NM",
+    dateAdded: "2026-05-05",
+    source: "manual",
+    createdAt: new Date(),
+  })
+  .returning({ id: holdings.id })
+  .all()[0];
+
+importMoxfieldCsv(
+  db,
+  [HEADER, lmRow("1", "Forest", "blb", "280", "2026-01-01 10:00:00.000")].join("\n"),
+  {},
+);
+assert.equal(
+  db.select().from(holdings).where(eq(holdings.id, manual.id)).all().length,
+  1,
+  "a manual holding must survive an import that does not mention it",
+);
+
+// A price override on a surviving holding is kept: reconciliation updates the
+// row in place rather than deleting and recreating it.
+const survivor = listHoldings(db).rows.find((row) => row.name === "Forest")!;
+db.update(holdings)
+  .set({ priceOverrideCents: 4_242 })
+  .where(eq(holdings.id, survivor.id))
+  .run();
+
+importMoxfieldCsv(
+  db,
+  [HEADER, lmRow("7", "Forest", "blb", "280", "2026-01-01 10:00:00.000")].join("\n"),
+  {},
+);
+const kept = db.select().from(holdings).where(eq(holdings.id, survivor.id)).get()!;
+assert.equal(kept.priceOverrideCents, 4_242, "an override must survive a quantity change");
+assert.equal(kept.quantity, 7);
+
+// Two rows of the same card within one file are still one holding of their sum.
+db.delete(holdings).run();
+const summed = importMoxfieldCsv(
+  db,
+  [
+    HEADER,
+    lmRow("2", "Forest", "blb", "280", "2026-01-01 10:00:00.000"),
+    lmRow("3", "Forest", "blb", "280", "2026-01-01 10:00:00.000"),
+  ].join("\n"),
+  {},
+);
+assert.equal(summed.reconciled?.added, 1);
+assert.equal(listHoldings(db).totalCards, 5);
+assert.equal(listHoldings(db).rows.length, 1);
+
+// --add keeps the old accumulate behaviour for a partial list.
+const appended = importMoxfieldCsv(
+  db,
+  [HEADER, lmRow("2", "Forest", "blb", "280", "2026-01-01 10:00:00.000")].join("\n"),
+  { mode: "add" },
+);
+assert.equal(appended.mode, "add");
+assert.equal(listHoldings(db).totalCards, 7, "--add accumulates");
+
+// A dry run reports the removals it would make, without making them.
+db.delete(holdings).run();
+importMoxfieldCsv(db, snapshot, {});
+const preview = importMoxfieldCsv(
+  db,
+  [HEADER, lmRow("4", "Forest", "blb", "280", "2026-01-01 10:00:00.000")].join("\n"),
+  { dryRun: true },
+);
+assert.equal(preview.reconciled?.removed, 1);
+assert.equal(preview.reconciled?.unchanged, 1);
+assert.equal(listHoldings(db).totalCards, 6, "a dry run must not write");
+
+// --adopt claims rows of unknown provenance, so a collection imported before
+// holdings recorded a source is not duplicated by the next import.
+db.delete(holdings).run();
+db.insert(holdings)
+  .values({
+    printingKey: db.select({ id: printings.id }).from(printings).all()[0].id,
+    quantity: 4,
+    finish: "nonfoil",
+    condition: "NM",
+    dateAdded: "2026-01-01",
+    source: "manual",
+    createdAt: new Date(),
+  })
+  .run();
+
+const adopted = importMoxfieldCsv(
+  db,
+  [HEADER, lmRow("4", "Forest", "blb", "280", "2026-01-01 10:00:00.000")].join("\n"),
+  { adopt: true },
+);
+assert.equal(adopted.adopted, 1);
+assert.equal(listHoldings(db).totalCards, 4, "--adopt must not duplicate the collection");
+assert.equal(listHoldings(db).rows.length, 1);
+
+db.delete(holdings).run();
 
 // ------------------------------------------------------------- unhappy rows ---
 
