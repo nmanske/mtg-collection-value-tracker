@@ -3,10 +3,9 @@
 import { useId } from "react";
 import {
   Area,
-  AreaChart,
   Bar,
-  BarChart,
   CartesianGrid,
+  ComposedChart,
   ReferenceDot,
   ResponsiveContainer,
   Tooltip,
@@ -42,18 +41,17 @@ export interface ChartPoint {
   acquiredCards: number;
 }
 
-/**
- * Margins and axis width are shared by both panes.
- *
- * The acquisition pane is a separate chart stacked underneath, so its plot area
- * only lines up with the value chart's if the reserved space either side
- * matches exactly.
- */
 const CHART_MARGIN = { top: 8, right: 16, bottom: 0, left: 4 };
 const Y_AXIS_WIDTH = 64;
 
-/** Links the two panes' hover, so one crosshair drives both. */
-const SYNC_ID = "portfolio";
+/**
+ * How much of the plot height the busiest acquisition day fills.
+ *
+ * The bars sit behind the value lines on their own hidden scale, so this is
+ * the only thing setting their size. Tall enough that a small day is legible,
+ * short enough that a big one does not read as part of the value series.
+ */
+const ACQUISITION_HEIGHT = 0.45;
 
 interface TooltipPayload {
   active?: boolean;
@@ -107,27 +105,6 @@ function ValueTooltip({ active, payload }: TooltipPayload) {
           </span>
         </div>
       ) : null}
-    </div>
-  );
-}
-
-function AcquisitionTooltip({ active, payload }: TooltipPayload) {
-  if (!active || !payload?.length) return null;
-  const point = payload[0].payload;
-  if (point.acquiredHoldings === 0) return null;
-
-  return (
-    <div className="rounded-md border border-[var(--viz-grid)] bg-[var(--viz-surface)] px-3 py-2 text-xs shadow-sm">
-      <div className="font-medium text-[var(--viz-text)]">{point.date}</div>
-      <div className="mt-0.5 text-[var(--viz-text)]">
-        +{point.acquiredCards.toLocaleString()} card
-        {point.acquiredCards === 1 ? "" : "s"}
-        <span className="text-[var(--viz-muted)]">
-          {" "}
-          ({point.acquiredHoldings.toLocaleString()} holding
-          {point.acquiredHoldings === 1 ? "" : "s"})
-        </span>
-      </div>
     </div>
   );
 }
@@ -186,7 +163,7 @@ export function PortfolioChart({
 
   return (
     <figure className="viz-root m-0">
-      {showBasket ? (
+      {showBasket || showAcquisitions ? (
         <figcaption className="mb-3 flex flex-wrap items-center gap-x-5 gap-y-1 text-xs">
           <span className="flex items-center gap-1.5">
             <span
@@ -208,16 +185,24 @@ export function PortfolioChart({
               today&apos;s cards priced across the whole window
             </span>
           </span>
+          {showAcquisitions ? (
+            <span className="flex items-center gap-1.5">
+              <span
+                aria-hidden
+                className="inline-block h-2.5 w-2 rounded-sm bg-[var(--viz-mark)] opacity-55"
+              />
+              <span className="text-[var(--viz-text)]">Cards added</span>
+              <span className="text-[var(--viz-muted)]">
+                taller means more that day
+              </span>
+            </span>
+          ) : null}
         </figcaption>
       ) : null}
 
       <div className="h-64 w-full sm:h-72">
         <ResponsiveContainer width="100%" height="100%">
-          <AreaChart
-            data={data}
-            margin={CHART_MARGIN}
-            syncId={SYNC_ID}
-          >
+          <ComposedChart data={data} margin={CHART_MARGIN}>
             <defs>
               <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
                 <stop
@@ -240,10 +225,6 @@ export function PortfolioChart({
               vertical={false}
             />
 
-            {/* Hidden when the acquisition pane is shown: the two panes share
-                one timeline, so the labels belong under the lower of them. The
-                scale is still needed, so the axis stays and only its rendering
-                goes. */}
             <XAxis
               dataKey="date"
               tickFormatter={shortDate}
@@ -251,7 +232,6 @@ export function PortfolioChart({
               axisLine={{ stroke: "var(--viz-grid)" }}
               tick={{ fill: "var(--viz-muted)", fontSize: 11 }}
               minTickGap={28}
-              hide={showAcquisitions}
             />
             <YAxis
               domain={domain}
@@ -262,6 +242,37 @@ export function PortfolioChart({
               tick={{ fill: "var(--viz-muted)", fontSize: 11 }}
               width={Y_AXIS_WIDTH}
             />
+            {/* The acquisition scale: hidden, unlabelled, and never compared
+                against the value axis. The bars are an annotation of when cards
+                arrived, not a second measure to read off.
+                Only this axis is named — the value axis stays the chart's
+                default, because anything that does not name an axis (the grid,
+                the tooltip cursor) binds to the default id, and naming every
+                axis leaves those bound to an id that no longer exists. */}
+            <YAxis
+              yAxisId="acquisitions"
+              domain={[0, busiestDay / ACQUISITION_HEIGHT]}
+              hide
+            />
+
+            {/* First child, so the bars paint behind both lines. */}
+            {showAcquisitions ? (
+              <Bar
+                yAxisId="acquisitions"
+                dataKey="acquiredHoldings"
+                fill="var(--viz-mark)"
+                fillOpacity={0.55}
+                maxBarSize={14}
+                radius={[2, 2, 0, 0]}
+                // A function, not a number: a plain floor applies to the zeroes
+                // too and would draw a mark on every date, claiming cards were
+                // added on days that had none.
+                minPointSize={(value: number | null | undefined) =>
+                  value != null && value > 0 ? 3 : 0
+                }
+                isAnimationActive={false}
+              />
+            ) : null}
 
             <Tooltip
               content={<ValueTooltip />}
@@ -321,68 +332,17 @@ export function PortfolioChart({
               stroke="var(--viz-surface)"
               strokeWidth={2}
             />
-          </AreaChart>
+          </ComposedChart>
         </ResponsiveContainer>
       </div>
 
       {showAcquisitions ? (
-        <div className="mt-1">
-          {/* A separate pane rather than marks inside the value plot: the bars
-              count holdings, not money, and overlaying them would put a second
-              scale in the same box. Stacked and hover-linked, they read as
-              annotation on the same timeline — the convention a price chart
-              uses for volume. */}
-          <div className="h-16 w-full">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={data} margin={CHART_MARGIN} syncId={SYNC_ID}>
-                <XAxis
-                  dataKey="date"
-                  tickFormatter={shortDate}
-                  tickLine={false}
-                  axisLine={{ stroke: "var(--viz-grid)" }}
-                  tick={{ fill: "var(--viz-muted)", fontSize: 11 }}
-                  minTickGap={28}
-                />
-                {/* Hidden, but the same reserved width, so the two plot areas
-                    line up to the pixel. */}
-                <YAxis
-                  width={Y_AXIS_WIDTH}
-                  domain={[0, busiestDay]}
-                  hide
-                />
-                <Tooltip
-                  content={<AcquisitionTooltip />}
-                  cursor={{ fill: "var(--viz-grid)", fillOpacity: 0.35 }}
-                />
-                <Bar
-                  dataKey="acquiredHoldings"
-                  fill="var(--viz-mark)"
-                  // Thin marks with a rounded data-end, grown from a single
-                  // baseline; capped so a sparse window does not render a few
-                  // enormous blocks.
-                  maxBarSize={10}
-                  radius={[2, 2, 0, 0]}
-                  // A single-holding day is 0.6% of the busiest one and would
-                  // render sub-pixel, so small events get a floor. Applied as a
-                  // function because a plain number floors every bar including
-                  // the zeroes, drawing a mark on all 89 dates and claiming
-                  // acquisitions on days that had none.
-                  minPointSize={(value: number | null | undefined) =>
-                    value != null && value > 0 ? 2 : 0
-                  }
-                  isAnimationActive={false}
-                />
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-          <p className="mt-1 text-xs text-[var(--viz-muted)]">
-            Cards added, by day — taller means more. {" "}
-            {acquisitions.length} day{acquisitions.length === 1 ? "" : "s"} in
-            this window, the largest{" "}
-            {busiestDay.toLocaleString()} holdings. These are the steps in the
-            blue line.
-          </p>
-        </div>
+        <p className="mt-2 text-xs text-[var(--viz-muted)]">
+          Grey bars mark days cards were added — taller means more.{" "}
+          {acquisitions.length} day{acquisitions.length === 1 ? "" : "s"} in this
+          window, the largest {busiestDay.toLocaleString()} holdings. They are
+          what the steps in the blue line are.
+        </p>
       ) : null}
 
       {/* The table view, so nothing is gated behind hover or colour. */}
