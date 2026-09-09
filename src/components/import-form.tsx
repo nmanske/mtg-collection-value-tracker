@@ -70,6 +70,7 @@ export function ImportForm() {
             <Stat label="Rows in file" value={report.dataRows} />
             <Stat label="Rows imported" value={report.importedRows} />
             <Stat label="Cards" value={report.importedCards} />
+            <Stat label="Proxies skipped" value={report.proxyCardsSkipped} />
             <Stat label="Not imported" value={report.problems.length} />
           </dl>
 
@@ -81,6 +82,17 @@ export function ImportForm() {
               mapped: entry.mappedTo ?? "unrecognised → NM",
               count: entry.count,
               warn: entry.mappedTo === null,
+            }))}
+          />
+
+          <Mapping
+            title="Proxy column"
+            note="Proxies are not imported — they carry none of the real card's value."
+            rows={report.proxyValuesSeen.map((entry) => ({
+              raw: entry.raw,
+              mapped: entry.treatedAsProxy ? "proxy → skipped" : "real card",
+              count: entry.count,
+              warn: entry.treatedAsProxy,
             }))}
           />
 

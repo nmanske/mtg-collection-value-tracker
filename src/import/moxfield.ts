@@ -23,6 +23,14 @@ import { columnIndex, parseCsvTable } from "./csv";
 const REQUIRED_COLUMNS = ["count", "name", "edition", "collector number"];
 
 /**
+ * Values in Moxfield's boolean columns that mean true. Moxfield writes
+ * `True`/`False`; the rest are accepted so an export edited in a spreadsheet
+ * still reads correctly.
+ */
+const TRUTHY = new Set(["true", "yes", "1", "y", "t"]);
+const FALSY = new Set(["false", "no", "0", "n", "f", ""]);
+
+/**
  * Moxfield's condition vocabulary mapped onto ours.
  *
  * Moxfield's UI uses a Mint/Near Mint/Excellent/Good/Played/Poor scale while
@@ -109,6 +117,11 @@ export interface ImportReport {
   finishesSeen: { raw: string; mappedTo: Finish | null; count: number }[];
   /** Distinct `Language` values. v1 prices English printings only. */
   languagesSeen: { raw: string; count: number }[];
+  /** Proxy rows skipped, and the cards they represented. */
+  proxyRowsSkipped: number;
+  proxyCardsSkipped: number;
+  /** Distinct raw `Proxy` values, so an unexpected spelling is visible. */
+  proxyValuesSeen: { raw: string; treatedAsProxy: boolean; count: number }[];
   /**
    * Set codes with no paper printing in the local database, with how many rows
    * referenced them. Almost always MTGO-only sets, which carry a tix price but
@@ -229,6 +242,9 @@ export function importMoxfieldCsv(
     conditionsSeen: [],
     finishesSeen: [],
     languagesSeen: [],
+    proxyRowsSkipped: 0,
+    proxyCardsSkipped: 0,
+    proxyValuesSeen: [],
     unknownSets: [],
     fileErrors: table.errors,
   };
@@ -237,6 +253,7 @@ export function importMoxfieldCsv(
   const finishCounts = new Map<string, number>();
   const languageCounts = new Map<string, number>();
   const unknownSetCounts = new Map<string, number>();
+  const proxyCounts = new Map<string, number>();
 
   // Every set that has at least one paper printing, read once rather than
   // queried per failing row. Sets absent here are digital-only: the Scryfall
@@ -270,6 +287,19 @@ export function importMoxfieldCsv(
       }
 
       const count = Number(at(row, "count"));
+
+      const rawProxy = at(row, "proxy").toLowerCase();
+      proxyCounts.set(rawProxy, (proxyCounts.get(rawProxy) ?? 0) + 1);
+      // Proxies are not the real card and carry none of its value, so they are
+      // excluded from the collection outright rather than imported and priced.
+      // An unrecognised value is treated as not-a-proxy and surfaced in the
+      // report, so a spelling change upstream cannot silently drop real cards.
+      if (TRUTHY.has(rawProxy)) {
+        report.proxyRowsSkipped += 1;
+        report.proxyCardsSkipped += Number.isInteger(count) && count > 0 ? count : 0;
+        return;
+      }
+
       if (!Number.isInteger(count) || count < 1) {
         report.problems.push({
           ...where,
@@ -355,6 +385,27 @@ export function importMoxfieldCsv(
   report.languagesSeen = [...languageCounts.entries()]
     .sort((a, b) => b[1] - a[1])
     .map(([raw, count]) => ({ raw, count }));
+  report.proxyValuesSeen = [...proxyCounts.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .map(([raw, count]) => ({
+      raw,
+      treatedAsProxy: TRUTHY.has(raw),
+      count,
+    }));
+  // A value that is neither clearly true nor clearly false would be imported
+  // as a real card; make that loud rather than leaving it to be noticed.
+  for (const entry of report.proxyValuesSeen) {
+    if (!TRUTHY.has(entry.raw) && !FALSY.has(entry.raw)) {
+      report.problems.push({
+        line: 0,
+        name: "",
+        edition: "",
+        collectorNumber: "",
+        reason: `Unrecognised Proxy value "${entry.raw}" on ${entry.count} row${entry.count === 1 ? "" : "s"}; those rows were imported as real cards. Check them.`,
+      });
+    }
+  }
+
   report.unknownSets = [...unknownSetCounts.entries()]
     .sort((a, b) => b[1] - a[1])
     .map(([setCode, rows]) => ({ setCode, rows }));

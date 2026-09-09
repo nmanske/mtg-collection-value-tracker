@@ -125,8 +125,19 @@ const row = (
   foil: string,
   number: string,
   language = "English",
+  proxy = "False",
 ) =>
-  `${count},0,"${name}",${edition},${condition},${language},${foil},,2026-01-01,${number},False,False,`;
+  `${count},0,"${name}",${edition},${condition},${language},${foil},,2026-01-01,${number},False,${proxy},`;
+
+/** A row flagged as a proxy in Moxfield's export. */
+const proxyRow = (
+  count: string,
+  name: string,
+  edition: string,
+  number: string,
+  flag = "True",
+) =>
+  `${count},0,"${name}",${edition},Near Mint,English,,,2026-01-01,${number},False,${flag},`;
 
 // ------------------------------------------------------------ happy import ---
 
@@ -180,6 +191,59 @@ const dupe = importMoxfieldCsv(
 assert.equal(dupe.mergedRows, 1);
 assert.equal(listHoldings(db).rows.length, 4);
 assert.equal(listHoldings(db).totalCards, 11);
+
+// ------------------------------------------------------------------ proxies ---
+
+// Proxies are not the real card and carry none of its value, so they must not
+// reach the collection. A real export was 631 of 4,356 rows.
+const withProxies = importMoxfieldCsv(
+  db,
+  [
+    HEADER,
+    row("1", "Forest", "blb", "Near Mint", "", "280"),
+    proxyRow("2", "Forest", "blb", "280"),
+    proxyRow("1", "Jace, the Mind Sculptor", "wwk", "31"),
+  ].join("\n"),
+  { dryRun: true },
+);
+assert.equal(withProxies.importedRows, 1);
+assert.equal(withProxies.importedCards, 1);
+assert.equal(withProxies.proxyRowsSkipped, 2);
+assert.equal(withProxies.proxyCardsSkipped, 3);
+// A skipped proxy is not an error — it does not belong in the problem list.
+assert.equal(withProxies.problems.length, 0);
+
+// Lower case and other spellings of true are still proxies.
+for (const flag of ["true", "TRUE", "yes", "1"]) {
+  const report = importMoxfieldCsv(
+    db,
+    [HEADER, proxyRow("1", "Forest", "blb", "280", flag)].join("\n"),
+    { dryRun: true },
+  );
+  assert.equal(report.proxyRowsSkipped, 1, `"${flag}" should count as a proxy`);
+}
+
+// False, and an empty cell, are real cards.
+for (const flag of ["False", "false", "0", ""]) {
+  const report = importMoxfieldCsv(
+    db,
+    [HEADER, proxyRow("1", "Forest", "blb", "280", flag)].join("\n"),
+    { dryRun: true },
+  );
+  assert.equal(report.proxyRowsSkipped, 0, `"${flag}" should be a real card`);
+  assert.equal(report.importedRows, 1);
+}
+
+// An unrecognised value imports the row but says so loudly, rather than
+// silently dropping real cards if Moxfield changes the spelling.
+const oddProxy = importMoxfieldCsv(
+  db,
+  [HEADER, proxyRow("1", "Forest", "blb", "280", "maybe")].join("\n"),
+  { dryRun: true },
+);
+assert.equal(oddProxy.importedRows, 1);
+assert.equal(oddProxy.proxyRowsSkipped, 0);
+assert.match(oddProxy.problems[0].reason, /Unrecognised Proxy value "maybe"/);
 
 // ------------------------------------------------------------- unhappy rows ---
 

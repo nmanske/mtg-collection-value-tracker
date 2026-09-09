@@ -44,6 +44,8 @@ function printReport(report: ImportReport) {
     "rows imported": report.importedRows,
     "  of which merged": report.mergedRows,
     "cards imported": report.importedCards,
+    "proxy rows skipped": report.proxyRowsSkipped,
+    "  proxy cards skipped": report.proxyCardsSkipped,
     "rows with problems": report.problems.length,
     "resolved by name": report.resolvedByName.length,
   });
@@ -66,6 +68,16 @@ function printReport(report: ImportReport) {
     console.log(
       `  ${String(entry.count).padStart(6)}  ${shown.padEnd(20)} -> ${
         entry.mappedTo ?? "UNRECOGNISED, row skipped"
+      }`,
+    );
+  }
+
+  console.log("\nProxy values found:");
+  for (const entry of report.proxyValuesSeen) {
+    const shown = entry.raw === "" ? "(empty)" : entry.raw;
+    console.log(
+      `  ${String(entry.count).padStart(6)}  ${shown.padEnd(20)} -> ${
+        entry.treatedAsProxy ? "PROXY, skipped" : "real card"
       }`,
     );
   }
