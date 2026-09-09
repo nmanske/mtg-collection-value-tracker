@@ -12,6 +12,9 @@ Pre-alpha. Phase 0 (project scaffolding) only.
 - **Portfolio tracking** — add printings to a collection (quantity, finish,
   condition, date added) and chart total collection value over time.
 - **Card price history** — look up any single printing and view its price chart.
+- **Statistics** — `/stats`: most valuable cards, biggest risers and fallers,
+  what actually moved the collection's value, buylist spreads, where the value
+  sits by set, and the long tail.
 - **Export** — three CSVs at `/export`: your collection with every vendor's
   current price beside it, the dashboard's value history, and daily price
   history for the cards you hold. Each is bounded by the size of your

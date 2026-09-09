@@ -33,7 +33,8 @@ body {
  * dataviz palette validator — lightness band, chroma floor and >=3:1 contrast
  * all pass in both.
  */
-.viz-root {
+.viz-root,
+:root {
   --viz-surface: #fcfcfb;
   --viz-text: #0b0b0b;
   --viz-muted: #52514e;
@@ -43,6 +44,10 @@ body {
 }
 
 @media (prefers-color-scheme: dark) {
+  /* Both selectors, matching the light block: the tokens are defined at :root
+     so plain elements (the stats bars) can use them, and again on .viz-root so
+     a chart keeps them even inside a forced-light subtree. */
+  :root:not([data-theme="light"]),
   :root:not([data-theme="light"]) .viz-root {
     --viz-surface: #1a1a19;
     --viz-text: #ffffff;
