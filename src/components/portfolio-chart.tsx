@@ -34,6 +34,8 @@ export interface ChartPoint {
   valueCents: number;
   holdingsHeld: number;
   unpricedHoldings: number;
+  /** Today's holdings valued on this date, ignoring acquisition dates. */
+  basketCents: number | null;
 }
 
 interface TooltipPayload {
@@ -59,6 +61,18 @@ function ValueTooltip({ active, payload }: TooltipPayload) {
           {formatUsd(point.valueCents)}
         </span>
       </div>
+      {point.basketCents != null ? (
+        <div className="mt-1 flex items-center gap-1.5">
+          <span
+            aria-hidden
+            className="inline-block h-2 w-2 rounded-full bg-[var(--viz-series-2)]"
+          />
+          <span className="tabular-nums text-[var(--viz-text)]">
+            {formatUsd(point.basketCents)}
+          </span>
+          <span className="text-[var(--viz-muted)]">if held throughout</span>
+        </div>
+      ) : null}
       <div className="mt-0.5 text-[var(--viz-muted)]">
         {point.holdingsHeld.toLocaleString()} holdings
         {point.unpricedHoldings > 0
@@ -69,7 +83,18 @@ function ValueTooltip({ active, payload }: TooltipPayload) {
   );
 }
 
-export function PortfolioChart({ points }: { points: ValuePoint[] }) {
+export function PortfolioChart({
+  points,
+  basketPoints,
+}: {
+  points: ValuePoint[];
+  /**
+   * The same holdings valued across the whole window regardless of when they
+   * were bought. Plotted alongside so the gap between the lines is the part of
+   * the change that came from acquiring cards rather than from prices.
+   */
+  basketPoints?: ValuePoint[];
+}) {
   const gradientId = useId();
 
   if (points.length < 2) {
@@ -81,20 +106,55 @@ export function PortfolioChart({ points }: { points: ValuePoint[] }) {
     );
   }
 
+  const basketByDate = new Map(
+    (basketPoints ?? []).map((point) => [point.date, point.valueCents]),
+  );
+  const showBasket = basketByDate.size > 0;
+
   const data: ChartPoint[] = points.map((point) => ({
     date: point.date,
     valueCents: point.valueCents,
     holdingsHeld: point.holdingsHeld,
     unpricedHoldings: point.unpricedHoldings,
+    basketCents: basketByDate.get(point.date) ?? null,
   }));
 
   const last = data[data.length - 1];
   const { domain, ticks } = paddedScale(
-    data.map((point) => point.valueCents),
+    data.flatMap((point) =>
+      point.basketCents == null
+        ? [point.valueCents]
+        : [point.valueCents, point.basketCents],
+    ),
   );
 
   return (
     <figure className="viz-root m-0">
+      {showBasket ? (
+        <figcaption className="mb-3 flex flex-wrap items-center gap-x-5 gap-y-1 text-xs">
+          <span className="flex items-center gap-1.5">
+            <span
+              aria-hidden
+              className="inline-block h-0.5 w-4 rounded-full bg-[var(--viz-series)]"
+            />
+            <span className="text-[var(--viz-text)]">As held</span>
+            <span className="text-[var(--viz-muted)]">
+              counts each card from the day you got it
+            </span>
+          </span>
+          <span className="flex items-center gap-1.5">
+            <span
+              aria-hidden
+              className="inline-block h-0.5 w-4 rounded-full bg-[var(--viz-series-2)]"
+            />
+            <span className="text-[var(--viz-text)]">If held throughout</span>
+            <span className="text-[var(--viz-muted)]">
+              today&apos;s cards priced across the whole window
+            </span>
+          </span>
+        </figcaption>
+      ) : null}
+
       <div className="h-64 w-full sm:h-72">
         <ResponsiveContainer width="100%" height="100%">
           <AreaChart
@@ -146,6 +206,29 @@ export function PortfolioChart({ points }: { points: ValuePoint[] }) {
               cursor={{ stroke: "var(--viz-grid)", strokeWidth: 1 }}
             />
 
+            {showBasket ? (
+              <Area
+                type="monotone"
+                dataKey="basketCents"
+                stroke="var(--viz-series-2)"
+                strokeWidth={2}
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                // No fill: two washes over one another muddies both, and this
+                // line is context for the primary rather than a second total.
+                fill="none"
+                dot={false}
+                activeDot={{
+                  r: 4,
+                  fill: "var(--viz-series-2)",
+                  stroke: "var(--viz-surface)",
+                  strokeWidth: 2,
+                }}
+                isAnimationActive={false}
+                connectNulls
+              />
+            ) : null}
+
             <Area
               type="monotone"
               dataKey="valueCents"
@@ -196,8 +279,13 @@ export function PortfolioChart({ points }: { points: ValuePoint[] }) {
                   Date
                 </th>
                 <th scope="col" className="py-1 pr-4 text-right font-medium">
-                  Value
+                  As held
                 </th>
+                {showBasket ? (
+                  <th scope="col" className="py-1 pr-4 text-right font-medium">
+                    If held throughout
+                  </th>
+                ) : null}
                 <th scope="col" className="py-1 text-right font-medium">
                   Holdings
                 </th>
@@ -210,6 +298,13 @@ export function PortfolioChart({ points }: { points: ValuePoint[] }) {
                   <td className="py-0.5 pr-4 text-right tabular-nums">
                     {formatUsd(point.valueCents)}
                   </td>
+                  {showBasket ? (
+                    <td className="py-0.5 pr-4 text-right tabular-nums">
+                      {point.basketCents == null
+                        ? "—"
+                        : formatUsd(point.basketCents)}
+                    </td>
+                  ) : null}
                   <td className="py-0.5 text-right tabular-nums">
                     {point.holdingsHeld.toLocaleString()}
                   </td>

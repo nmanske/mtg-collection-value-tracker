@@ -39,6 +39,7 @@ body {
   --viz-muted: #52514e;
   --viz-grid: #e6e5e1;
   --viz-series: #2a78d6;
+  --viz-series-2: #eb6834;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -48,6 +49,7 @@ body {
     --viz-muted: #c3c2b7;
     --viz-grid: #33322f;
     --viz-series: #3987e5;
+    --viz-series-2: #d95926;
   }
 }
 

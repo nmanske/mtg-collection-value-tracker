@@ -195,6 +195,41 @@ assert.deepEqual(
 );
 assert.equal(ranged.points[0].valueCents, 400);
 
+// --- constant basket ---
+
+// The basket ignores acquisition dates: today's holdings are valued across the
+// whole window, so the movement is prices alone rather than prices plus buying.
+const basket = portfolioSeries(db, { constantBasket: true }).points;
+const asHeld = portfolioSeries(db).points;
+
+// Beta was acquired on the 4th, so as-held counts it only from then...
+assert.equal(asHeld[0].valueCents, 200);
+assert.deepEqual(
+  asHeld.map((point) => point.holdingsHeld),
+  [1, 1, 1, 2, 2],
+);
+
+// ...while the basket counts it on every date it has a price for.
+assert.deepEqual(
+  basket.map((point) => point.holdingsHeld),
+  [2, 2, 2, 2, 2],
+);
+
+// Beta has no price before the 3rd, so it still contributes nothing then —
+// the basket ignores acquisition dates, not missing prices.
+assert.equal(basket[0].valueCents, 200);
+assert.equal(basket[0].unpricedHoldings, 1);
+// From the 3rd, Beta's price counts even though it was "acquired" on the 4th.
+assert.equal(basket[2].valueCents, 400 + 1_000);
+assert.equal(asHeld[2].valueCents, 400);
+
+// Both series must agree on the final date: everything held today is in both.
+assert.equal(
+  basket.at(-1)!.valueCents,
+  asHeld.at(-1)!.valueCents,
+  "the two series must converge on the last date",
+);
+
 // --- summary ---
 const summary = portfolioSummary(db);
 assert.equal(summary.currentCents, 2_200);
@@ -209,6 +244,25 @@ assert.equal(summary.allTime.changeRatio, 10);
 // A window longer than the history reports nothing rather than a wrong number.
 assert.equal(summary.week.fromCents, null);
 assert.equal(summary.month.changeCents, null);
+
+// The prices-only figure is the basket's all-time change, which is smaller
+// than the headline whenever cards were acquired during the window.
+assert.equal(summary.basketPoints.length, 5);
+assert.equal(summary.marketOnly.fromCents, basket[0].valueCents);
+assert.equal(
+  summary.marketOnly.changeCents,
+  basket.at(-1)!.valueCents - basket[0].valueCents,
+);
+// The general invariant, rather than a strict inequality that happens to hold
+// only when the not-yet-acquired cards are priced at the start: the basket
+// contains everything the as-held series contains, plus cards bought later, so
+// it can never be worth less on any date.
+summary.basketPoints.forEach((point, index) => {
+  assert.ok(
+    point.valueCents >= summary.points[index].valueCents,
+    `basket must not be below as-held on ${point.date}`,
+  );
+});
 
 sqlite.close();
 cleanup();

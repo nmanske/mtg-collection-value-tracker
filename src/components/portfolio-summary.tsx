@@ -80,10 +80,18 @@ export function PortfolioSummaryPanel({
           <ChangeTile label="Week" change={summary.week} />
           <ChangeTile label="Month" change={summary.month} />
           <ChangeTile label="All time" change={summary.allTime} />
+          {/* Separated by a rule: this one answers a different question from
+              the three beside it — prices only, with buying held out. */}
+          <div className="border-l border-neutral-200 pl-8 dark:border-neutral-800">
+            <ChangeTile label="Prices only" change={summary.marketOnly} />
+          </div>
         </dl>
       </div>
 
-      <PortfolioChart points={summary.points} />
+      <PortfolioChart
+        points={summary.points}
+        basketPoints={summary.basketPoints}
+      />
 
       {last && last.unpricedHoldings > 0 ? (
         <p className="mt-3 text-xs text-amber-700 dark:text-amber-400">
@@ -98,6 +106,17 @@ export function PortfolioSummaryPanel({
         <p className="mt-3 text-xs text-neutral-500">
           History begins {summary.points[0].date}, the earliest price data
           available. Cards acquired before then count from that date onward.
+          {summary.marketOnly.changeCents != null &&
+          summary.allTime.changeCents != null ? (
+            <>
+              {" "}
+              Of the {formatUsd(summary.allTime.changeCents)} all-time change,{" "}
+              {formatUsd(summary.marketOnly.changeCents)} came from prices and
+              the rest from cards entering the collection. The fixed basket is
+              the cards you hold today, so it is chosen with hindsight rather
+              than being a market index.
+            </>
+          ) : null}
         </p>
       ) : null}
     </section>

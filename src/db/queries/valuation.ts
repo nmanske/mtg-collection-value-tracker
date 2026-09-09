@@ -106,7 +106,23 @@ export function priceDates(db: Db, from?: string, to?: string): string[] {
  */
 export function portfolioSeries(
   db: Db,
-  options: { from?: string; to?: string } = {},
+  options: {
+    from?: string;
+    to?: string;
+    /**
+     * Value today's holdings on every date, ignoring when each was acquired.
+     *
+     * The normal series answers "what was my collection worth then", which
+     * mixes two different things: prices moving, and cards being bought. This
+     * holds the basket fixed so only prices move — measured against the real
+     * collection, 84% of an apparent 9.47% gain turned out to be acquisitions.
+     *
+     * It is not a market index. The basket is whatever is owned today, so it
+     * is selected with hindsight; it is a fair proxy only to the extent the
+     * collection is broad.
+     */
+    constantBasket?: boolean;
+  } = {},
 ): ValuationSeries {
   const sqlite = clientOf(db);
   const dates = priceDates(db, options.from, options.to);
@@ -231,7 +247,7 @@ export function portfolioSeries(
 
     for (let i = 0; i < rows.length; i += 1) {
       const row = rows[i];
-      if (row.dateAdded > date) continue;
+      if (!options.constantBasket && row.dateAdded > date) continue;
       holdingsHeld += 1;
 
       // A manual override applies for the whole life of the holding; it exists
@@ -290,6 +306,13 @@ export interface PortfolioSummary {
   month: Change;
   allTime: Change;
   points: ValuePoint[];
+  /**
+   * The same holdings valued on every date regardless of when they were
+   * acquired, so the movement is prices alone.
+   */
+  basketPoints: ValuePoint[];
+  /** All-time change of the fixed basket: market movement without buying. */
+  marketOnly: Change;
 }
 
 /**
@@ -328,11 +351,19 @@ function changeOver(points: ValuePoint[], days: number): Change {
 
 export function portfolioSummary(db: Db): PortfolioSummary {
   const { points } = portfolioSeries(db);
+  const { points: basketPoints } = portfolioSeries(db, {
+    constantBasket: true,
+  });
   const last = points.at(-1);
 
   const allTime: Change =
     points.length > 0
       ? changeOver(points, points.length - 1)
+      : { fromCents: null, fromDate: null, changeCents: null, changeRatio: null };
+
+  const marketOnly: Change =
+    basketPoints.length > 0
+      ? changeOver(basketPoints, basketPoints.length - 1)
       : { fromCents: null, fromDate: null, changeCents: null, changeRatio: null };
 
   return {
@@ -343,6 +374,8 @@ export function portfolioSummary(db: Db): PortfolioSummary {
     month: changeOver(points, 30),
     allTime,
     points,
+    basketPoints,
+    marketOnly,
   };
 }
 
