@@ -5,24 +5,27 @@ import { MARKET_SIDES, VENDORS } from "@/db/schema";
 import { csvRow, moneyCell, UTF8_BOM } from "./csv";
 
 /**
- * The three exports.
+ * The two exports: what you own, and what it has been worth.
  *
- * Kept to three because the useful groupings are: what you own, what it has
- * been worth, and what each card cost day by day. Everything else folds into
- * one of those rather than becoming a fourth file — vendor prices in
- * particular are columns, not their own export.
+ * Both describe the user's own collection. `collection` is a snapshot of their
+ * holdings with today's prices beside each one; `value-history` is a derived
+ * daily total. Vendor prices are columns on the collection rather than their
+ * own file, because the comparison a reader wants runs across a row.
  *
- * Volume is the design constraint. Exporting the price tables as they are
- * stored would be 12.9 million canonical rows plus 2.7 million vendor rows.
- * Every export here is bounded by the size of the collection instead:
+ * A per-card daily price series was deliberately removed. Price providers'
+ * terms consistently forbid repackaging their data as a standalone feed or
+ * bulk dataset, and an export button emitting one row per card per day is
+ * exactly that shape — a risk that grows if this is ever offered commercially.
+ * It was also 34 MB against 600 KB for everything else. The database file
+ * remains the backup route for the accumulated history; see the README.
  *
- * - collection: one row per holding (3,724)
- * - value-history: one row per date (89)
- * - price-history: one row per held card, finish and date, with every vendor
- *   as a column (331,170 rather than ~3.1 million)
+ * Volume is still the design constraint on what is left. The price tables hold
+ * 12.9 million canonical rows plus 2.7 million vendor rows; both exports here
+ * are bounded by the size of the collection instead — one row per holding
+ * (3,724) and one row per date (89).
  */
 
-export type ExportId = "collection" | "value-history" | "price-history";
+export type ExportId = "collection" | "value-history";
 
 export interface ExportSpec {
   id: ExportId;
@@ -197,111 +200,12 @@ const valueHistory: ExportSpec = {
   },
 };
 
-/**
- * Daily prices for the cards you hold, every vendor on one row.
- *
- * Scoped to held printings and pivoted so each date is a single row. Exporting
- * the tables as stored would be roughly 3.1 million rows across two files; this
- * is 331,170 rows in one.
- *
- * Deliberately carries no card names, set codes or collector numbers. Those
- * belong to the card, not to the day, so repeating them once per date wrote
- * 8.3 MB of the 42 MB file to say the same 3,724 things 89 times. This file is
- * the time series and nothing else; join it to the collection export on
- * (scryfall_id, finish) to get names back.
- */
-const priceHistory: ExportSpec = {
-  id: "price-history",
-  title: "Price history",
-  description:
-    "One row per card, finish and date, with every vendor and the buylist as columns. Identified by scryfall_id and finish — join it to the collection export on those two columns for names and set codes. The largest export by far.",
-  rows: (db) =>
-    count(
-      db,
-      `select count(*) c from (
-         select printing_key, finish, date from price_snapshots ps
-          where exists (select 1 from holdings h
-                         where h.printing_key = ps.printing_key and h.finish = ps.finish)
-         union
-         select printing_key, finish, date from vendor_prices vp
-          where exists (select 1 from holdings h
-                         where h.printing_key = vp.printing_key and h.finish = vp.finish))`,
-    ),
-  *stream(db) {
-    yield UTF8_BOM +
-      csvRow([
-        "date",
-        // The join key back to the collection export.
-        "scryfall_id",
-        "finish",
-        "tracked_price_usd",
-        "tracked_source",
-        "estimated",
-        ...VENDOR_COLUMNS.map(vendorHeader),
-      ]);
-
-    const vendorSelects = VENDOR_COLUMNS.map(
-      ({ vendor, side }) =>
-        `max(case when vp.vendor = '${vendor}' and vp.side = '${side}'
-                  then vp.price_cents end) as ${vendor}_${side}`,
-    ).join(",\n");
-
-    // Driven from the held (printing, finish) pairs so both price tables are
-    // read along their primary keys, and grouped so a date is one row.
-    const statement = client(db).prepare(`
-      with held as (select distinct printing_key, finish from holdings)
-      select d.date, p.scryfall_id,
-             d.finish, ps.price_cents as tracked, ps.source, ps.estimated,
-             ${vendorSelects}
-        from (
-          select h.printing_key, h.finish, s.date
-            from held h join price_snapshots s
-              on s.printing_key = h.printing_key and s.finish = h.finish
-          union
-          select h.printing_key, h.finish, v.date
-            from held h join vendor_prices v
-              on v.printing_key = h.printing_key and v.finish = h.finish
-        ) d
-        join printings p on p.id = d.printing_key
-        left join price_snapshots ps
-          on ps.printing_key = d.printing_key and ps.finish = d.finish
-         and ps.date = d.date
-        left join vendor_prices vp
-          on vp.printing_key = d.printing_key and vp.finish = d.finish
-         and vp.date = d.date
-       group by d.printing_key, d.finish, d.date
-       order by d.date desc, p.scryfall_id, d.finish
-    `);
-
-    for (const row of statement.iterate() as Iterable<
-      Record<string, string | number | null>
-    >) {
-      yield csvRow([
-        row.date,
-        row.scryfall_id,
-        row.finish,
-        moneyCell(row.tracked as number | null),
-        row.source ?? "",
-        row.estimated ? "true" : "false",
-        ...VENDOR_COLUMNS.map(({ vendor, side }) =>
-          moneyCell(row[`${vendor}_${side}`] as number | null),
-        ),
-      ]);
-    }
-  },
-};
-
 export const EXPORTS: Record<ExportId, ExportSpec> = {
   collection,
   "value-history": valueHistory,
-  "price-history": priceHistory,
 };
 
-export const EXPORT_ORDER: ExportId[] = [
-  "collection",
-  "value-history",
-  "price-history",
-];
+export const EXPORT_ORDER: ExportId[] = ["collection", "value-history"];
 
 export function isExportId(value: string): value is ExportId {
   return value in EXPORTS;

@@ -15,12 +15,11 @@ Pre-alpha. Phase 0 (project scaffolding) only.
 - **Statistics** — `/stats`: most valuable cards, biggest risers and fallers,
   what actually moved the collection's value, buylist spreads, where the value
   sits by set, and the long tail.
-- **Export** — three CSVs at `/export`: your collection with every vendor's
-  current price beside it, the dashboard's value history, and daily price
-  history for the cards you hold. Each is bounded by the size of your
-  collection rather than the price tables, which hold 15.7 million rows. The
-  collection and price-history files carry no duplicated columns and join on
-  `scryfall_id` + `finish`.
+- **Export** — two CSVs at `/export`: your collection with every vendor's
+  current price beside it, and the dashboard's value history. Both are bounded
+  by the size of your collection rather than the price tables, which hold 15.7
+  million rows. There is deliberately no per-card daily price export; see
+  below.
 - **Vendor comparison** — what TCGplayer, Card Kingdom, Cardmarket and Mana
   Pool ask for your cards, and what Card Kingdom would pay for them. Scoped to
   your collection: every vendor and side for every printing measures at roughly
@@ -110,6 +109,18 @@ image. Run them from a checkout, against the same file the container uses:
 DATABASE_PATH=./data/mtg.db npm run backfill:mtgjson -- --all
 DATABASE_PATH=./data/mtg.db npm run import:moxfield -- collection.csv --dry-run
 ```
+
+### Backing up
+
+The database is the backup. Copy `data/mtg.db` — it holds the collection and
+every price ever recorded, including days that can no longer be re-fetched once
+MTGJSON's rolling 90-day window moves past them.
+
+There is no export of the per-card daily price series, and that is deliberate.
+Price providers' terms consistently forbid repackaging their data as a
+standalone feed or bulk dataset, and a CSV with one row per card per day is
+exactly that shape — a real risk if this is ever run commercially. The two
+exports that remain describe your own holdings and a derived daily total.
 
 SQLite is in WAL mode, so these are safe to run while the container is serving.
 CSV import is also available in the app itself at `/import`, which needs no

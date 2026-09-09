@@ -7,10 +7,9 @@ export const metadata = { title: "Export" };
 
 export const dynamic = "force-dynamic";
 
-/** A rough file size, so a 31 MB download is not a surprise. */
+/** A rough file size, so a download is not a surprise. */
 function estimateBytes(id: string, rows: number): number {
-  const perRow = id === "price-history" ? 72 : id === "collection" ? 160 : 60;
-  return rows * perRow;
+  return rows * (id === "collection" ? 160 : 60);
 }
 
 function formatBytes(bytes: number): string {
@@ -35,11 +34,9 @@ export default async function ExportPage() {
       </header>
 
       <p className="mb-8 text-sm text-neutral-500">
-        Everything here is CSV, UTF-8 with a byte-order mark so spreadsheets read
-        accented card names correctly. Each export is scoped to your collection
-        rather than the whole card database — the price tables hold 15.7 million
-        rows between them, and dumping those verbatim is what these are designed
-        to avoid.
+        Both exports describe your collection: what you own, and what it has
+        been worth. CSV, UTF-8 with a byte-order mark so spreadsheets read
+        accented card names correctly.
       </p>
 
       <ul className="flex flex-col gap-4">
@@ -88,29 +85,20 @@ export default async function ExportPage() {
 
       <div className="mt-8 flex flex-col gap-2 text-xs text-neutral-500">
         <p>
-          The two card exports are meant to be used together and share no
-          duplicated columns.{" "}
-          <strong className="font-medium">Collection</strong> describes each
-          card once — name, set, quantity, today&apos;s prices.{" "}
-          <strong className="font-medium">Price history</strong> is the time
-          series alone, identified by{" "}
-          <code className="font-mono">scryfall_id</code> and{" "}
-          <code className="font-mono">finish</code>. Join on those two columns
-          to put names against the history.
-        </p>
-        <p>
-          Card names are deliberately absent from the history: repeating them
-          once per date wrote the same 3,724 names 89 times, which was a fifth
-          of the file.
-        </p>
-        <p>
           Prices are decimal dollars except the Cardmarket columns, which are
           euros and labelled as such — nothing here converts between
-          currencies. Vendor prices are columns rather than extra rows, which
-          keeps the history to a third of a million rows instead of roughly
-          three million.
+          currencies. Each vendor is a column rather than extra rows, so the
+          comparison reads across a card.
+        </p>
+        <p>
+          There is deliberately no per-card daily price export. Price providers
+          forbid repackaging their data as a standalone feed or bulk dataset,
+          and a file with one row per card per day is exactly that. To back up
+          the accumulated history, copy the database file itself —{" "}
+          <code className="font-mono">data/mtg.db</code>.
         </p>
       </div>
+
     </main>
   );
 }

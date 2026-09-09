@@ -180,57 +180,21 @@ assert.equal(history.rows[0][1], "30.00");
 assert.equal(history.rows[1][1], "36.00");
 assert.equal(EXPORTS["value-history"].rows(db), 2);
 
-// ----------------------------------------------------------- price history ---
-
-const prices = parseCsvTable(render("price-history"));
-// One row per card, finish and date — not one per vendor.
-assert.equal(prices.rows.length, 2);
-assert.equal(EXPORTS["price-history"].rows(db), 2);
-
-const priceRow = Object.fromEntries(
-  prices.header.map((name, i) => [name, prices.rows[0][i]]),
-);
-// Ordered newest first.
-assert.equal(priceRow.date, "2026-01-02");
-
-// The time series carries no card names: those belong to the card, not the
-// day, and repeating them per date was 20% of the real file. It joins to the
-// collection export on these two columns instead.
-assert.ok(!prices.header.includes("name"), "no name column");
-assert.ok(!prices.header.includes("set_code"), "no set_code column");
-assert.ok(!prices.header.includes("collector_number"), "no collector_number column");
-assert.ok(prices.header.includes("scryfall_id"), "the join key must be present");
-assert.ok(prices.header.includes("finish"), "the join key must be present");
-
-// The join actually resolves: every series in the history is in the collection.
-const collectionKeys = new Set(
-  collection.rows.map(
-    (row) =>
-      `${row[collection.header.indexOf("scryfall_id")]}|${row[collection.header.indexOf("finish")]}`,
-  ),
-);
-for (const row of prices.rows) {
-  const key = `${row[prices.header.indexOf("scryfall_id")]}|${row[prices.header.indexOf("finish")]}`;
-  assert.ok(
-    collectionKeys.has(key),
-    `price history row ${key} must join to the collection export`,
-  );
-}
-assert.equal(priceRow.tracked_price_usd, "12.00");
-assert.equal(priceRow.cardkingdom_buylist_usd, "7.00");
-assert.equal(priceRow.estimated, "false");
-
-// The pivot is the whole point: vendors must be columns, so the row count
-// stays at one per date rather than one per vendor per date.
+// The per-card daily price series was removed: providers' terms forbid
+// repackaging their data as a standalone feed, and an export emitting one row
+// per card per day is exactly that. Assert it stays gone rather than trusting
+// that nobody adds it back.
+assert.deepEqual(EXPORT_ORDER, ["collection", "value-history"]);
+assert.equal(isExportId("price-history"), false);
 assert.ok(
-  prices.header.includes("cardkingdom_retail_usd") &&
-    prices.header.includes("manapool_buylist_usd"),
-  "every vendor and side must be a column",
+  !Object.keys(EXPORTS).includes("price-history"),
+  "the raw price-series export must not come back",
 );
-assert.ok(
-  !prices.header.includes("vendor"),
-  "there must be no vendor column — vendors are columns, not rows",
-);
+
+// Both remaining exports describe the collection, so neither can grow with the
+// price tables: one row per holding and one row per date.
+assert.ok(EXPORTS.collection.rows(db) <= 10);
+assert.ok(EXPORTS["value-history"].rows(db) <= 10);
 
 sqlite.close();
 cleanup();
