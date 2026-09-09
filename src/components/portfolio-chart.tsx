@@ -4,6 +4,8 @@ import { useId } from "react";
 import {
   Area,
   AreaChart,
+  Bar,
+  BarChart,
   CartesianGrid,
   ReferenceDot,
   ResponsiveContainer,
@@ -36,7 +38,22 @@ export interface ChartPoint {
   unpricedHoldings: number;
   /** Today's holdings valued on this date, ignoring acquisition dates. */
   basketCents: number | null;
+  acquiredHoldings: number;
+  acquiredCards: number;
 }
+
+/**
+ * Margins and axis width are shared by both panes.
+ *
+ * The acquisition pane is a separate chart stacked underneath, so its plot area
+ * only lines up with the value chart's if the reserved space either side
+ * matches exactly.
+ */
+const CHART_MARGIN = { top: 8, right: 16, bottom: 0, left: 4 };
+const Y_AXIS_WIDTH = 64;
+
+/** Links the two panes' hover, so one crosshair drives both. */
+const SYNC_ID = "portfolio";
 
 interface TooltipPayload {
   active?: boolean;
@@ -79,6 +96,38 @@ function ValueTooltip({ active, payload }: TooltipPayload) {
           ? ` · ${point.unpricedHoldings.toLocaleString()} unpriced`
           : ""}
       </div>
+      {point.acquiredHoldings > 0 ? (
+        <div className="mt-1 border-t border-[var(--viz-grid)] pt-1 text-[var(--viz-text)]">
+          +{point.acquiredCards.toLocaleString()} card
+          {point.acquiredCards === 1 ? "" : "s"} added
+          <span className="text-[var(--viz-muted)]">
+            {" "}
+            ({point.acquiredHoldings.toLocaleString()} holding
+            {point.acquiredHoldings === 1 ? "" : "s"})
+          </span>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function AcquisitionTooltip({ active, payload }: TooltipPayload) {
+  if (!active || !payload?.length) return null;
+  const point = payload[0].payload;
+  if (point.acquiredHoldings === 0) return null;
+
+  return (
+    <div className="rounded-md border border-[var(--viz-grid)] bg-[var(--viz-surface)] px-3 py-2 text-xs shadow-sm">
+      <div className="font-medium text-[var(--viz-text)]">{point.date}</div>
+      <div className="mt-0.5 text-[var(--viz-text)]">
+        +{point.acquiredCards.toLocaleString()} card
+        {point.acquiredCards === 1 ? "" : "s"}
+        <span className="text-[var(--viz-muted)]">
+          {" "}
+          ({point.acquiredHoldings.toLocaleString()} holding
+          {point.acquiredHoldings === 1 ? "" : "s"})
+        </span>
+      </div>
     </div>
   );
 }
@@ -117,7 +166,14 @@ export function PortfolioChart({
     holdingsHeld: point.holdingsHeld,
     unpricedHoldings: point.unpricedHoldings,
     basketCents: basketByDate.get(point.date) ?? null,
+    acquiredHoldings: point.acquiredHoldings,
+    acquiredCards: point.acquiredCards,
   }));
+
+  // Only worth a pane if anything was actually acquired inside the window.
+  const acquisitions = data.filter((point) => point.acquiredHoldings > 0);
+  const showAcquisitions = acquisitions.length > 0;
+  const busiestDay = Math.max(1, ...data.map((point) => point.acquiredHoldings));
 
   const last = data[data.length - 1];
   const { domain, ticks } = paddedScale(
@@ -159,7 +215,8 @@ export function PortfolioChart({
         <ResponsiveContainer width="100%" height="100%">
           <AreaChart
             data={data}
-            margin={{ top: 8, right: 16, bottom: 0, left: 4 }}
+            margin={CHART_MARGIN}
+            syncId={SYNC_ID}
           >
             <defs>
               <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
@@ -183,6 +240,10 @@ export function PortfolioChart({
               vertical={false}
             />
 
+            {/* Hidden when the acquisition pane is shown: the two panes share
+                one timeline, so the labels belong under the lower of them. The
+                scale is still needed, so the axis stays and only its rendering
+                goes. */}
             <XAxis
               dataKey="date"
               tickFormatter={shortDate}
@@ -190,6 +251,7 @@ export function PortfolioChart({
               axisLine={{ stroke: "var(--viz-grid)" }}
               tick={{ fill: "var(--viz-muted)", fontSize: 11 }}
               minTickGap={28}
+              hide={showAcquisitions}
             />
             <YAxis
               domain={domain}
@@ -198,7 +260,7 @@ export function PortfolioChart({
               tickLine={false}
               axisLine={false}
               tick={{ fill: "var(--viz-muted)", fontSize: 11 }}
-              width={64}
+              width={Y_AXIS_WIDTH}
             />
 
             <Tooltip
@@ -263,6 +325,66 @@ export function PortfolioChart({
         </ResponsiveContainer>
       </div>
 
+      {showAcquisitions ? (
+        <div className="mt-1">
+          {/* A separate pane rather than marks inside the value plot: the bars
+              count holdings, not money, and overlaying them would put a second
+              scale in the same box. Stacked and hover-linked, they read as
+              annotation on the same timeline — the convention a price chart
+              uses for volume. */}
+          <div className="h-16 w-full">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={data} margin={CHART_MARGIN} syncId={SYNC_ID}>
+                <XAxis
+                  dataKey="date"
+                  tickFormatter={shortDate}
+                  tickLine={false}
+                  axisLine={{ stroke: "var(--viz-grid)" }}
+                  tick={{ fill: "var(--viz-muted)", fontSize: 11 }}
+                  minTickGap={28}
+                />
+                {/* Hidden, but the same reserved width, so the two plot areas
+                    line up to the pixel. */}
+                <YAxis
+                  width={Y_AXIS_WIDTH}
+                  domain={[0, busiestDay]}
+                  hide
+                />
+                <Tooltip
+                  content={<AcquisitionTooltip />}
+                  cursor={{ fill: "var(--viz-grid)", fillOpacity: 0.35 }}
+                />
+                <Bar
+                  dataKey="acquiredHoldings"
+                  fill="var(--viz-mark)"
+                  // Thin marks with a rounded data-end, grown from a single
+                  // baseline; capped so a sparse window does not render a few
+                  // enormous blocks.
+                  maxBarSize={10}
+                  radius={[2, 2, 0, 0]}
+                  // A single-holding day is 0.6% of the busiest one and would
+                  // render sub-pixel, so small events get a floor. Applied as a
+                  // function because a plain number floors every bar including
+                  // the zeroes, drawing a mark on all 89 dates and claiming
+                  // acquisitions on days that had none.
+                  minPointSize={(value: number | null | undefined) =>
+                    value != null && value > 0 ? 2 : 0
+                  }
+                  isAnimationActive={false}
+                />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+          <p className="mt-1 text-xs text-[var(--viz-muted)]">
+            Cards added, by day — taller means more. {" "}
+            {acquisitions.length} day{acquisitions.length === 1 ? "" : "s"} in
+            this window, the largest{" "}
+            {busiestDay.toLocaleString()} holdings. These are the steps in the
+            blue line.
+          </p>
+        </div>
+      ) : null}
+
       {/* The table view, so nothing is gated behind hover or colour. */}
       <details className="mt-3">
         <summary className="cursor-pointer text-xs text-[var(--viz-muted)] hover:text-[var(--viz-text)]">
@@ -286,8 +408,11 @@ export function PortfolioChart({
                     If held throughout
                   </th>
                 ) : null}
-                <th scope="col" className="py-1 text-right font-medium">
+                <th scope="col" className="py-1 pr-4 text-right font-medium">
                   Holdings
+                </th>
+                <th scope="col" className="py-1 text-right font-medium">
+                  Added
                 </th>
               </tr>
             </thead>
@@ -305,8 +430,13 @@ export function PortfolioChart({
                         : formatUsd(point.basketCents)}
                     </td>
                   ) : null}
-                  <td className="py-0.5 text-right tabular-nums">
+                  <td className="py-0.5 pr-4 text-right tabular-nums">
                     {point.holdingsHeld.toLocaleString()}
+                  </td>
+                  <td className="py-0.5 text-right tabular-nums">
+                    {point.acquiredCards > 0
+                      ? `+${point.acquiredCards.toLocaleString()}`
+                      : ""}
                   </td>
                 </tr>
               ))}

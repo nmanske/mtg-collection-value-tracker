@@ -41,6 +41,10 @@ body {
   --viz-grid: #e6e5e1;
   --viz-series: #2a78d6;
   --viz-series-2: #eb6834;
+  /* Annotation marks — acquisition ticks. Deliberately a neutral, not a series
+     hue: they are context for the value line, not a third measure, and a
+     coloured mark would read as one. */
+  --viz-mark: #b6b5b0;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -55,6 +59,7 @@ body {
     --viz-grid: #33322f;
     --viz-series: #3987e5;
     --viz-series-2: #d95926;
+    --viz-mark: #5a5955;
   }
 }
 

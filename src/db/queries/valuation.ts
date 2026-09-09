@@ -40,6 +40,15 @@ export interface ValuePoint {
    * `valueCents` rather than counted as zero.
    */
   unpricedHoldings: number;
+  /**
+   * Holdings whose acquisition date is this date, and the cards they cover.
+   *
+   * The value line rises for two unrelated reasons — prices moving and cards
+   * arriving — and the second is invisible in a single line. This is what lets
+   * the chart mark the difference.
+   */
+  acquiredHoldings: number;
+  acquiredCards: number;
 }
 
 export interface ValuationSeries {
@@ -149,6 +158,8 @@ export function portfolioSeries(
         holdingsHeld: 0,
         pricedHoldings: 0,
         unpricedHoldings: 0,
+        acquiredHoldings: 0,
+        acquiredCards: 0,
       })),
       firstDate: dates[0],
       lastDate: dates[dates.length - 1],
@@ -161,6 +172,15 @@ export function portfolioSeries(
     priceOverrideCents: row.priceOverrideCents,
     seriesKey: seriesKey(row.printingKey, row.finish),
   }));
+
+  // Acquisitions per date, counted once rather than re-scanned per point.
+  const acquired = new Map<string, { holdings: number; cards: number }>();
+  for (const row of rows) {
+    const entry = acquired.get(row.dateAdded) ?? { holdings: 0, cards: 0 };
+    entry.holdings += 1;
+    entry.cards += row.quantity;
+    acquired.set(row.dateAdded, entry);
+  }
 
   const lastDate = dates[dates.length - 1];
 
@@ -271,7 +291,16 @@ export function portfolioSeries(
       pricedHoldings += 1;
     }
 
-    return { date, valueCents, holdingsHeld, pricedHoldings, unpricedHoldings };
+    const added = acquired.get(date);
+    return {
+      date,
+      valueCents,
+      holdingsHeld,
+      pricedHoldings,
+      unpricedHoldings,
+      acquiredHoldings: added?.holdings ?? 0,
+      acquiredCards: added?.cards ?? 0,
+    };
   });
 
   return {

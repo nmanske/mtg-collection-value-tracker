@@ -195,6 +195,28 @@ assert.deepEqual(
 );
 assert.equal(ranged.points[0].valueCents, 400);
 
+// --- acquisition marks ---
+
+// The chart marks the days cards arrived, because a rising line has two
+// unrelated causes and one of them is invisible otherwise.
+const marked = portfolioSeries(db).points;
+assert.deepEqual(
+  marked.map((point) => point.acquiredHoldings),
+  // Alpha on the 1st, Beta on the 4th; nothing on the other days.
+  [1, 0, 0, 1, 0],
+);
+assert.deepEqual(
+  marked.map((point) => point.acquiredCards),
+  // Quantities, not holdings: 2 Alpha and 1 Beta.
+  [2, 0, 0, 1, 0],
+);
+
+// Every date carries the field, so a zero is a real zero rather than absent —
+// which is what lets the chart draw no mark instead of a floor-height one.
+assert.ok(
+  marked.every((point) => typeof point.acquiredHoldings === "number"),
+);
+
 // --- constant basket ---
 
 // The basket ignores acquisition dates: today's holdings are valued across the
