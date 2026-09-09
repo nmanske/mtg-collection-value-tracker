@@ -15,6 +15,13 @@
       "when": 1788986091718,
       "tag": "0001_holding_source",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1788987490616,
+      "tag": "0002_vendor_prices",
+      "breakpoints": true
     }
   ]
 }

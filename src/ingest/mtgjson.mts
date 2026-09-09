@@ -31,13 +31,19 @@ import { parser } from "stream-json/parser.js";
 import { streamObject } from "stream-json/streamers/stream-object.js";
 
 import {
+  type Currency,
   type Finish,
   holdings,
+  MARKET_SIDES,
+  type MarketSide,
   mtgjsonIds,
   type NewPriceSnapshot,
   priceSnapshots,
   printings,
   syncMeta,
+  type Vendor,
+  VENDORS,
+  vendorPrices,
 } from "@/db/schema";
 
 import { priceNumberToCents } from "./money";
@@ -66,6 +72,17 @@ const FINISH_BY_MTGJSON_KEY: Record<string, Finish> = {
 const BATCH_SIZE = 5_000;
 const PROGRESS_EVERY = 20_000;
 
+/**
+ * SQLite caps how many bind parameters one statement may carry — 32,766 in
+ * current builds. A multi-row insert uses one per column per row, so the batch
+ * size has to account for the width of the table: vendor_prices has seven
+ * columns, and 5,000 rows of it is 35,000 parameters, which fails with
+ * "too many SQL variables".
+ */
+const MAX_BIND_PARAMS = 30_000;
+const VENDOR_COLUMNS = 7;
+const VENDOR_BATCH_SIZE = Math.floor(MAX_BIND_PARAMS / VENDOR_COLUMNS);
+
 interface MtgjsonMeta {
   meta: { date: string; version: string };
 }
@@ -77,8 +94,36 @@ interface PriceEntry {
     {
       currency?: string;
       retail?: Record<string, Record<string, number>>;
+      buylist?: Record<string, Record<string, number>>;
     }
   >;
+}
+
+/** A row destined for `vendor_prices`. */
+interface VendorRow {
+  printingKey: number;
+  finish: Finish;
+  vendor: Vendor;
+  side: MarketSide;
+  date: string;
+  priceCents: number;
+  currency: Currency;
+}
+
+/**
+ * Also record every vendor and both sides of the market into `vendor_prices`,
+ * for the printings in scope.
+ *
+ * Off by default and deliberately never applied to every printing: measured
+ * against a real build, all vendors and sides for all printings is roughly 60
+ * million rows, against 2.9 million for one collection.
+ */
+export interface VendorBackfillResult {
+  rowsWritten: number;
+  bySeries: { vendor: Vendor; side: MarketSide; rows: number }[];
+  currencies: { vendor: Vendor; currency: Currency }[];
+  earliestDate: string | null;
+  latestDate: string | null;
 }
 
 export interface BackfillOptions {
@@ -91,6 +136,8 @@ export interface BackfillOptions {
   all?: boolean;
   /** Stop after this many uuids. For measurement. */
   limit?: number;
+  /** Record all vendors and both market sides into `vendor_prices` too. */
+  vendors?: boolean;
   dryRun?: boolean;
   cacheDir?: string;
   log?: (message: string) => void;
@@ -112,6 +159,8 @@ export interface BackfillResult {
   snapshotsAlreadyPresent: number;
   earliestDate: string | null;
   latestDate: string | null;
+  /** Present when `vendors` was requested. */
+  vendorResult: VendorBackfillResult | null;
 }
 
 async function fetchJson<T>(url: string): Promise<T> {
@@ -259,6 +308,7 @@ export async function backfillMtgjsonPrices(
     snapshotsAlreadyPresent: 0,
     earliestDate: null,
     latestDate: null,
+    vendorResult: null,
   };
 
   const lastRun = db
@@ -272,7 +322,10 @@ export async function backfillMtgjsonPrices(
     return { ...result, skipped: true };
   }
 
-  await refreshIdentifierMap(db, sqlite, version, cacheDir, log, options.force);
+  // Deliberately not passed options.force: the map is keyed on the same build
+  // version, so re-running the price backfill should reuse it rather than
+  // re-download 243 MB.
+  await refreshIdentifierMap(db, sqlite, version, cacheDir, log);
 
   // Scope. Held printings only by default: a full backfill is ~90x more rows
   // than a single day and most of them are for cards nobody owns.
@@ -313,7 +366,46 @@ export async function backfillMtgjsonPrices(
   await downloadCached(`${BASE_URL}/AllPrices.json.gz`, pricesPath, log);
 
   const buffer: NewPriceSnapshot[] = [];
+  const wantVendors = options.vendors ?? false;
+  const vendorBuffer: VendorRow[] = [];
+  const vendorCounts = new Map<string, number>();
+  const vendorCurrency = new Map<Vendor, Currency>();
+  const vendorResult: VendorBackfillResult = {
+    rowsWritten: 0,
+    bySeries: [],
+    currencies: [],
+    earliestDate: null,
+    latestDate: null,
+  };
   const startedAt = Date.now();
+
+  const flushVendors = sqlite.transaction(() => {
+    if (vendorBuffer.length === 0) return;
+    // Sliced here rather than trusting the buffer's length: one card can push
+    // several hundred rows in a single iteration (a vendor and side per finish
+    // across ~90 days), so the buffer routinely overshoots the batch size
+    // before it is next checked. Exceeding SQLite's bind-parameter cap fails
+    // the whole run with "too many SQL variables".
+    for (let i = 0; i < vendorBuffer.length; i += VENDOR_BATCH_SIZE) {
+      const slice = vendorBuffer.slice(i, i + VENDOR_BATCH_SIZE);
+      const info = db
+      .insert(vendorPrices)
+      .values(slice)
+      .onConflictDoUpdate({
+        target: [
+          vendorPrices.printingKey,
+          vendorPrices.finish,
+          vendorPrices.vendor,
+          vendorPrices.side,
+          vendorPrices.date,
+        ],
+        set: { priceCents: sql`excluded.price_cents` },
+      })
+      .run();
+      vendorResult.rowsWritten += info.changes;
+    }
+    vendorBuffer.length = 0;
+  });
 
   const flush = sqlite.transaction(() => {
     if (buffer.length === 0) return;
@@ -321,21 +413,38 @@ export async function backfillMtgjsonPrices(
     // written. Backfill fills gaps in history and never overwrites a price
     // already recorded for a day, which keeps the series single-sourced
     // wherever the two overlap.
-    const info = db
-      .insert(priceSnapshots)
-      .values(buffer)
-      .onConflictDoNothing({
-        target: [
-          priceSnapshots.printingKey,
-          priceSnapshots.finish,
-          priceSnapshots.date,
-        ],
-      })
-      .run();
-    result.snapshotsInserted += info.changes;
-    result.snapshotsAlreadyPresent += buffer.length - info.changes;
+    // Sliced for the same reason as the vendor insert below: the buffer
+    // overshoots its batch size, and six columns leaves less headroom than it
+    // looks.
+    const SNAPSHOT_BATCH = Math.floor(MAX_BIND_PARAMS / 6);
+    for (let i = 0; i < buffer.length; i += SNAPSHOT_BATCH) {
+      const slice = buffer.slice(i, i + SNAPSHOT_BATCH);
+      const info = db
+        .insert(priceSnapshots)
+        .values(slice)
+        .onConflictDoNothing({
+          target: [
+            priceSnapshots.printingKey,
+            priceSnapshots.finish,
+            priceSnapshots.date,
+          ],
+        })
+        .run();
+      result.snapshotsInserted += info.changes;
+      result.snapshotsAlreadyPresent += slice.length - info.changes;
+    }
     buffer.length = 0;
   });
+
+  const maybeFlushVendors = (force = false) => {
+    if (!force && vendorBuffer.length < VENDOR_BATCH_SIZE) return;
+    if (options.dryRun) {
+      vendorResult.rowsWritten += vendorBuffer.length;
+      vendorBuffer.length = 0;
+      return;
+    }
+    flushVendors();
+  };
 
   const maybeFlush = (force = false) => {
     if (!force && buffer.length < BATCH_SIZE) return;
@@ -414,13 +523,74 @@ export async function backfillMtgjsonPrices(
         }
       }
 
+      if (wantVendors) {
+        for (const [vendorName, body] of Object.entries(item.value?.paper ?? {})) {
+          if (!(VENDORS as readonly string[]).includes(vendorName)) continue;
+          const vendor = vendorName as Vendor;
+
+          // MTGJSON states the currency per vendor. Cardmarket quotes euros;
+          // storing what it says is what keeps a EUR figure out of a USD total.
+          const currency: Currency = body?.currency === "EUR" ? "EUR" : "USD";
+          vendorCurrency.set(vendor, currency);
+
+          for (const side of MARKET_SIDES) {
+            const series = body?.[side];
+            if (!series) continue;
+
+            for (const [mtgjsonFinish, points] of Object.entries(series)) {
+              const finish = FINISH_BY_MTGJSON_KEY[mtgjsonFinish];
+              if (!finish || !points) continue;
+
+              for (const [date, price] of Object.entries(points)) {
+                const priceCents = priceNumberToCents(price);
+                if (priceCents == null) continue;
+
+                if (!vendorResult.earliestDate || date < vendorResult.earliestDate) {
+                  vendorResult.earliestDate = date;
+                }
+                if (!vendorResult.latestDate || date > vendorResult.latestDate) {
+                  vendorResult.latestDate = date;
+                }
+
+                const key = `${vendor}.${side}`;
+                vendorCounts.set(key, (vendorCounts.get(key) ?? 0) + 1);
+                vendorBuffer.push({
+                  printingKey,
+                  finish,
+                  vendor,
+                  side,
+                  date,
+                  priceCents,
+                  currency,
+                });
+              }
+            }
+          }
+        }
+        maybeFlushVendors();
+      }
+
       maybeFlush();
       if (options.limit && result.uuidsSeen >= options.limit) break;
     }
 
     maybeFlush(true);
+    maybeFlushVendors(true);
   } finally {
     stream.destroy();
+  }
+
+  if (wantVendors) {
+    vendorResult.bySeries = [...vendorCounts.entries()]
+      .sort((a, b) => b[1] - a[1])
+      .map(([key, rows]) => {
+        const [vendor, side] = key.split(".");
+        return { vendor: vendor as Vendor, side: side as MarketSide, rows };
+      });
+    vendorResult.currencies = [...vendorCurrency.entries()].map(
+      ([vendor, currency]) => ({ vendor, currency }),
+    );
+    result.vendorResult = vendorResult;
   }
 
   if (!options.dryRun && !options.limit) {

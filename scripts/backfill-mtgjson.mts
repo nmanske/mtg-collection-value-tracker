@@ -5,6 +5,8 @@
  *   npm run backfill:mtgjson -- [--all] [--force] [--dry-run] [--limit N]
  *
  *   --all       backfill every printing, not just those you hold
+ *   --vendors   also record every vendor and both market sides (retail and
+ *               buylist) into vendor_prices, for the printings in scope
  *   --force     re-run even if this MTGJSON build was already processed
  *   --dry-run   parse and report without writing
  *   --limit N   stop after N uuids (measurement; does not record the run)
@@ -31,6 +33,7 @@ const sqlite = openDatabase(DB_PATH);
 try {
   const result = await backfillMtgjsonPrices(drizzle(sqlite), sqlite, {
     all: args.includes("--all"),
+    vendors: args.includes("--vendors"),
     force: args.includes("--force"),
     dryRun: args.includes("--dry-run"),
     limit: numericFlag("--limit"),
@@ -49,6 +52,23 @@ try {
       "already present (kept)": result.snapshotsAlreadyPresent.toLocaleString(),
       "date range": `${result.earliestDate ?? "-"} .. ${result.latestDate ?? "-"}`,
     });
+
+    if (result.vendorResult) {
+      const v = result.vendorResult;
+      console.log(
+        `
+Vendor comparison rows: ${v.rowsWritten.toLocaleString()} (${v.earliestDate ?? "-"} .. ${v.latestDate ?? "-"})`,
+      );
+      for (const series of v.bySeries) {
+        console.log(
+          `  ${String(series.rows).padStart(9)}  ${series.vendor}.${series.side}`,
+        );
+      }
+      console.log("\nCurrency reported per vendor:");
+      for (const entry of v.currencies) {
+        console.log(`  ${entry.vendor.padEnd(14)} ${entry.currency}`);
+      }
+    }
   }
 } catch (error) {
   console.error(`Backfill failed: ${(error as Error).message}`);

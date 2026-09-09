@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import { CardPriceChart } from "@/components/card-price-chart";
+import { VendorQuotes } from "@/components/vendor-quotes";
 import { db } from "@/db";
 import { holdingsForPrinting } from "@/db/queries/holdings";
 import {
@@ -10,6 +11,7 @@ import {
   priceHistory,
   priceStats,
 } from "@/db/queries/printings";
+import { vendorQuotes } from "@/db/queries/vendors";
 import { FINISHES, type Finish } from "@/db/schema";
 import { FINISH_LABEL, formatUsd, printingCode } from "@/lib/format";
 
@@ -46,6 +48,7 @@ export default async function CardPage(props: PageProps<"/cards/[scryfallId]">) 
   const points = priceHistory(db, printing.id, finish);
   const stats = priceStats(points);
   const owned = holdingsForPrinting(db, printing.id);
+  const quotes = vendorQuotes(db, printing.id, finish);
   const others = otherPrintings(db, printing.oracleId, printing.scryfallId);
 
   const ownedForFinish = owned.filter((holding) => holding.finish === finish);
@@ -200,6 +203,16 @@ export default async function CardPage(props: PageProps<"/cards/[scryfallId]">) 
         </div>
 
         <CardPriceChart points={points} />
+      </section>
+
+      <section className="mb-8 rounded-lg border border-neutral-200 p-5 dark:border-neutral-800">
+        <h2 className="text-xs text-neutral-500">
+          Vendors · {FINISH_LABEL[finish].toLowerCase()}
+        </h2>
+        <p className="mt-1 mb-4 text-sm text-neutral-500">
+          What each shop asks, and what it would pay.
+        </p>
+        <VendorQuotes quotes={quotes} />
       </section>
 
       {others.length > 0 ? (

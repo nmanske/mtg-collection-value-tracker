@@ -2,9 +2,11 @@ import Link from "next/link";
 
 import { db } from "@/db";
 import { PortfolioSummaryPanel } from "@/components/portfolio-summary";
+import { VendorTotals } from "@/components/vendor-totals";
 import { RemoveHoldingButton } from "@/components/remove-holding-button";
 import { listHoldings } from "@/db/queries/holdings";
 import { portfolioSummary } from "@/db/queries/valuation";
+import { collectionByVendor } from "@/db/queries/vendors";
 import {
   FINISH_LABEL,
   daysAgo,
@@ -21,6 +23,7 @@ export default async function CollectionPage(props: PageProps<"/">) {
   const { rows, totalCards, unpricedCount, holdingCount, pageCount, page: current } =
     listHoldings(db, Number(page) || 1);
   const summary = portfolioSummary(db);
+  const vendorTotals = collectionByVendor(db);
 
   return (
     <main className="mx-auto w-full max-w-5xl px-6 py-10">
@@ -52,6 +55,8 @@ export default async function CollectionPage(props: PageProps<"/">) {
       </header>
 
       <PortfolioSummaryPanel summary={summary} />
+
+      <VendorTotals totals={vendorTotals} holdingCount={holdingCount} />
 
       {unpricedCount > 0 ? (
         // Never let an unpriced card quietly count as $0 in the total.

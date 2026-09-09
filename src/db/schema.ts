@@ -41,6 +41,37 @@ export type Condition = (typeof CONDITIONS)[number];
 export const HOLDING_SOURCES = ["manual", "moxfield"] as const;
 export type HoldingSource = (typeof HOLDING_SOURCES)[number];
 
+/**
+ * Vendors MTGJSON aggregates paper prices for, verified against a real build.
+ * Scryfall carries only TCGplayer (USD) and Cardmarket (EUR), so the other two
+ * are reachable through MTGJSON alone.
+ */
+export const VENDORS = [
+  "tcgplayer",
+  "cardkingdom",
+  "cardmarket",
+  "manapool",
+] as const;
+export type Vendor = (typeof VENDORS)[number];
+
+/**
+ * Which side of the market a price is.
+ *
+ * `retail` is what a shop asks; `buylist` is what it pays. A collection is
+ * worth the buylist if you actually sell it, which is a different and usually
+ * much smaller number than the retail total.
+ */
+export const MARKET_SIDES = ["retail", "buylist"] as const;
+export type MarketSide = (typeof MARKET_SIDES)[number];
+
+/**
+ * Cardmarket quotes in euros while the rest quote in dollars. Storing the
+ * currency per row is what stops a EUR figure being summed into a USD total;
+ * nothing in this app converts between them.
+ */
+export const CURRENCIES = ["USD", "EUR"] as const;
+export type Currency = (typeof CURRENCIES)[number];
+
 /** Where a price snapshot came from. Used to reason about continuity. */
 export const PRICE_SOURCES = ["scryfall", "mtgjson", "manual"] as const;
 export type PriceSource = (typeof PRICE_SOURCES)[number];
@@ -181,6 +212,47 @@ export const priceSnapshots = sqliteTable(
     // printing for one date. The primary key covers the other direction —
     // one printing's history — on its own.
     index("price_snapshots_date_idx").on(t.date),
+  ],
+);
+
+/**
+ * Multi-vendor price comparison, kept apart from `price_snapshots`.
+ *
+ * Two deliberate differences from the canonical series:
+ *
+ * - It is scoped to printings actually held. Every vendor and side for every
+ *   printing measures at roughly 60 million rows against 2.9 million for a
+ *   collection, and comparison only means anything for cards you own.
+ * - It is not what the portfolio is valued from. `price_snapshots` stays the
+ *   single canonical TCGplayer-retail series so valuation keeps one definition
+ *   and one fast query; this table is for answering "what would Card Kingdom
+ *   pay me" beside it.
+ *
+ * TCGplayer retail therefore appears in both, which is a small duplication
+ * bought deliberately: it lets a vendor comparison be answered from one table
+ * without a union.
+ */
+export const vendorPrices = sqliteTable(
+  "vendor_prices",
+  {
+    printingKey: integer("printing_key")
+      .notNull()
+      .references(() => printings.id, { onDelete: "cascade" }),
+    finish: text("finish").$type<Finish>().notNull(),
+    vendor: text("vendor").$type<Vendor>().notNull(),
+    side: text("side").$type<MarketSide>().notNull(),
+    /** `YYYY-MM-DD`, UTC. */
+    date: text("date").notNull(),
+    /** Whole minor units of {@link currency} — cents for USD, cents for EUR. */
+    priceCents: integer("price_cents").notNull(),
+    currency: text("currency").$type<Currency>().notNull(),
+  },
+  (t) => [
+    primaryKey({
+      columns: [t.printingKey, t.finish, t.vendor, t.side, t.date],
+    }),
+    // Serves "every vendor on this date" for a collection-wide comparison.
+    index("vendor_prices_date_idx").on(t.date),
   ],
 );
 

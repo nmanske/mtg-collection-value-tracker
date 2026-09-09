@@ -12,6 +12,10 @@ Pre-alpha. Phase 0 (project scaffolding) only.
 - **Portfolio tracking** — add printings to a collection (quantity, finish,
   condition, date added) and chart total collection value over time.
 - **Card price history** — look up any single printing and view its price chart.
+- **Vendor comparison** — what TCGplayer, Card Kingdom, Cardmarket and Mana
+  Pool ask for your cards, and what Card Kingdom would pay for them. Scoped to
+  your collection: every vendor and side for every printing measures at roughly
+  60 million rows against 2.9 million for one collection.
 
 Single-user, USD-only, no account system.
 
@@ -49,6 +53,7 @@ npm run dev
 | `npm run ingest:scryfall` | Streams Scryfall's gzipped JSONL `default_cards` bulk file. Upserts printings and writes one day of price snapshots. Idempotent, and skips entirely if that build was already ingested (`--force` overrides). This is what the daily cron will run. |
 | `npm run backfill:mtgjson` | One-time historical fill from MTGJSON's `AllPrices`, TCGplayer retail only, joined to Scryfall ids through MTGJSON's `uuid`. Scoped to held printings by default; `--all` covers every printing. Never overwrites a day already recorded. |
 | `npm run import:moxfield` | Imports a Moxfield collection CSV. The export is treated as a snapshot of the whole collection: quantities are set from the file and holdings it no longer lists are removed, so re-importing the same file changes nothing. Only rows the importer owns are touched, so hand-added cards survive. `--add` merges without removing; `--adopt` claims pre-existing rows once. |
+| `npm run backfill:mtgjson -- --vendors` | Also records every vendor and both market sides into `vendor_prices`, for held printings. Cardmarket quotes euros and is stored as such; nothing converts between currencies. |
 | `npm run db:smoke` | Round-trips every table and asserts the constraints the app depends on. |
 | `npm run test:ingest` | Unit tests for price conversion and snapshot dating. |
 | `npm test` | Every suite: ingest, holdings, import, valuation, chart axes, schema. |
