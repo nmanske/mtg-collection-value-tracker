@@ -45,3 +45,6 @@ next-env.d.ts
 
 # Cached upstream bulk downloads
 /data/cache
+
+# Dev server log
+/dev.log
