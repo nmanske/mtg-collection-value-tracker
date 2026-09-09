@@ -19,7 +19,7 @@ export const dynamic = "force-dynamic";
 
 export default async function CollectionPage(props: PageProps<"/">) {
   // searchParams is a Promise in Next 16.
-  const { page } = await props.searchParams;
+  const { page, range } = await props.searchParams;
   const { rows, totalCards, unpricedCount, holdingCount, pageCount, page: current } =
     listHoldings(db, Number(page) || 1);
   const summary = portfolioSummary(db);
@@ -66,7 +66,10 @@ export default async function CollectionPage(props: PageProps<"/">) {
         </div>
       </header>
 
-      <PortfolioSummaryPanel summary={summary} />
+      <PortfolioSummaryPanel
+        summary={summary}
+        range={typeof range === "string" ? range : undefined}
+      />
 
       <VendorTotals totals={vendorTotals} holdingCount={holdingCount} />
 

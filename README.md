@@ -12,6 +12,9 @@ Pre-alpha. Phase 0 (project scaffolding) only.
 - **Portfolio tracking** — add printings to a collection (quantity, finish,
   condition, date added) and chart total collection value over time.
 - **Card price history** — look up any single printing and view its price chart.
+- **Chart ranges** — 1M / 3M / 6M / 1Y / All above the value chart. A range is
+  disabled until the price history actually spans it, so a short series is
+  never stretched across a wide axis.
 - **Statistics** — `/stats`: most valuable cards, biggest risers and fallers,
   what actually moved the collection's value, buylist spreads, where the value
   sits by set, and the long tail.

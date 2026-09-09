@@ -1,5 +1,15 @@
+import Link from "next/link";
+
 import type { Change, PortfolioSummary } from "@/db/queries/valuation";
 import { formatUsd } from "@/lib/format";
+import {
+  RANGES,
+  type RangeId,
+  isRangeAvailable,
+  rangeStart,
+  resolveRange,
+  spanInDays,
+} from "@/lib/ranges";
 
 import { PortfolioChart } from "./portfolio-chart";
 
@@ -51,12 +61,82 @@ function ChangeTile({ label, change }: { label: string; change: Change }) {
   );
 }
 
+/**
+ * The range buttons.
+ *
+ * A range the history cannot fill is rendered disabled rather than hidden, so
+ * the set of choices stays stable and it is visible that more will unlock as
+ * the daily job accumulates days.
+ */
+function RangePicker({
+  active,
+  spanDays,
+}: {
+  active: RangeId;
+  spanDays: number;
+}) {
+  return (
+    <nav aria-label="Chart range" className="flex flex-wrap gap-1">
+      {RANGES.map((range) => {
+        const available = isRangeAvailable(range, spanDays);
+        const current = range.id === active;
+
+        if (!available) {
+          return (
+            <span
+              key={range.id}
+              aria-disabled="true"
+              title={`Needs ${range.days} days of price history; there are ${spanDays}.`}
+              className="cursor-not-allowed rounded-md border border-neutral-200 px-2.5 py-1 text-xs text-neutral-300 dark:border-neutral-800 dark:text-neutral-700"
+            >
+              {range.label}
+            </span>
+          );
+        }
+
+        return (
+          <Link
+            key={range.id}
+            href={`/?range=${range.id}`}
+            scroll={false}
+            aria-current={current ? "true" : undefined}
+            className={`rounded-md border px-2.5 py-1 text-xs transition-colors ${
+              current
+                ? "border-neutral-900 bg-neutral-900 text-white dark:border-neutral-100 dark:bg-neutral-100 dark:text-neutral-900"
+                : "border-neutral-300 hover:bg-neutral-50 dark:border-neutral-700 dark:hover:bg-neutral-900"
+            }`}
+          >
+            {range.label}
+          </Link>
+        );
+      })}
+    </nav>
+  );
+}
+
 export function PortfolioSummaryPanel({
   summary,
+  range: requestedRange,
 }: {
   summary: PortfolioSummary;
+  range?: string;
 }) {
   const last = summary.points.at(-1);
+
+  const first = summary.points[0]?.date ?? null;
+  const spanDays = first && last ? spanInDays(first, last.date) : 0;
+  const range = resolveRange(requestedRange, spanDays);
+  const from = last ? rangeStart(range, last.date) : null;
+
+  // Filtered from the already-computed series rather than re-queried: the full
+  // series has carried prices forward from the beginning, so a slice of it is
+  // identical to recomputing the range and costs nothing.
+  const visible = from
+    ? summary.points.filter((point) => point.date >= from)
+    : summary.points;
+  const visibleBasket = from
+    ? summary.basketPoints.filter((point) => point.date >= from)
+    : summary.basketPoints;
 
   return (
     <section
@@ -88,10 +168,11 @@ export function PortfolioSummaryPanel({
         </dl>
       </div>
 
-      <PortfolioChart
-        points={summary.points}
-        basketPoints={summary.basketPoints}
-      />
+      <div className="mb-3 flex justify-end">
+        <RangePicker active={range.id} spanDays={spanDays} />
+      </div>
+
+      <PortfolioChart points={visible} basketPoints={visibleBasket} />
 
       {last && last.unpricedHoldings > 0 ? (
         <p className="mt-3 text-xs text-amber-700 dark:text-amber-400">
@@ -104,8 +185,9 @@ export function PortfolioSummaryPanel({
 
       {summary.points.length > 0 ? (
         <p className="mt-3 text-xs text-neutral-500">
-          History begins {summary.points[0].date}, the earliest price data
-          available. Cards acquired before then count from that date onward.
+          {range.days === null
+            ? `History begins ${summary.points[0].date}, the earliest price data available.`
+            : `Showing ${visible.length} day${visible.length === 1 ? "" : "s"} to ${last?.date}; ${spanDays} days of history are available in total.`} Cards acquired before then count from that date onward.
           {summary.marketOnly.changeCents != null &&
           summary.allTime.changeCents != null ? (
             <>
