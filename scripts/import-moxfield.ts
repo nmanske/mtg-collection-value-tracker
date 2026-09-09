@@ -4,7 +4,9 @@
  *   npm run import:moxfield -- <file.csv> [--dry-run] [--date YYYY-MM-DD]
  *
  *   --dry-run       parse and report without writing anything
- *   --date          acquisition date for every row (default: today, UTC)
+ *   --import-dates  stamp every row with today instead of reading the
+ *                   Last Modified column
+ *   --date          force one acquisition date on every row
  *
  * Start with --dry-run: it prints the same report, including how each raw
  * Condition and Foil value was mapped and every row that did not resolve.
@@ -18,6 +20,7 @@ import { importMoxfieldCsv, type ImportReport } from "@/import/moxfield";
 const args = process.argv.slice(2);
 const file = args.find((arg) => !arg.startsWith("--"));
 const dryRun = args.includes("--dry-run");
+const dateSource = args.includes("--import-dates") ? "import" : "modified";
 
 const dateFlagIndex = args.indexOf("--date");
 const dateAdded =
@@ -39,7 +42,14 @@ function printReport(report: ImportReport) {
   console.log("");
   console.table({
     mode: report.dryRun ? "dry run (nothing written)" : "imported",
-    "acquisition date": report.dateAdded,
+    "acquisition dates":
+      report.dateSource === "modified"
+        ? "from Last Modified"
+        : report.dateSource === "fixed"
+          ? `fixed at ${report.dateAdded}`
+          : `import date (${report.dateAdded})`,
+    "  date range": `${report.earliestDate ?? "-"} .. ${report.latestDate ?? "-"}`,
+    "  fell back to import date": report.datesFellBack,
     "data rows": report.dataRows,
     "rows imported": report.importedRows,
     "  of which merged": report.mergedRows,
@@ -137,7 +147,11 @@ const sqlite = openDatabase(DB_PATH);
 
 try {
   const text = readFileSync(file, "utf8");
-  const report = importMoxfieldCsv(drizzle(sqlite), text, { dryRun, dateAdded });
+  const report = importMoxfieldCsv(drizzle(sqlite), text, {
+    dryRun,
+    dateAdded,
+    dateSource,
+  });
   printReport(report);
 
   if (report.dryRun) {

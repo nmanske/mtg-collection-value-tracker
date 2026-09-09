@@ -98,8 +98,15 @@ export interface RowProblem {
 
 export interface ImportReport {
   dryRun: boolean;
-  /** Date stamped on every imported holding. */
+  /** Where acquisition dates came from. */
+  dateSource: DateSource | "fixed";
+  /** The fallback date, used when a row has no usable `Last Modified`. */
   dateAdded: string;
+  /** Rows that fell back to the import date because their timestamp was unusable. */
+  datesFellBack: number;
+  /** Earliest and latest acquisition date actually assigned. */
+  earliestDate: string | null;
+  latestDate: string | null;
   dataRows: number;
   /** Rows that produced a holding. */
   importedRows: number;
@@ -132,14 +139,33 @@ export interface ImportReport {
   fileErrors: { line: number; message: string }[];
 }
 
+/**
+ * Where each holding's acquisition date comes from.
+ *
+ * `modified` reads Moxfield's `Last Modified` column. That is strictly an
+ * edit timestamp rather than an acquisition date — editing a card later moves
+ * it forward, understating how long it has been held — but it is a far better
+ * lower bound than the import date, and it is what makes the value-over-time
+ * chart meaningful at all. Checked against a real 4,356-row export: 159
+ * distinct days spanning nearly three years, no single day over 12.4%, and no
+ * unparseable values. Stamping every row with the import date instead leaves
+ * the chart flat at zero until the day of import.
+ *
+ * `import` stamps every row with the import date, which is the honest choice
+ * when an export's timestamps are known to be meaningless — for instance after
+ * a bulk re-edit that touched every row.
+ */
+export type DateSource = "modified" | "import";
+
 export interface ImportOptions {
   /** Parse and report without writing. */
   dryRun?: boolean;
+  /** Defaults to `modified`. See {@link DateSource}. */
+  dateSource?: DateSource;
   /**
-   * Acquisition date stamped on every row. Moxfield's export has no
-   * acquisition date — `Last Modified` is its own edit timestamp, not when the
-   * card was acquired — so this defaults to the import date and can be edited
-   * per holding afterwards.
+   * Forces one acquisition date on every row, overriding `dateSource`.
+   * Otherwise the import date is used as the fallback for rows whose
+   * `Last Modified` is missing or unparseable.
    */
   dateAdded?: string;
 }
@@ -211,7 +237,26 @@ export function importMoxfieldCsv(
   options: ImportOptions = {},
 ): ImportReport {
   const dryRun = options.dryRun ?? false;
-  const dateAdded = options.dateAdded ?? new Date().toISOString().slice(0, 10);
+  const today = new Date().toISOString().slice(0, 10);
+  const fallbackDate = options.dateAdded ?? today;
+  const dateSource: DateSource | "fixed" = options.dateAdded
+    ? "fixed"
+    : (options.dateSource ?? "modified");
+
+  /**
+   * Moxfield writes `2025-10-30 05:05:42.953000`; only the date is kept, since
+   * price snapshots are daily. A timestamp in the future is clamped to today,
+   * because a holding dated ahead of now would contribute nothing to the chart
+   * until that day arrived.
+   */
+  const acquisitionDate = (raw: string): string | null => {
+    if (dateSource !== "modified") return null;
+    const day = raw.trim().slice(0, 10);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(day) || Number.isNaN(Date.parse(day))) {
+      return null;
+    }
+    return day > today ? today : day;
+  };
 
   const table = parseCsvTable(text);
   const columns = columnIndex(table.header);
@@ -232,7 +277,11 @@ export function importMoxfieldCsv(
 
   const report: ImportReport = {
     dryRun,
-    dateAdded,
+    dateSource,
+    dateAdded: fallbackDate,
+    datesFellBack: 0,
+    earliestDate: null,
+    latestDate: null,
     dataRows: table.rows.length,
     importedRows: 0,
     mergedRows: 0,
@@ -353,6 +402,17 @@ export function importMoxfieldCsv(
           ...where,
           reason: `Collector number ${collectorNumber} not found in ${edition.toUpperCase()}; matched "${resolved.printing.name}" by name.`,
         });
+      }
+
+      const rowDate = acquisitionDate(at(row, "last modified"));
+      if (dateSource === "modified" && rowDate === null) report.datesFellBack += 1;
+      const dateAdded = rowDate ?? fallbackDate;
+
+      if (!report.earliestDate || dateAdded < report.earliestDate) {
+        report.earliestDate = dateAdded;
+      }
+      if (!report.latestDate || dateAdded > report.latestDate) {
+        report.latestDate = dateAdded;
       }
 
       if (!dryRun) {

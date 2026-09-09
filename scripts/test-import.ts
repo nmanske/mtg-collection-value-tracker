@@ -10,7 +10,7 @@ import { migrate } from "drizzle-orm/better-sqlite3/migrator";
 
 import { openDatabase } from "@/db/client";
 import { listHoldings } from "@/db/queries/holdings";
-import { printings } from "@/db/schema";
+import { holdings, printings } from "@/db/schema";
 import { parseCsv, parseCsvTable } from "@/import/csv";
 import { importMoxfieldCsv } from "@/import/moxfield";
 
@@ -129,6 +129,16 @@ const row = (
 ) =>
   `${count},0,"${name}",${edition},${condition},${language},${foil},,2026-01-01,${number},False,${proxy},`;
 
+/** A row with a controllable Last Modified timestamp. */
+const lmRow = (
+  count: string,
+  name: string,
+  edition: string,
+  number: string,
+  lastModified: string,
+) =>
+  `${count},0,"${name}",${edition},Near Mint,English,,,${lastModified},${number},False,False,`;
+
 /** A row flagged as a proxy in Moxfield's export. */
 const proxyRow = (
   count: string,
@@ -191,6 +201,99 @@ const dupe = importMoxfieldCsv(
 assert.equal(dupe.mergedRows, 1);
 assert.equal(listHoldings(db).rows.length, 4);
 assert.equal(listHoldings(db).totalCards, 11);
+
+// ------------------------------------------------------------------- dates ---
+
+// Start from an empty collection; the section above left holdings behind.
+db.delete(holdings).run();
+
+// Acquisition dates come from Last Modified by default. Without this the whole
+// collection shares one date and the value chart is flat until the import day.
+const datedCsv = [
+  HEADER,
+  lmRow("1", "Forest", "blb", "280", "2024-12-17 04:22:33.483000"),
+  lmRow("1", "Jace, the Mind Sculptor", "wwk", "31", "2025-10-30 05:05:42.953000"),
+  lmRow("1", "Fire // Ice", "apc", "128", "2026-01-28 02:18:06.483000"),
+].join("\n");
+
+const dated = importMoxfieldCsv(db, datedCsv, { dryRun: true });
+assert.equal(dated.dateSource, "modified");
+assert.equal(dated.datesFellBack, 0);
+assert.equal(dated.earliestDate, "2024-12-17");
+assert.equal(dated.latestDate, "2026-01-28");
+
+// The time component is dropped: price snapshots are daily.
+const written = importMoxfieldCsv(db, datedCsv, {});
+assert.equal(written.importedRows, 3);
+const holdingDates = listHoldings(db)
+  .rows.map((holding) => holding.dateAdded)
+  .sort();
+assert.deepEqual(holdingDates, ["2024-12-17", "2025-10-30", "2026-01-28"]);
+db.delete(holdings).run();
+
+// --import-dates falls back to stamping every row with the import date.
+const stamped = importMoxfieldCsv(db, datedCsv, {
+  dryRun: true,
+  dateSource: "import",
+  dateAdded: "2026-09-09",
+});
+assert.equal(stamped.earliestDate, "2026-09-09");
+assert.equal(stamped.latestDate, "2026-09-09");
+
+// An explicit date overrides the column entirely.
+const forced = importMoxfieldCsv(db, datedCsv, {
+  dryRun: true,
+  dateAdded: "2026-01-01",
+});
+assert.equal(forced.dateSource, "fixed");
+assert.equal(forced.earliestDate, "2026-01-01");
+assert.equal(forced.latestDate, "2026-01-01");
+
+// A missing or unparseable timestamp falls back rather than failing the row,
+// and the fallback is counted so it is visible.
+const messy = importMoxfieldCsv(
+  db,
+  [
+    HEADER,
+    lmRow("1", "Forest", "blb", "280", ""),
+    lmRow("1", "Jace, the Mind Sculptor", "wwk", "31", "not a date"),
+  ].join("\n"),
+  { dryRun: true, dateAdded: "2026-09-09" },
+);
+assert.equal(messy.importedRows, 2);
+
+const fellBack = importMoxfieldCsv(
+  db,
+  [HEADER, lmRow("1", "Forest", "blb", "280", "garbage")].join("\n"),
+  { dryRun: true },
+);
+assert.equal(fellBack.datesFellBack, 1);
+assert.equal(fellBack.importedRows, 1);
+
+// A future timestamp is clamped to today: a holding dated ahead of now would
+// contribute nothing to the chart until that day arrived.
+const future = importMoxfieldCsv(
+  db,
+  [HEADER, lmRow("1", "Forest", "blb", "280", "2099-01-01 00:00:00.000000")].join("\n"),
+  { dryRun: true },
+);
+const todayIso = new Date().toISOString().slice(0, 10);
+assert.equal(future.latestDate, todayIso);
+
+// Two copies of the same card acquired on different days stay separate rows,
+// so each starts contributing to the chart on its own date.
+const twoDates = importMoxfieldCsv(
+  db,
+  [
+    HEADER,
+    lmRow("1", "Forest", "blb", "280", "2024-01-01 00:00:00.000000"),
+    lmRow("1", "Forest", "blb", "280", "2025-01-01 00:00:00.000000"),
+  ].join("\n"),
+  {},
+);
+assert.equal(twoDates.mergedRows, 0);
+assert.equal(listHoldings(db).rows.length, 2);
+db.delete(holdings).run();
 
 // ------------------------------------------------------------------ proxies ---
 

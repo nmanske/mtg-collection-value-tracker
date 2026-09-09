@@ -22,12 +22,13 @@ export default function ImportPage() {
       </header>
 
       <p className="mb-6 text-sm text-neutral-500">
-        Export your collection from Moxfield as CSV, then upload it here. Every
-        row is stamped with today&apos;s date as its acquisition date —
-        Moxfield&apos;s export has no acquisition date, and its{" "}
-        <code className="font-mono text-xs">Last Modified</code> column is its
-        own edit timestamp rather than when you got the card. You can edit
-        individual dates afterwards.
+        Export your collection from Moxfield as CSV, then upload it here.
+        Acquisition dates come from the{" "}
+        <code className="font-mono text-xs">Last Modified</code> column. That is
+        strictly an edit timestamp rather than a purchase date — editing a card
+        in Moxfield later moves it forward — so treat it as the earliest date
+        you are known to have held the card. Rows with no usable timestamp fall
+        back to today, and any date can be corrected per holding afterwards.
       </p>
 
       <ImportForm />
