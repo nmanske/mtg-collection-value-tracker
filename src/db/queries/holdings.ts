@@ -31,8 +31,9 @@ export interface HoldingRow {
   overridden: boolean;
 }
 
-export interface CollectionSummary {
-  rows: HoldingRow[];
+export interface CollectionTotals {
+  /** Distinct holdings, i.e. table rows. */
+  holdingCount: number;
   totalCards: number;
   /** Sum over holdings that have a price. Excludes unpriced ones entirely. */
   totalValueCents: number;
@@ -43,6 +44,55 @@ export interface CollectionSummary {
   unpricedCount: number;
 }
 
+export interface CollectionPage extends CollectionTotals {
+  rows: HoldingRow[];
+  page: number;
+  pageCount: number;
+}
+
+/** Rows per page. Rendering a whole 4,000-holding collection at once costs
+ * seconds of server render time, while the underlying query takes ~76ms — the
+ * cost is React, not SQLite, so the table is paged and the totals are not. */
+export const PAGE_SIZE = 100;
+
+/**
+ * Collection totals, computed in one aggregate pass over every holding.
+ *
+ * Kept separate from the row query so that paging the table never changes the
+ * headline value: the total is always the whole collection.
+ */
+export function collectionTotals(db: Db): CollectionTotals {
+  const latest = sql`(
+    select ps.price_cents
+    from price_snapshots ps
+    where ps.printing_key = ${holdings.printingKey}
+      and ps.finish = ${holdings.finish}
+    order by ps.date desc
+    limit 1
+  )`;
+
+  // A manual override wins over any snapshot; a holding with neither is
+  // counted as unpriced rather than as zero.
+  const unit = sql`coalesce(${holdings.priceOverrideCents}, ${latest})`;
+
+  const row = db
+    .select({
+      holdingCount: sql<number>`count(*)`,
+      totalCards: sql<number>`coalesce(sum(${holdings.quantity}), 0)`,
+      totalValueCents: sql<number>`coalesce(sum(case when ${unit} is null then 0 else ${unit} * ${holdings.quantity} end), 0)`,
+      unpricedCount: sql<number>`coalesce(sum(case when ${unit} is null then 1 else 0 end), 0)`,
+    })
+    .from(holdings)
+    .get();
+
+  return {
+    holdingCount: row?.holdingCount ?? 0,
+    totalCards: row?.totalCards ?? 0,
+    totalValueCents: row?.totalValueCents ?? 0,
+    unpricedCount: row?.unpricedCount ?? 0,
+  };
+}
+
 /**
  * The whole collection with each holding's latest unit price.
  *
@@ -50,7 +100,11 @@ export interface CollectionSummary {
  * grouped scan used for search: a collection is small, and this keeps each
  * lookup on the price table's primary key.
  */
-export function listHoldings(db: Db): CollectionSummary {
+export function listHoldings(db: Db, page = 1): CollectionPage {
+  const totals = collectionTotals(db);
+  const pageCount = Math.max(1, Math.ceil(totals.holdingCount / PAGE_SIZE));
+  const current = Math.min(Math.max(1, Math.trunc(page) || 1), pageCount);
+
   const latestPrice = sql<number | null>`(
     select ps.price_cents
     from price_snapshots ps
@@ -90,11 +144,9 @@ export function listHoldings(db: Db): CollectionSummary {
     .from(holdings)
     .innerJoin(printings, eq(printings.id, holdings.printingKey))
     .orderBy(desc(holdings.dateAdded), asc(printings.name))
+    .limit(PAGE_SIZE)
+    .offset((current - 1) * PAGE_SIZE)
     .all();
-
-  let totalCards = 0;
-  let totalValueCents = 0;
-  let unpricedCount = 0;
 
   const result: HoldingRow[] = rows.map((row) => {
     // A manual override wins over any snapshot: it exists precisely for
@@ -103,10 +155,6 @@ export function listHoldings(db: Db): CollectionSummary {
     const unitPriceCents = overridden
       ? row.priceOverrideCents
       : (row.snapshotPriceCents ?? null);
-
-    totalCards += row.quantity;
-    if (unitPriceCents == null) unpricedCount += 1;
-    else totalValueCents += unitPriceCents * row.quantity;
 
     return {
       id: row.id,
@@ -128,7 +176,7 @@ export function listHoldings(db: Db): CollectionSummary {
     };
   });
 
-  return { rows: result, totalCards, totalValueCents, unpricedCount };
+  return { ...totals, rows: result, page: current, pageCount };
 }
 
 /**

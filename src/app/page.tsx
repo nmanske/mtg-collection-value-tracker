@@ -13,8 +13,11 @@ import {
 // Reads the collection on every request; adds and removes must show at once.
 export const dynamic = "force-dynamic";
 
-export default async function CollectionPage() {
-  const { rows, totalCards, totalValueCents, unpricedCount } = listHoldings(db);
+export default async function CollectionPage(props: PageProps<"/">) {
+  // searchParams is a Promise in Next 16.
+  const { page } = await props.searchParams;
+  const { rows, totalCards, totalValueCents, unpricedCount, holdingCount, pageCount, page: current } =
+    listHoldings(db, Number(page) || 1);
 
   return (
     <main className="mx-auto w-full max-w-5xl px-6 py-10">
@@ -23,8 +26,9 @@ export default async function CollectionPage() {
           <h1 className="text-2xl font-semibold tracking-tight">Collection</h1>
           <p className="mt-1 text-sm text-neutral-500">
             {totalCards.toLocaleString()} card
-            {totalCards === 1 ? "" : "s"} across {rows.length} holding
-            {rows.length === 1 ? "" : "s"}
+            {totalCards === 1 ? "" : "s"} across{" "}
+            {holdingCount.toLocaleString()} holding
+            {holdingCount === 1 ? "" : "s"}
           </p>
         </div>
 
@@ -154,6 +158,41 @@ export default async function CollectionPage() {
           </table>
         </div>
       )}
+
+      {pageCount > 1 ? (
+        // The table is paged because rendering thousands of rows costs seconds
+        // of server render time; the totals above always cover everything.
+        <nav
+          aria-label="Pagination"
+          className="mt-6 flex items-center justify-between text-sm"
+        >
+          {current > 1 ? (
+            <Link
+              href={`/?page=${current - 1}`}
+              className="rounded-md border border-neutral-300 px-3 py-1.5 hover:bg-neutral-50 dark:border-neutral-700 dark:hover:bg-neutral-900"
+            >
+              Previous
+            </Link>
+          ) : (
+            <span />
+          )}
+
+          <span className="text-neutral-500">
+            Page {current.toLocaleString()} of {pageCount.toLocaleString()}
+          </span>
+
+          {current < pageCount ? (
+            <Link
+              href={`/?page=${current + 1}`}
+              className="rounded-md border border-neutral-300 px-3 py-1.5 hover:bg-neutral-50 dark:border-neutral-700 dark:hover:bg-neutral-900"
+            >
+              Next
+            </Link>
+          ) : (
+            <span />
+          )}
+        </nav>
+      ) : null}
     </main>
   );
 }

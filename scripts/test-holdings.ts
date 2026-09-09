@@ -291,6 +291,27 @@ const overriddenLotus = overridden.rows.find(
 assert.equal(overriddenLotus.overridden, true);
 assert.equal(overriddenLotus.unitPriceCents, 2_500_000);
 
+// --- paging ---
+// Totals must cover the whole collection regardless of which page is shown,
+// or the headline value would change as the user pages through the table.
+const paged = listHoldings(db, 1);
+assert.equal(paged.page, 1);
+assert.equal(paged.pageCount, 1);
+assert.equal(paged.holdingCount, 4);
+// An out-of-range or nonsense page clamps rather than returning nothing.
+assert.equal(listHoldings(db, 99).page, 1);
+assert.equal(listHoldings(db, 0).page, 1);
+assert.equal(listHoldings(db, -5).page, 1);
+assert.equal(listHoldings(db, Number.NaN).page, 1);
+assert.equal(listHoldings(db, 99).totalValueCents, paged.totalValueCents);
+
+// The aggregate totals must agree with summing the rows by hand.
+const byHand = paged.rows.reduce(
+  (sum, row) => sum + (row.unitPriceCents ?? 0) * row.quantity,
+  0,
+);
+assert.equal(paged.totalValueCents, byHand);
+
 // --- removal ---
 assert.equal(removeHolding(db, first.id), true);
 assert.equal(removeHolding(db, first.id), false);
