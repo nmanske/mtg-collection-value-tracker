@@ -29,6 +29,8 @@ Pre-alpha. Phase 0 (project scaffolding) only.
 
 Single-user, USD-only, no account system.
 
+Planned work and known issues are in [TODO.md](TODO.md).
+
 ## Data sources
 
 - [MTGJSON](https://mtgjson.com/) — **every price, past and present.**
