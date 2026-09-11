@@ -709,7 +709,37 @@ export async function backfillFromArchive(
     latestDate: null,
   };
 
+  // Builds already completed are skipped outright rather than re-read.
+  //
+  // The overlap watermark alone makes them harmless — every date is below it,
+  // so nothing is written — but "harmless" still means streaming a 500 MB file
+  // to discover there is nothing to do, at 65-85 seconds each. That is a cost
+  // paid on every restart and it grows as the watermark advances: resuming at
+  // build 200 would spend nearly three hours re-parsing before reaching new
+  // data.
+  //
+  // Keyed on the build's own date rather than its label. A build's window ends
+  // at its build date, so one dated at or before the watermark can contribute
+  // nothing, whatever it is called. Reading that date is a 4 KB head read
+  // against a full parse, and unlike a label it cannot be thrown off by the
+  // recorded position moving.
+  let skipped = 0;
+
   for (const [index, build] of builds.entries()) {
+    if (watermark && !options.force) {
+      const { date } = await readBuildMeta(build.pricesPath).catch(() => ({
+        date: "",
+      }));
+      if (date && date <= watermark) {
+        skipped += 1;
+        continue;
+      }
+    }
+    if (skipped > 0) {
+      log(`Skipped ${skipped} build(s) already covered through ${watermark}`);
+      skipped = 0;
+    }
+
     log(`\n[${index + 1}/${builds.length}] ${build.label}`);
 
     if ((options.refreshIds || options.idsOnly) && build.identifiersPath) {
@@ -760,8 +790,13 @@ export async function backfillFromArchive(
         watermark = outcome.latestDate;
       }
       const now = new Date();
+      // Monotonic, like the date. Re-reading an older build must not move the
+      // recorded position backwards — that is how version_0043 became
+      // version_0010 and bought another pass of no-op re-parsing.
+      const recordedVersion =
+        doneVersion && doneVersion > build.label ? doneVersion : build.label;
       for (const [key, value] of [
-        [ARCHIVE_VERSION_KEY, build.label],
+        [ARCHIVE_VERSION_KEY, recordedVersion],
         [ARCHIVE_DATE_KEY, watermark ?? ""],
       ] as const) {
         db.insert(syncMeta)
