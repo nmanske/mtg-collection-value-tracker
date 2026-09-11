@@ -50,3 +50,6 @@ next-env.d.ts
 
 # Dev server log
 /dev.log
+
+# Local build artifact, not part of the project.
+/mtg-collection-value-tracker.zip
