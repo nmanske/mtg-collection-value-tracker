@@ -116,8 +116,11 @@ function PortfolioChartBody({
   points,
   basketPoints,
   width,
+  plotClass,
 }: {
   width: number;
+  /** Height classes for the plot element; see ChartFrame. */
+  plotClass: string;
   points: ValuePoint[];
   /**
    * The same holdings valued across the whole window regardless of when they
@@ -219,7 +222,7 @@ function PortfolioChartBody({
         </figcaption>
       ) : null}
 
-      <div className="h-full w-full">
+      <div className={`${plotClass} w-full`}>
         <ResponsiveContainer width="100%" height="100%">
           <ComposedChart data={data} margin={CHART_MARGIN}>
             <defs>
@@ -441,7 +444,9 @@ export function PortfolioChart(props: {
 }) {
   return (
     <ChartFrame label="of collection value over time">
-      {(width) => <PortfolioChartBody {...props} width={width} />}
+      {({ width, plotClass }) => (
+        <PortfolioChartBody {...props} width={width} plotClass={plotClass} />
+      )}
     </ChartFrame>
   );
 }

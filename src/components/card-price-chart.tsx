@@ -74,9 +74,12 @@ function PriceTooltip({ active, payload }: TooltipProps) {
 function CardPriceChartBody({
   points,
   width,
+  plotClass,
 }: {
   points: PricePoint[];
   width: number;
+  /** Height classes for the plot element; see ChartFrame. */
+  plotClass: string;
 }) {
   const gradientId = useId();
 
@@ -111,7 +114,7 @@ function CardPriceChartBody({
 
   return (
     <figure className="viz-root m-0">
-      <div className="h-full w-full">
+      <div className={`${plotClass} w-full`}>
         <ResponsiveContainer width="100%" height="100%">
           <AreaChart data={data} margin={{ top: 8, right: 16, bottom: 0, left: 4 }}>
             <defs>
@@ -244,8 +247,10 @@ function CardPriceChartBody({
 /** One printing's price history, expandable to full screen. */
 export function CardPriceChart({ points }: { points: PricePoint[] }) {
   return (
-    <ChartFrame label="of this card's price history" className="h-56 sm:h-64">
-      {(width) => <CardPriceChartBody points={points} width={width} />}
+    <ChartFrame label="of this card's price history" height="h-56 sm:h-64">
+      {({ width, plotClass }) => (
+        <CardPriceChartBody points={points} width={width} plotClass={plotClass} />
+      )}
     </ChartFrame>
   );
 }
