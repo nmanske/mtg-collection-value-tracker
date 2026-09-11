@@ -53,3 +53,6 @@ next-env.d.ts
 
 # Local build artifact, not part of the project.
 /mtg-collection-value-tracker.zip
+
+# Agent instruction files, regenerated locally by `next dev`.
+/CLAUDE.md

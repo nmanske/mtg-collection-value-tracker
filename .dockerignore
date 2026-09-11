@@ -6,7 +6,6 @@ data
 shot
 *.log
 README.md
-CLAUDE.md
 AGENTS.md
 mtg-tracker-prompt.md
 .env
