@@ -1,6 +1,6 @@
 import type { VendorQuote } from "@/db/queries/vendors";
-import type { Currency, MarketSide, Vendor } from "@/db/schema";
-import { formatMoney } from "@/lib/format";
+import type { MarketSide, Vendor } from "@/db/schema";
+import { formatUsd } from "@/lib/format";
 
 /**
  * What each vendor quotes for one printing, retail beside buylist.
@@ -9,15 +9,12 @@ import { formatMoney } from "@/lib/format";
  * Kingdom publishes one — so the panel says which vendor a buylist figure
  * belongs to rather than implying a market-wide number.
  *
- * Currencies are never mixed or converted: Cardmarket quotes euros and is
- * labelled as such.
+ * Every kept vendor quotes USD, so the figures here are directly comparable.
  */
 
 const VENDOR_LABEL: Record<Vendor, string> = {
   tcgplayer: "TCGplayer",
   cardkingdom: "Card Kingdom",
-  cardmarket: "Cardmarket",
-  manapool: "Mana Pool",
 };
 
 const SIDE_LABEL: Record<MarketSide, string> = {
@@ -30,7 +27,7 @@ function Row({
   spreadAgainst,
 }: {
   quote: VendorQuote;
-  /** The retail quote in the same currency, for a buylist ratio. */
+  /** The same vendor's retail quote, for a buylist ratio. */
   spreadAgainst?: VendorQuote;
 }) {
   const ratio =
@@ -43,7 +40,7 @@ function Row({
       <td className="py-1.5 pr-4">{VENDOR_LABEL[quote.vendor]}</td>
       <td className="py-1.5 pr-4 text-neutral-500">{SIDE_LABEL[quote.side]}</td>
       <td className="py-1.5 pr-4 text-right font-medium tabular-nums">
-        {formatMoney(quote.priceCents, quote.currency)}
+        {formatUsd(quote.priceCents)}
       </td>
       <td className="py-1.5 pr-4 text-right text-xs tabular-nums text-neutral-500">
         {ratio != null ? `${Math.round(ratio * 100)}% of retail` : ""}
@@ -71,13 +68,9 @@ export function VendorQuotes({ quotes }: { quotes: VendorQuote[] }) {
 
   const retail = quotes.filter((quote) => quote.side === "retail");
   const buylist = quotes.filter((quote) => quote.side === "buylist");
-  const currencies = new Set(quotes.map((quote) => quote.currency));
-
-  // Retail in the same currency, so a buylist ratio compares like with like.
-  const retailFor = (vendor: Vendor, currency: Currency) =>
-    retail.find(
-      (quote) => quote.vendor === vendor && quote.currency === currency,
-    );
+  // A spread only means anything against the same vendor's own asking price.
+  const retailFor = (vendor: Vendor) =>
+    retail.find((quote) => quote.vendor === vendor);
 
   return (
     <div>
@@ -99,7 +92,7 @@ export function VendorQuotes({ quotes }: { quotes: VendorQuote[] }) {
               <Row
                 key={`${quote.vendor}-${quote.side}`}
                 quote={quote}
-                spreadAgainst={retailFor(quote.vendor, quote.currency)}
+                spreadAgainst={retailFor(quote.vendor)}
               />
             ))}
         </tbody>
@@ -109,9 +102,6 @@ export function VendorQuotes({ quotes }: { quotes: VendorQuote[] }) {
         {buylist.length === 0
           ? "No vendor publishes a buylist price for this printing."
           : `"Pays" is what that shop offers for the card, not the market.`}
-        {currencies.has("EUR")
-          ? " Cardmarket quotes euros; nothing here converts between currencies."
-          : ""}
       </p>
     </div>
   );

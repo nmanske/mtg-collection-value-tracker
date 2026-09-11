@@ -1,3 +1,5 @@
+import { FINISH_CODES, SIDE_CODES, VENDOR_CODES } from "@/db/codec";
+
 import type { Db } from "./printings";
 
 /**
@@ -114,7 +116,19 @@ export interface CollectionStats {
   worstSpreads: Spread[];
 }
 
-interface Row extends CardRef {
+/**
+ * Decodes the stored `finish` integer back to its name.
+ *
+ * This query is read through better-sqlite3 directly rather than the query
+ * builder, so nothing has applied the column codec on the way out and the
+ * finish arrives as its stored code.
+ */
+const FINISH_BY_CODE = new Map(
+  Object.entries(FINISH_CODES).map(([name, code]) => [code, name]),
+);
+
+interface Row extends Omit<CardRef, "finish"> {
+  finish: number;
   oracleId: string;
   dateAdded: string;
   overrideCents: number | null;
@@ -154,11 +168,11 @@ export function collectionStats(db: Db): CollectionStats {
                 order by s.date asc limit 1) as firstDate,
               (select price_cents from vendor_prices v
                 where v.printing_key = h.printing_key and v.finish = h.finish
-                  and v.vendor = 'cardkingdom' and v.side = 'retail'
+                  and v.vendor = ${VENDOR_CODES.cardkingdom} and v.side = ${SIDE_CODES.retail}
                 order by v.date desc limit 1) as ckRetail,
               (select price_cents from vendor_prices v
                 where v.printing_key = h.printing_key and v.finish = h.finish
-                  and v.vendor = 'cardkingdom' and v.side = 'buylist'
+                  and v.vendor = ${VENDOR_CODES.cardkingdom} and v.side = ${SIDE_CODES.buylist}
                 order by v.date desc limit 1) as ckBuylist
          from holdings h join printings p on p.id = h.printing_key`,
     )
@@ -190,7 +204,7 @@ export function collectionStats(db: Db): CollectionStats {
     setName: row.setName,
     collectorNumber: row.collectorNumber,
     scryfallId: row.scryfallId,
-    finish: row.finish,
+    finish: FINISH_BY_CODE.get(row.finish)!,
     imageUri: row.imageUri,
     quantity: row.quantity,
   });
@@ -246,14 +260,15 @@ export function collectionStats(db: Db): CollectionStats {
 
   const finishes = new Map<string, { finish: string; holdings: number; valueCents: number }>();
   for (const row of rows) {
-    const entry = finishes.get(row.finish) ?? {
-      finish: row.finish,
+    const finish = FINISH_BY_CODE.get(row.finish)!;
+    const entry = finishes.get(finish) ?? {
+      finish,
       holdings: 0,
       valueCents: 0,
     };
     entry.holdings += 1;
     entry.valueCents += (unit(row) ?? 0) * row.quantity;
-    finishes.set(row.finish, entry);
+    finishes.set(finish, entry);
   }
 
   const months = new Map<string, MonthCount>();

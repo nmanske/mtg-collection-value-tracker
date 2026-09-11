@@ -7,74 +7,14 @@ import {
   text,
 } from "drizzle-orm/sqlite-core";
 
-/**
- * Finish of a specific physical card, using Scryfall's own vocabulary so that
- * ingest needs no translation layer: each finish maps directly onto a price
- * field (`prices.usd`, `usd_foil`, `usd_etched`).
- *
- * Note this is `nonfoil`, not `normal` — Scryfall's `finishes` array uses the
- * former. MTGJSON says `normal` and Moxfield's CSV uses an empty string; both
- * are mapped at their own boundary.
- */
-export const FINISHES = ["nonfoil", "foil", "etched"] as const;
-export type Finish = (typeof FINISHES)[number];
+import { finishCode, priceSourceCode, sideCode, vendorCode } from "./codec";
+import type {
+  Condition,
+  Finish,
+  HoldingSource,
+} from "./schema-enums";
 
-/** The `prices` field on a Scryfall card object that carries each finish. */
-export const FINISH_PRICE_FIELD = {
-  nonfoil: "usd",
-  foil: "usd_foil",
-  etched: "usd_etched",
-} as const satisfies Record<Finish, string>;
-
-/** Card condition, mapped from Moxfield's CSV export values on import. */
-export const CONDITIONS = ["NM", "LP", "MP", "HP", "DMG"] as const;
-export type Condition = (typeof CONDITIONS)[number];
-
-/**
- * Where a holding came from.
- *
- * A CSV export is a snapshot of an entire collection, so importing one has to
- * reconcile — add what is new, update what changed, remove what is gone. That
- * is only safe if the importer can tell which holdings it owns; hand-added
- * cards must survive an import that does not mention them.
- */
-export const HOLDING_SOURCES = ["manual", "moxfield"] as const;
-export type HoldingSource = (typeof HOLDING_SOURCES)[number];
-
-/**
- * Vendors MTGJSON aggregates paper prices for, verified against a real build.
- * Scryfall carries only TCGplayer (USD) and Cardmarket (EUR), so the other two
- * are reachable through MTGJSON alone.
- */
-export const VENDORS = [
-  "tcgplayer",
-  "cardkingdom",
-  "cardmarket",
-  "manapool",
-] as const;
-export type Vendor = (typeof VENDORS)[number];
-
-/**
- * Which side of the market a price is.
- *
- * `retail` is what a shop asks; `buylist` is what it pays. A collection is
- * worth the buylist if you actually sell it, which is a different and usually
- * much smaller number than the retail total.
- */
-export const MARKET_SIDES = ["retail", "buylist"] as const;
-export type MarketSide = (typeof MARKET_SIDES)[number];
-
-/**
- * Cardmarket quotes in euros while the rest quote in dollars. Storing the
- * currency per row is what stops a EUR figure being summed into a USD total;
- * nothing in this app converts between them.
- */
-export const CURRENCIES = ["USD", "EUR"] as const;
-export type Currency = (typeof CURRENCIES)[number];
-
-/** Where a price snapshot came from. Used to reason about continuity. */
-export const PRICE_SOURCES = ["scryfall", "mtgjson", "manual"] as const;
-export type PriceSource = (typeof PRICE_SOURCES)[number];
+export * from "./schema-enums";
 
 /**
  * One row per Scryfall printing.
@@ -128,7 +68,14 @@ export const holdings = sqliteTable(
       .notNull()
       .references(() => printings.id, { onDelete: "restrict" }),
     quantity: integer("quantity").notNull(),
-    finish: text("finish").$type<Finish>().notNull(),
+    /**
+     * Integer-coded like the price tables' own `finish`, not for size — this
+     * table is tiny — but because every valuation query joins holdings to
+     * price_snapshots on it. A text column here against a coded one there is a
+     * comparison that simply never matches, and silently prices the whole
+     * collection at nothing.
+     */
+    finish: finishCode("finish").notNull(),
     condition: text("condition").$type<Condition>().notNull(),
     /**
      * Acquisition date, `YYYY-MM-DD`. Drives the value-over-time chart: a
@@ -188,7 +135,8 @@ export const priceSnapshots = sqliteTable(
     printingKey: integer("printing_key")
       .notNull()
       .references(() => printings.id, { onDelete: "cascade" }),
-    finish: text("finish").$type<Finish>().notNull(),
+    /** Stored as a small integer; see `codec.ts`. Reads and writes as a string. */
+    finish: finishCode("finish").notNull(),
     /** `YYYY-MM-DD`, UTC. */
     date: text("date").notNull(),
     /**
@@ -196,7 +144,7 @@ export const priceSnapshots = sqliteTable(
      * collection is exact.
      */
     priceCents: integer("price_cents").notNull(),
-    source: text("source").$type<PriceSource>().notNull(),
+    source: priceSourceCode("source").notNull(),
     /**
      * True for synthetic points — e.g. an earliest-known price flat-filled
      * backward to cover a holding acquired before price history exists. The
@@ -220,17 +168,19 @@ export const priceSnapshots = sqliteTable(
  *
  * Two deliberate differences from the canonical series:
  *
- * - It is scoped to printings actually held. Every vendor and side for every
- *   printing measures at roughly 60 million rows against 2.9 million for a
- *   collection, and comparison only means anything for cards you own.
  * - It is not what the portfolio is valued from. `price_snapshots` stays the
  *   single canonical TCGplayer-retail series so valuation keeps one definition
  *   and one fast query; this table is for answering "what would Card Kingdom
  *   pay me" beside it.
+ * - It holds only what `price_snapshots` does not: Card Kingdom's two sides and
+ *   TCGplayer's buylist. TCGplayer retail is deliberately *not* duplicated
+ *   here. That duplication was cheap while this table covered one collection
+ *   over 90 days; across every printing and five years it is ~355 million rows
+ *   and ~18 GB of nothing, so the vendor comparison reads that one series from
+ *   `price_snapshots` and unions it in.
  *
- * TCGplayer retail therefore appears in both, which is a small duplication
- * bought deliberately: it lets a vendor comparison be answered from one table
- * without a union.
+ * Its columns are integer-coded (see `codec.ts`) and carry no currency, both
+ * for size: this table is the largest in the database after `price_snapshots`.
  */
 export const vendorPrices = sqliteTable(
   "vendor_prices",
@@ -238,14 +188,14 @@ export const vendorPrices = sqliteTable(
     printingKey: integer("printing_key")
       .notNull()
       .references(() => printings.id, { onDelete: "cascade" }),
-    finish: text("finish").$type<Finish>().notNull(),
-    vendor: text("vendor").$type<Vendor>().notNull(),
-    side: text("side").$type<MarketSide>().notNull(),
+    /** All three stored as small integers; see `codec.ts`. */
+    finish: finishCode("finish").notNull(),
+    vendor: vendorCode("vendor").notNull(),
+    side: sideCode("side").notNull(),
     /** `YYYY-MM-DD`, UTC. */
     date: text("date").notNull(),
-    /** Whole minor units of {@link currency} — cents for USD, cents for EUR. */
+    /** USD in whole cents. Every kept vendor quotes dollars. */
     priceCents: integer("price_cents").notNull(),
-    currency: text("currency").$type<Currency>().notNull(),
   },
   (t) => [
     primaryKey({
@@ -269,7 +219,8 @@ export const unpricedPrintings = sqliteTable(
     printingKey: integer("printing_key")
       .notNull()
       .references(() => printings.id, { onDelete: "cascade" }),
-    finish: text("finish").$type<Finish>().notNull(),
+    /** Coded, so this joins to holdings and price_snapshots on equal terms. */
+    finish: finishCode("finish").notNull(),
     reason: text("reason").notNull(),
     lastCheckedAt: integer("last_checked_at", { mode: "timestamp" }).notNull(),
   },

@@ -1,5 +1,11 @@
 import type { Db } from "@/db/queries/printings";
 import { portfolioSeries } from "@/db/queries/valuation";
+import {
+  FINISH_CODES,
+  PRICE_SOURCE_CODES,
+  SIDE_CODES,
+  VENDOR_CODES,
+} from "@/db/codec";
 import { MARKET_SIDES, VENDORS } from "@/db/schema";
 
 import { csvRow, moneyCell, UTF8_BOM } from "./csv";
@@ -42,16 +48,16 @@ const VENDOR_COLUMNS = VENDORS.flatMap((vendor) =>
   MARKET_SIDES.map((side) => ({ vendor, side })),
 );
 
-/** Cardmarket quotes euros; the header has to say so or the number lies. */
-const CURRENCY_OF: Record<string, string> = {
-  tcgplayer: "usd",
-  cardkingdom: "usd",
-  cardmarket: "eur",
-  manapool: "usd",
-};
-
+/** Every kept vendor quotes USD, and the header still says so explicitly. */
 const vendorHeader = ({ vendor, side }: { vendor: string; side: string }) =>
-  `${vendor}_${side}_${CURRENCY_OF[vendor] ?? "usd"}`;
+  `${vendor}_${side}_usd`;
+
+const FINISH_BY_CODE = new Map(
+  Object.entries(FINISH_CODES).map(([name, code]) => [code, name]),
+);
+const PRICE_SOURCE_BY_CODE = new Map(
+  Object.entries(PRICE_SOURCE_CODES).map(([name, code]) => [code, name]),
+);
 
 function client(db: Db) {
   return (db as unknown as { $client: import("better-sqlite3").Database })
@@ -99,11 +105,21 @@ const collection: ExportSpec = {
     // The canonical price and every vendor series are read as correlated
     // lookups per holding. A collection is small, and each lookup rides the
     // price tables' primary keys.
-    const vendorSelects = VENDOR_COLUMNS.map(
-      ({ vendor, side }) => `(
+    //
+    // TCGplayer retail is the canonical series and lives in price_snapshots,
+    // not vendor_prices. The column is emitted either way, so the file's shape
+    // does not depend on which table happens to hold a given series.
+    const vendorSelects = VENDOR_COLUMNS.map(({ vendor, side }) =>
+      vendor === "tcgplayer" && side === "retail"
+        ? `(
+        select ps.price_cents from price_snapshots ps
+         where ps.printing_key = h.printing_key and ps.finish = h.finish
+         order by ps.date desc limit 1
+      ) as ${vendor}_${side}`
+        : `(
         select vp.price_cents from vendor_prices vp
          where vp.printing_key = h.printing_key and vp.finish = h.finish
-           and vp.vendor = '${vendor}' and vp.side = '${side}'
+           and vp.vendor = ${VENDOR_CODES[vendor]} and vp.side = ${SIDE_CODES[side]}
          order by vp.date desc limit 1
       ) as ${vendor}_${side}`,
     ).join(",\n");
@@ -142,14 +158,17 @@ const collection: ExportSpec = {
         row.set_name,
         row.collector_number,
         row.scryfall_id,
-        row.finish,
+        // Coded on disk; the export must carry the name, not the code.
+        FINISH_BY_CODE.get(row.finish as number) ?? "",
         row.condition,
         row.quantity,
         row.date_added,
         moneyCell(unit),
         unit == null ? "" : moneyCell(unit * (row.quantity as number)),
         row.price_override_cents != null ? "" : (row.price_date ?? ""),
-        row.price_override_cents != null ? "manual" : (row.price_source ?? ""),
+        row.price_override_cents != null
+          ? "manual"
+          : (PRICE_SOURCE_BY_CODE.get(row.price_source as number) ?? ""),
         moneyCell(row.price_override_cents as number | null),
         row.note ?? "",
         ...VENDOR_COLUMNS.map(({ vendor, side }) =>

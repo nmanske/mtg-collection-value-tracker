@@ -64,10 +64,6 @@ Vendor comparison rows: ${v.rowsWritten.toLocaleString()} (${v.earliestDate ?? "
           `  ${String(series.rows).padStart(9)}  ${series.vendor}.${series.side}`,
         );
       }
-      console.log("\nCurrency reported per vendor:");
-      for (const entry of v.currencies) {
-        console.log(`  ${entry.vendor.padEnd(14)} ${entry.currency}`);
-      }
     }
   }
 } catch (error) {

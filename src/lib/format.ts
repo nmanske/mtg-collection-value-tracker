@@ -2,9 +2,6 @@ import type { Currency, Finish } from "@/db/schema";
 
 const FORMATTERS: Record<Currency, Intl.NumberFormat> = {
   USD: new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }),
-  // Shown in en-US so the digit grouping matches the rest of the page; the
-  // symbol still marks it as euros, which is the part that must not be lost.
-  EUR: new Intl.NumberFormat("en-US", { style: "currency", currency: "EUR" }),
 };
 
 /** Formats whole cents as USD. Prices are stored as integers; only display divides. */

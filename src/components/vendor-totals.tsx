@@ -1,6 +1,6 @@
 import type { CollectionTotalsByVendor } from "@/db/queries/vendors";
 import type { MarketSide, Vendor } from "@/db/schema";
-import { formatMoney } from "@/lib/format";
+import { formatUsd } from "@/lib/format";
 
 /**
  * What the collection is worth from each vendor, and what it would fetch if
@@ -17,8 +17,6 @@ import { formatMoney } from "@/lib/format";
 const VENDOR_LABEL: Record<Vendor, string> = {
   tcgplayer: "TCGplayer",
   cardkingdom: "Card Kingdom",
-  cardmarket: "Cardmarket",
-  manapool: "Mana Pool",
 };
 
 const SIDE_LABEL: Record<MarketSide, string> = {
@@ -82,7 +80,7 @@ export function VendorTotals({
                   {SIDE_LABEL[row.side]}
                 </td>
                 <td className="py-2 pr-4 text-right font-medium tabular-nums">
-                  {formatMoney(row.totalCents, row.currency)}
+                  {formatUsd(row.totalCents)}
                 </td>
                 <td className="py-2 text-xs tabular-nums text-neutral-500">
                   {/* Plain text, not a bar. Every vendor quotes 95-100% of a

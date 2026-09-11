@@ -99,11 +99,11 @@ price(chase, "2026-01-01", 9_000);
 price(chase, "2026-01-05", 10_000);
 db.insert(vendorPrices)
   .values([
-    { printingKey: chase, finish: "nonfoil", vendor: "cardkingdom", side: "retail", date: "2026-01-05", priceCents: 12_000, currency: "USD" },
-    { printingKey: chase, finish: "nonfoil", vendor: "cardkingdom", side: "buylist", date: "2026-01-05", priceCents: 6_000, currency: "USD" },
+    { printingKey: chase, finish: "nonfoil", vendor: "cardkingdom", side: "retail", date: "2026-01-05", priceCents: 12_000 },
+    { printingKey: chase, finish: "nonfoil", vendor: "cardkingdom", side: "buylist", date: "2026-01-05", priceCents: 6_000 },
     // Below the spread floor, so it must not appear in either spread list.
-    { printingKey: riser, finish: "nonfoil", vendor: "cardkingdom", side: "retail", date: "2026-01-05", priceCents: 900, currency: "USD" },
-    { printingKey: riser, finish: "nonfoil", vendor: "cardkingdom", side: "buylist", date: "2026-01-05", priceCents: 100, currency: "USD" },
+    { printingKey: riser, finish: "nonfoil", vendor: "cardkingdom", side: "retail", date: "2026-01-05", priceCents: 900 },
+    { printingKey: riser, finish: "nonfoil", vendor: "cardkingdom", side: "buylist", date: "2026-01-05", priceCents: 100 },
   ])
   .run();
 

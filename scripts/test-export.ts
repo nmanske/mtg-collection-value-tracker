@@ -115,9 +115,8 @@ db.insert(priceSnapshots)
 
 db.insert(vendorPrices)
   .values([
-    { printingKey: comma.id, finish: "nonfoil", vendor: "cardkingdom", side: "retail", date: "2026-01-02", priceCents: 1_500, currency: "USD" },
-    { printingKey: comma.id, finish: "nonfoil", vendor: "cardkingdom", side: "buylist", date: "2026-01-02", priceCents: 700, currency: "USD" },
-    { printingKey: comma.id, finish: "nonfoil", vendor: "cardmarket", side: "retail", date: "2026-01-02", priceCents: 900, currency: "EUR" },
+    { printingKey: comma.id, finish: "nonfoil", vendor: "cardkingdom", side: "retail", date: "2026-01-02", priceCents: 1_500 },
+    { printingKey: comma.id, finish: "nonfoil", vendor: "cardkingdom", side: "buylist", date: "2026-01-02", priceCents: 700 },
   ])
   .run();
 
@@ -144,16 +143,14 @@ assert.equal(byName.quantity, "3");
 assert.equal(byName.unit_price_usd, "12.00");
 assert.equal(byName.value_usd, "36.00");
 assert.equal(byName.price_source, "scryfall");
-// Vendors are columns, and the euro one is labelled as euros.
+// Vendors are columns, every one of them labelled USD.
 assert.equal(byName.cardkingdom_retail_usd, "15.00");
 assert.equal(byName.cardkingdom_buylist_usd, "7.00");
-assert.equal(byName.cardmarket_retail_eur, "9.00");
-// A vendor with no data is blank, never zero.
-assert.equal(byName.manapool_retail_usd, "");
-assert.ok(
-  "cardmarket_retail_eur" in byName,
-  "the Cardmarket column must name its currency",
-);
+// TCGplayer retail is read from price_snapshots rather than vendor_prices, so
+// its column proves the export spans both tables.
+assert.equal(byName.tcgplayer_retail_usd, "12.00");
+// A vendor and side with no data is blank, never zero.
+assert.equal(byName.tcgplayer_buylist_usd, "");
 
 // A manual override replaces the tracked price and says so.
 db.update(holdings).set({ priceOverrideCents: 5_000 }).run();

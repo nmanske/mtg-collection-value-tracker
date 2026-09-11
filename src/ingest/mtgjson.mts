@@ -31,7 +31,6 @@ import { parser } from "stream-json/parser.js";
 import { streamObject } from "stream-json/streamers/stream-object.js";
 
 import {
-  type Currency,
   type Finish,
   holdings,
   MARKET_SIDES,
@@ -63,7 +62,7 @@ export const IDS_SYNC_KEY = "mtgjson_identifiers_version";
 const VENDOR = "tcgplayer";
 
 /** MTGJSON's finish keys, mapped onto ours. `normal` is Scryfall's `nonfoil`. */
-const FINISH_BY_MTGJSON_KEY: Record<string, Finish> = {
+export const FINISH_BY_MTGJSON_KEY: Record<string, Finish> = {
   normal: "nonfoil",
   foil: "foil",
   etched: "etched",
@@ -75,12 +74,12 @@ const PROGRESS_EVERY = 20_000;
 /**
  * SQLite caps how many bind parameters one statement may carry — 32,766 in
  * current builds. A multi-row insert uses one per column per row, so the batch
- * size has to account for the width of the table: vendor_prices has seven
- * columns, and 5,000 rows of it is 35,000 parameters, which fails with
+ * size has to account for the width of the table: vendor_prices has six
+ * columns, and 5,000 rows of it is 30,000 parameters, which fails with
  * "too many SQL variables".
  */
-const MAX_BIND_PARAMS = 30_000;
-const VENDOR_COLUMNS = 7;
+export const MAX_BIND_PARAMS = 30_000;
+const VENDOR_COLUMNS = 6;
 const VENDOR_BATCH_SIZE = Math.floor(MAX_BIND_PARAMS / VENDOR_COLUMNS);
 
 interface MtgjsonMeta {
@@ -107,7 +106,6 @@ interface VendorRow {
   side: MarketSide;
   date: string;
   priceCents: number;
-  currency: Currency;
 }
 
 /**
@@ -121,7 +119,6 @@ interface VendorRow {
 export interface VendorBackfillResult {
   rowsWritten: number;
   bySeries: { vendor: Vendor; side: MarketSide; rows: number }[];
-  currencies: { vendor: Vendor; currency: Currency }[];
   earliestDate: string | null;
   latestDate: string | null;
 }
@@ -369,11 +366,9 @@ export async function backfillMtgjsonPrices(
   const wantVendors = options.vendors ?? false;
   const vendorBuffer: VendorRow[] = [];
   const vendorCounts = new Map<string, number>();
-  const vendorCurrency = new Map<Vendor, Currency>();
   const vendorResult: VendorBackfillResult = {
     rowsWritten: 0,
     bySeries: [],
-    currencies: [],
     earliestDate: null,
     latestDate: null,
   };
@@ -528,10 +523,9 @@ export async function backfillMtgjsonPrices(
           if (!(VENDORS as readonly string[]).includes(vendorName)) continue;
           const vendor = vendorName as Vendor;
 
-          // MTGJSON states the currency per vendor. Cardmarket quotes euros;
-          // storing what it says is what keeps a EUR figure out of a USD total.
-          const currency: Currency = body?.currency === "EUR" ? "EUR" : "USD";
-          vendorCurrency.set(vendor, currency);
+          // Both kept vendors quote USD. A build that ever said otherwise is
+          // skipped rather than silently counted as dollars.
+          if (body?.currency && body.currency !== "USD") continue;
 
           for (const side of MARKET_SIDES) {
             const series = body?.[side];
@@ -561,7 +555,6 @@ export async function backfillMtgjsonPrices(
                   side,
                   date,
                   priceCents,
-                  currency,
                 });
               }
             }
@@ -587,9 +580,6 @@ export async function backfillMtgjsonPrices(
         const [vendor, side] = key.split(".");
         return { vendor: vendor as Vendor, side: side as MarketSide, rows };
       });
-    vendorResult.currencies = [...vendorCurrency.entries()].map(
-      ([vendor, currency]) => ({ vendor, currency }),
-    );
     result.vendorResult = vendorResult;
   }
 

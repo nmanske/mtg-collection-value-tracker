@@ -14,6 +14,7 @@
     "ingest:scryfall": "tsx scripts/ingest-scryfall.ts",
     "test:ingest": "tsx scripts/test-ingest.ts",
     "backfill:mtgjson": "tsx scripts/backfill-mtgjson.mts",
+    "backfill:archive": "tsx scripts/backfill-archive.mts",
     "test:holdings": "tsx scripts/test-holdings.ts",
     "test": "npm run test:ingest && npm run test:holdings && npm run test:import && npm run test:valuation && npm run test:vendors && npm run test:stats && npm run test:chart && npm run test:ranges && npm run test:export && npm run db:smoke",
     "import:moxfield": "tsx scripts/import-moxfield.ts",

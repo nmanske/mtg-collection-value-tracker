@@ -15,7 +15,7 @@ import {
   vendorQuotes,
   vendorSeries,
 } from "@/db/queries/vendors";
-import { holdings, printings, vendorPrices } from "@/db/schema";
+import { holdings, priceSnapshots, printings, vendorPrices } from "@/db/schema";
 
 const PATH = "./data/test-vendors.db";
 const cleanup = () => {
@@ -74,17 +74,27 @@ db.insert(holdings)
   ])
   .run();
 
-db.insert(vendorPrices)
+// TCGplayer retail lives in price_snapshots — the canonical series the
+// portfolio is valued from — and is deliberately not copied into
+// vendor_prices. Every query below has to reunite the two tables, so seeding
+// them separately is what actually exercises the union.
+db.insert(priceSnapshots)
   .values([
     // Two days, so "latest" has to pick the later one.
-    { printingKey: ALPHA, finish: "nonfoil", vendor: "tcgplayer", side: "retail", date: "2026-01-01", priceCents: 900, currency: "USD" },
-    { printingKey: ALPHA, finish: "nonfoil", vendor: "tcgplayer", side: "retail", date: "2026-01-02", priceCents: 1_000, currency: "USD" },
-    { printingKey: ALPHA, finish: "nonfoil", vendor: "cardkingdom", side: "retail", date: "2026-01-02", priceCents: 1_200, currency: "USD" },
-    { printingKey: ALPHA, finish: "nonfoil", vendor: "cardkingdom", side: "buylist", date: "2026-01-02", priceCents: 600, currency: "USD" },
-    // Cardmarket quotes euros — this must never join a dollar total.
-    { printingKey: ALPHA, finish: "nonfoil", vendor: "cardmarket", side: "retail", date: "2026-01-02", priceCents: 800, currency: "EUR" },
+    { printingKey: ALPHA, finish: "nonfoil", date: "2026-01-01", priceCents: 900, source: "mtgjson" },
+    { printingKey: ALPHA, finish: "nonfoil", date: "2026-01-02", priceCents: 1_000, source: "mtgjson" },
     // Beta is quoted by TCGplayer only, so other vendors cover less than all.
-    { printingKey: BETA, finish: "nonfoil", vendor: "tcgplayer", side: "retail", date: "2026-01-02", priceCents: 500, currency: "USD" },
+    { printingKey: BETA, finish: "nonfoil", date: "2026-01-02", priceCents: 500, source: "mtgjson" },
+  ])
+  .run();
+
+db.insert(vendorPrices)
+  .values([
+    { printingKey: ALPHA, finish: "nonfoil", vendor: "cardkingdom", side: "retail", date: "2026-01-02", priceCents: 1_200 },
+    { printingKey: ALPHA, finish: "nonfoil", vendor: "cardkingdom", side: "buylist", date: "2026-01-02", priceCents: 600 },
+    // TCGplayer's buylist exists only in archived MTGJSON builds. It belongs
+    // in vendor_prices even though its retail counterpart does not.
+    { printingKey: ALPHA, finish: "nonfoil", vendor: "tcgplayer", side: "buylist", date: "2026-01-02", priceCents: 700 },
   ])
   .run();
 
@@ -92,20 +102,22 @@ assert.equal(hasVendorData(db), true);
 
 // --- per-card quotes ---
 const quotes = vendorQuotes(db, ALPHA, "nonfoil");
+// tcgplayer retail + tcgplayer buylist + cardkingdom retail + cardkingdom
+// buylist, gathered from both tables.
 assert.equal(quotes.length, 4);
 
 const tcg = quotes.find((q) => q.vendor === "tcgplayer" && q.side === "retail")!;
 // The later day wins, not the first or the cheapest.
 assert.equal(tcg.priceCents, 1_000);
 assert.equal(tcg.date, "2026-01-02");
-assert.equal(tcg.currency, "USD");
 
-const euro = quotes.find((q) => q.vendor === "cardmarket")!;
-assert.equal(euro.currency, "EUR", "cardmarket must carry its own currency");
-
-const buylist = quotes.find((q) => q.side === "buylist")!;
-assert.equal(buylist.vendor, "cardkingdom");
-assert.equal(buylist.priceCents, 600);
+// Both vendors' buylists surface, including TCGplayer's archive-only one.
+const buylists = new Map(
+  quotes.filter((q) => q.side === "buylist").map((q) => [q.vendor, q]),
+);
+assert.equal(buylists.size, 2);
+assert.equal(buylists.get("cardkingdom")!.priceCents, 600);
+assert.equal(buylists.get("tcgplayer")!.priceCents, 700);
 
 // A finish with no vendor data returns nothing rather than another finish's.
 assert.equal(vendorQuotes(db, ALPHA, "foil").length, 0);
@@ -131,25 +143,19 @@ assert.equal(
   "a vendor that quotes part of the collection must report the shortfall",
 );
 
-// The euro total is its own figure, never folded into a dollar one.
-const cmTotal = byKey.get("cardmarket.retail")!;
-assert.equal(cmTotal.currency, "EUR");
-assert.equal(cmTotal.totalCents, 2 * 800);
+// TCGplayer's buylist total comes from vendor_prices while its retail total
+// comes from price_snapshots: the split is invisible to the caller.
+const tcgBuylist = byKey.get("tcgplayer.buylist")!;
+assert.equal(tcgBuylist.totalCents, 2 * 700);
+assert.equal(tcgBuylist.covered, 1);
 
-const usdRetail = totals.filter(
-  (row) => row.currency === "USD" && row.side === "retail",
-);
-assert.ok(
-  !usdRetail.some((row) => row.totalCents === cmTotal.totalCents),
-  "the EUR total must not appear among the USD ones",
-);
-
-// Currencies are grouped so the ordering never implies a cross-currency rank.
-const currencyOrder = totals.map((row) => row.currency);
+// Retail rows sort before buylist ones, so the ordering never reads a
+// what-you-pay figure against a what-you-get one.
+const sideOrder = totals.map((row) => row.side);
 assert.deepEqual(
-  currencyOrder,
-  [...currencyOrder].sort((a, b) => (a === b ? 0 : a === "USD" ? -1 : 1)),
-  "USD rows must group before EUR rows",
+  sideOrder,
+  [...sideOrder].sort((a, b) => (a === b ? 0 : a === "retail" ? -1 : 1)),
+  "retail rows must group before buylist rows",
 );
 
 // --- series ---
@@ -159,8 +165,14 @@ assert.deepEqual(
   ["2026-01-01", "2026-01-02"],
 );
 assert.equal(series[0].priceCents, 900);
+
+// The same call shape reads the other table without the caller knowing.
+assert.deepEqual(
+  vendorSeries(db, ALPHA, "nonfoil", "cardkingdom", "buylist"),
+  [{ date: "2026-01-02", priceCents: 600 }],
+);
 assert.equal(
-  vendorSeries(db, ALPHA, "nonfoil", "manapool", "retail").length,
+  vendorSeries(db, BETA, "nonfoil", "cardkingdom", "retail").length,
   0,
 );
 

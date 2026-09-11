@@ -2,6 +2,8 @@ import { and, lte, sql } from "drizzle-orm";
 
 import { holdings, priceSnapshots } from "@/db/schema";
 
+import { FINISH_CODES } from "@/db/codec";
+
 import type { Db } from "./printings";
 
 /**
@@ -65,8 +67,17 @@ interface HoldingRow {
   seriesKey: string;
 }
 
-const seriesKey = (printingKey: number, finish: string) =>
-  `${printingKey}|${finish}`;
+/**
+ * Identifies one (printing, finish) price series.
+ *
+ * Keyed on the *coded* finish, because the price matrix below is filled from a
+ * hand-written statement read with `.raw(true)` — which returns the stored
+ * integer, not the string Drizzle would decode it to. Holding rows come through
+ * the query builder and so arrive decoded; encoding them here is what keeps the
+ * two halves addressing the same series.
+ */
+const seriesKey = (printingKey: number, finishCode: number) =>
+  `${printingKey}|${finishCode}`;
 
 /**
  * The underlying better-sqlite3 connection.
@@ -170,7 +181,7 @@ export function portfolioSeries(
     quantity: row.quantity,
     dateAdded: row.dateAdded,
     priceOverrideCents: row.priceOverrideCents,
-    seriesKey: seriesKey(row.printingKey, row.finish),
+    seriesKey: seriesKey(row.printingKey, FINISH_CODES[row.finish]),
   }));
 
   // Acquisitions per date, counted once rather than re-scanned per point.
@@ -235,7 +246,7 @@ export function portfolioSeries(
   );
 
   for (const raw of statement.raw(true).iterate(lastDate) as Iterable<
-    [number, string, string, number]
+    [number, number, string, number]
   >) {
     const series = seriesIndex.get(seriesKey(raw[0], raw[1]));
     if (series === undefined) continue;
