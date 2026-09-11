@@ -8,6 +8,8 @@
  *   --vendors WHICH   all | held | none   (default held)
  *   --vendor-list A,B which vendors to record (default tcgplayer,cardkingdom)
  *   --refresh-ids     merge each build's AllIdentifiers.json into the uuid map
+ *   --ids-only        rebuild the uuid map only; read no price file
+ *   --every N         process only every Nth build
  *   --force           re-read every build and ignore the overlap watermark
  *   --dry-run         parse and count without writing
  *   --limit N         stop after N uuids per build (measurement; not recorded)
@@ -78,6 +80,8 @@ try {
       vendorScope: scopeFlag("--vendors", "held"),
       keepVendors: vendorListFlag(),
       refreshIds: args.includes("--refresh-ids"),
+      idsOnly: args.includes("--ids-only"),
+      every: numericFlag("--every"),
       force: args.includes("--force"),
       dryRun: args.includes("--dry-run"),
       limit: numericFlag("--limit"),

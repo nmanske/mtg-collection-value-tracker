@@ -173,6 +173,21 @@ export interface ArchiveOptions {
   dryRun?: boolean;
   /** Merge each build's own `AllIdentifiers.json` into the uuid map first. */
   refreshIds?: boolean;
+  /**
+   * Only rebuild the uuid map; read no price file.
+   *
+   * The map has to be complete *before* prices are read, because a uuid it
+   * cannot resolve is skipped silently and that history simply never lands. A
+   * uuid is never remapped to a different printing — verified across builds
+   * 0001 and 0277, where zero uuids changed meaning — but MTGJSON does retire
+   * them: 2,508 of 2021's uuids are absent from the current build. Most remain
+   * reachable through another uuid for the same printing; 82 printings are
+   * reachable only through a retired one. Merging every build's identifiers
+   * before the price pass is what closes that gap.
+   */
+  idsOnly?: boolean;
+  /** Process only every Nth build. Identifier merges tolerate sampling. */
+  every?: number;
   /** Stop after this many uuids per build. For measurement. */
   limit?: number;
   log?: (message: string) => void;
@@ -637,7 +652,17 @@ export async function backfillFromArchive(
   const snapshotScope = options.snapshotScope ?? "all";
   const vendorScope = options.vendorScope ?? "held";
 
-  const builds = await discoverArchive(root);
+  let builds = await discoverArchive(root);
+  if (options.every && options.every > 1) {
+    // The newest build is always kept: it defines the current map, and a
+    // sample that stopped short of it would miss every recent printing.
+    const sampled = builds.filter((_, i) => i % options.every! === 0);
+    if (builds.length > 0 && sampled.at(-1) !== builds.at(-1)) {
+      sampled.push(builds.at(-1)!);
+    }
+    builds = sampled;
+    log(`Sampling every ${options.every} builds`);
+  }
   log(`${builds.length} build(s) in ${root}`);
   log(
     `Scope: snapshots=${snapshotScope}, vendor prices=${vendorScope} ` +
@@ -682,9 +707,11 @@ export async function backfillFromArchive(
   for (const [index, build] of builds.entries()) {
     log(`\n[${index + 1}/${builds.length}] ${build.label}`);
 
-    if (options.refreshIds && build.identifiersPath) {
+    if ((options.refreshIds || options.idsOnly) && build.identifiersPath) {
       await mergeIdentifiers(db, sqlite, build.identifiersPath, log);
     }
+    // Nothing past here touches the price file, the expensive half of a build.
+    if (options.idsOnly) continue;
 
     const outcome = await ingestArchiveBuild(
       db,
