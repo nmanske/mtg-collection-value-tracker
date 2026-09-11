@@ -45,7 +45,8 @@ export function VendorTotals({
         By vendor
       </h2>
       <p className="mt-1 mb-4 text-sm text-neutral-500">
-        What each shop asks for your cards, and what it would pay for them.
+        What each shop asks for your cards, and what it would pay for them,
+        using the most recent price recorded for each card.
       </p>
 
       <table className="w-full text-sm">
@@ -60,8 +61,11 @@ export function VendorTotals({
             <th scope="col" className="py-2 pr-4 text-right font-medium">
               Total
             </th>
-            <th scope="col" className="py-2 font-medium">
+            <th scope="col" className="py-2 pr-4 font-medium">
               Covers
+            </th>
+            <th scope="col" className="py-2 font-medium">
+              Priced
             </th>
           </tr>
         </thead>
@@ -104,6 +108,22 @@ export function VendorTotals({
                     </span>
                   )}
                 </td>
+                <td
+                  className="py-2 text-xs tabular-nums text-neutral-500"
+                  // Almost every card is priced on the newest date, so that is
+                  // the only one shown. The rare card a shop has stopped
+                  // listing keeps an older price in the total; the oldest one
+                  // still counted rides along as a tooltip rather than a second
+                  // date, which read as a range and invited the question of
+                  // which number the total actually used.
+                  title={
+                    row.oldestDate && row.oldestDate !== row.date
+                      ? `Oldest price still counted in this total: ${row.oldestDate}`
+                      : undefined
+                  }
+                >
+                  {row.date ?? "—"}
+                </td>
               </tr>
             );
           })}
@@ -113,9 +133,9 @@ export function VendorTotals({
       <p className="mt-4 text-xs text-neutral-500">
         Totals only span the holdings a vendor actually quotes, so a smaller
         figure may mean thinner coverage rather than a lower price — check the
-        &ldquo;covers&rdquo; column before reading it as a discount. Cardmarket
-        quotes euros and is not converted. Vendor data covers your collection
-        only.
+        &ldquo;covers&rdquo; column before reading it as a discount.
+        &ldquo;Priced&rdquo; is the date these prices come from; a card a shop
+        has stopped listing keeps its last price rather than dropping out.
       </p>
     </section>
   );

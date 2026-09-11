@@ -157,7 +157,17 @@ export interface CollectionTotalsByVendor {
   covered: number;
   /** Holdings it does not, which are simply absent from the total. */
   missing: number;
+  /** The most recent quote in the total. */
   date: string | null;
+  /**
+   * The least recent quote in the total.
+   *
+   * `date` alone overstates how current a figure is: it only proves that *one*
+   * holding was quoted that day. If a shop stopped listing a card, its old
+   * price stays in the sum indefinitely, and a single "as of" date would
+   * present a stale total as today's.
+   */
+  oldestDate: string | null;
 }
 
 /**
@@ -185,7 +195,8 @@ export function collectionByVendor(db: Db): CollectionTotalsByVendor[] {
     return `select ${VENDOR_CODES[vendor]} as vendor, ${SIDE_CODES[side]} as side,
                    sum(quantity * cents) as totalCents,
                    count(cents) as covered,
-                   max(seen) as date
+                   max(seen) as date,
+                   min(seen) as oldestDate
               from (select h.quantity as quantity,
                            ${latest("x.price_cents")} as cents,
                            ${latest("x.date")} as seen
@@ -195,7 +206,11 @@ export function collectionByVendor(db: Db): CollectionTotalsByVendor[] {
   const rows = client(db).prepare(selects).all() as (Omit<
     RawQuote,
     "priceCents"
-  > & { totalCents: number | null; covered: number })[];
+  > & {
+    totalCents: number | null;
+    covered: number;
+    oldestDate: string | null;
+  })[];
 
   const totalHoldings =
     db.select({ n: sql<number>`count(*)` }).from(holdings).get()?.n ?? 0;
@@ -210,6 +225,7 @@ export function collectionByVendor(db: Db): CollectionTotalsByVendor[] {
       covered: row.covered,
       missing: totalHoldings - row.covered,
       date: row.date,
+      oldestDate: row.oldestDate,
     }))
     .sort((a, b) => {
       // Retail before buylist, then by size. All figures are USD, so a single
