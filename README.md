@@ -23,21 +23,31 @@ Pre-alpha. Phase 0 (project scaffolding) only.
   by the size of your collection rather than the price tables, which hold 15.7
   million rows. There is deliberately no per-card daily price export; see
   below.
-- **Vendor comparison** — what TCGplayer, Card Kingdom, Cardmarket and Mana
-  Pool ask for your cards, and what Card Kingdom would pay for them. Scoped to
-  your collection: every vendor and side for every printing measures at roughly
-  60 million rows against 2.9 million for one collection.
+- **Vendor comparison** — what TCGplayer and Card Kingdom ask for your cards,
+  and what Card Kingdom would pay for them, with the coverage and date behind
+  each figure stated rather than implied.
 
 Single-user, USD-only, no account system.
 
 ## Data sources
 
-- [Scryfall](https://scryfall.com/docs/api) bulk data — card metadata and the
-  ongoing daily price snapshot (`prices.usd` / `prices.usd_foil`, sourced from
-  TCGplayer).
-- [MTGJSON](https://mtgjson.com/) `AllPrices` — one-time 90-day historical
-  backfill, `tcgplayer` retail series only, joined to Scryfall IDs through
-  `AllIdentifiers`.
+- [Scryfall](https://scryfall.com/docs/api) bulk data — card metadata for every
+  printing, and the ongoing daily price snapshot (`prices.usd` /
+  `prices.usd_foil`). Those figures are TCGplayer's, the same series MTGJSON
+  publishes as `tcgplayer` retail, so the daily job and the historical backfill
+  describe one continuous series rather than two that happen to meet.
+- [MTGJSON](https://mtgjson.com/) `AllPrices` — all price history. The live API
+  serves a rolling ~90-day window; a local archive of past builds reaches back
+  years, because each build carries its own window and consecutive builds
+  overlap enough to stitch together. Joined to Scryfall IDs through MTGJSON's
+  `uuid`.
+
+Only TCGplayer and Card Kingdom are kept. MTGJSON also aggregates Cardmarket,
+which quotes EUR and cannot join a dollar total without exchange-rate history
+this project does not have, and Mana Pool, which appears only in recent builds
+and so cannot contribute history. TCGplayer retail lives in `price_snapshots`
+and Card Kingdom's two sides in `vendor_prices`; the two tables partition the
+series between them and the vendor comparison unions them.
 
 This project is not affiliated with, endorsed, or sponsored by Wizards of the
 Coast, Scryfall, MTGJSON, or TCGplayer.
@@ -62,9 +72,11 @@ npm run dev
 | Command | What it does |
 | --- | --- |
 | `npm run ingest:scryfall` | Streams Scryfall's gzipped JSONL `default_cards` bulk file. Upserts printings and writes one day of price snapshots. Idempotent, and skips entirely if that build was already ingested (`--force` overrides). This is what the daily cron will run. |
-| `npm run backfill:mtgjson` | One-time historical fill from MTGJSON's `AllPrices`, TCGplayer retail only, joined to Scryfall ids through MTGJSON's `uuid`. Scoped to held printings by default; `--all` covers every printing. Never overwrites a day already recorded. |
+| `npm run backfill:mtgjson` | Historical fill from MTGJSON's live `AllPrices` (~90 days), TCGplayer retail only, joined to Scryfall ids through MTGJSON's `uuid`. Scoped to held printings by default; `--all` covers every printing. Never overwrites a day already recorded. |
+| `npm run backfill:archive` | The same, from a local archive of past MTGJSON builds, which reaches back years rather than 90 days. Walks builds oldest-first, records progress after each, and resumes where it stopped. `--snapshots` / `--vendors` take `all`, `held` or `none`; `--ids-only` rebuilds just the uuid map; `--every N` samples builds. |
+| `npm run audit:archive` | Reports which archived builds failed to download, and — the part that matters — whether the gaps leave any date uncovered. Usually they do not: each build carries ~90 days while builds are ~8 days apart, so neighbours cover for a missing one. |
 | `npm run import:moxfield` | Imports a Moxfield collection CSV. The export is treated as a snapshot of the whole collection: quantities are set from the file and holdings it no longer lists are removed, so re-importing the same file changes nothing. Only rows the importer owns are touched, so hand-added cards survive. `--add` merges without removing; `--adopt` claims pre-existing rows once. |
-| `npm run backfill:mtgjson -- --vendors` | Also records every vendor and both market sides into `vendor_prices`, for held printings. Cardmarket quotes euros and is stored as such; nothing converts between currencies. |
+| `npm run backfill:mtgjson -- --vendors` | Also records Card Kingdom's retail and buylist into `vendor_prices`. TCGplayer retail is deliberately not written there: it is the canonical series in `price_snapshots`, and storing it twice put it on both sides of the comparison union and double-counted the collection. |
 | `npm run db:smoke` | Round-trips every table and asserts the constraints the app depends on. |
 | `npm run test:ingest` | Unit tests for price conversion and snapshot dating. |
 | `npm test` | Every suite: ingest, holdings, import, valuation, chart axes, schema. |
@@ -101,8 +113,9 @@ start, so pulling a newer image upgrades the schema rather than failing.
 ### Backfilling history and importing a collection
 
 The daily job only records prices from the day it first runs, so a new install
-has one day of history. The MTGJSON backfill fills in roughly 90 days before
-that.
+has one day of history. `backfill:mtgjson` fills in the ~90 days MTGJSON's live
+API serves. Going back further needs an archive of past MTGJSON builds on disk,
+which `backfill:archive` walks oldest-first — see "Backfilling from an archive".
 
 Both the backfill and the Moxfield import are development CLIs — they run under
 `tsx`, which is a dev dependency and is deliberately not in the production
@@ -113,11 +126,39 @@ DATABASE_PATH=./data/mtg.db npm run backfill:mtgjson -- --all
 DATABASE_PATH=./data/mtg.db npm run import:moxfield -- collection.csv --dry-run
 ```
 
+### Backfilling from an archive
+
+MTGJSON's live `AllPrices` is a rolling ~90-day window, so the public API can
+never reach further back than three months. An archive of past builds can: each
+one carries its own window, and consecutive builds overlap enough to stitch into
+a continuous series.
+
+Point `backfill:archive` at a directory of build folders, each holding that
+build's `AllPrices.json` (a nested `AllPrices.json/AllPrices.json` is accepted,
+as is `.gz`):
+
+```bash
+DATABASE_PATH=./data/mtg.db npm run backfill:archive -- --snapshots all --vendors all
+```
+
+Two things make a long run practical. Builds whose dates the watermark already
+covers are skipped on a 4 KB header read rather than a full parse, so restarting
+costs seconds instead of re-reading everything. And progress is recorded after
+each build, so an interrupted run resumes where it stopped — the same command
+continues it.
+
+Run `--ids-only` first if the archive spans years. MTGJSON retires `uuid`s over
+time, and a uuid the map cannot resolve is skipped silently, taking that card's
+history with it. Merging every build's `AllIdentifiers.json` first recovered
+30,691 mappings against a map built from the current build alone.
+
 ### Backing up
 
 The database is the backup. Copy `data/mtg.db` — it holds the collection and
 every price ever recorded, including days that can no longer be re-fetched once
-MTGJSON's rolling 90-day window moves past them.
+MTGJSON's rolling 90-day window moves past them. That window is the reason the
+database matters more than it looks: once a day falls out of it, the only
+sources are this file or an archived build.
 
 There is no export of the per-card daily price series, and that is deliberate.
 Price providers' terms consistently forbid repackaging their data as a
