@@ -52,6 +52,8 @@ import {
   vendorPrices,
 } from "@/db/schema";
 
+import { FINISH_CODES, SIDE_CODES, VENDOR_CODES } from "@/db/codec";
+
 import { FINISH_BY_MTGJSON_KEY, MAX_BIND_PARAMS } from "./mtgjson.mjs";
 import { priceNumberToCents } from "./money";
 
@@ -98,6 +100,41 @@ const VENDOR_BATCH_SIZE = Math.floor(MAX_BIND_PARAMS / 6);
 const SNAPSHOT_BATCH_SIZE = Math.floor(MAX_BIND_PARAMS / 6);
 const ID_BATCH_SIZE = 5_000;
 const PROGRESS_EVERY = 50_000;
+
+/**
+ * Rows buffered before a flush, far above the per-statement batch size.
+ *
+ * Both price tables are WITHOUT ROWID, so their rows live in a B-tree clustered
+ * on `printing_key`. MTGJSON iterates in uuid order, which against that key is
+ * random, so inserting as the file is read writes to a random page every time.
+ * Buffering a large run and sorting it into key order first turns that back
+ * into a mostly-sequential append.
+ *
+ * Sized to keep the buffer in the low hundreds of MB: one build contributes
+ * ~17M vendor rows, which could not be held whole.
+ */
+const SORT_BUFFER_ROWS = 1_000_000;
+
+/**
+ * Page cache for a bulk load, in KiB (negative means KiB rather than pages).
+ *
+ * The default is 2 MB. Random inserts into a multi-gigabyte clustered index
+ * miss that cache almost every time, and the read-modify-write of a random page
+ * is what the load actually spends its time on.
+ */
+const BULK_CACHE_KIB = -1_048_576;
+
+/**
+ * Applies pragmas worth setting only while bulk loading.
+ *
+ * Durability is deliberately untouched — WAL and its default synchronous level
+ * stay as they are. A backfill that corrupts the database on a power cut would
+ * cost far more than it saves, and the run is resumable anyway.
+ */
+export function tuneForBulkLoad(sqlite: SqliteDatabase): void {
+  sqlite.pragma(`cache_size = ${BULK_CACHE_KIB}`);
+  sqlite.pragma("temp_store = MEMORY");
+}
 
 export type Scope = "none" | "held" | "all";
 
@@ -371,6 +408,13 @@ export async function ingestArchiveBuild(
   const vendorRows: VendorRow[] = [];
 
   const flushSnapshots = sqlite.transaction(() => {
+    // Sorted into primary-key order before insert; see SORT_BUFFER_ROWS.
+    snapshots.sort(
+      (a, b) =>
+        a.printingKey - b.printingKey ||
+        FINISH_CODES[a.finish] - FINISH_CODES[b.finish] ||
+        (a.date < b.date ? -1 : a.date > b.date ? 1 : 0),
+    );
     for (let i = 0; i < snapshots.length; i += SNAPSHOT_BATCH_SIZE) {
       // onConflictDoNothing: whichever build first supplied a day owns it.
       // Archived builds agree on past dates, and the live ingest's own rows
@@ -391,6 +435,14 @@ export async function ingestArchiveBuild(
   });
 
   const flushVendors = sqlite.transaction(() => {
+    vendorRows.sort(
+      (a, b) =>
+        a.printingKey - b.printingKey ||
+        FINISH_CODES[a.finish] - FINISH_CODES[b.finish] ||
+        VENDOR_CODES[a.vendor] - VENDOR_CODES[b.vendor] ||
+        SIDE_CODES[a.side] - SIDE_CODES[b.side] ||
+        (a.date < b.date ? -1 : a.date > b.date ? 1 : 0),
+    );
     for (let i = 0; i < vendorRows.length; i += VENDOR_BATCH_SIZE) {
       result.vendorRowsWritten += db
         .insert(vendorPrices)
@@ -414,7 +466,7 @@ export async function ingestArchiveBuild(
   // internally rather than trusting the length check to keep them under
   // SQLite's bind-parameter cap.
   const maybeFlushSnapshots = (force = false) => {
-    if (!force && snapshots.length < SNAPSHOT_BATCH_SIZE) return;
+    if (!force && snapshots.length < SORT_BUFFER_ROWS) return;
     if (options.dryRun) {
       result.snapshotsInserted += snapshots.length;
       snapshots.length = 0;
@@ -424,7 +476,7 @@ export async function ingestArchiveBuild(
   };
 
   const maybeFlushVendors = (force = false) => {
-    if (!force && vendorRows.length < VENDOR_BATCH_SIZE) return;
+    if (!force && vendorRows.length < SORT_BUFFER_ROWS) return;
     if (options.dryRun) {
       result.vendorRowsWritten += vendorRows.length;
       vendorRows.length = 0;

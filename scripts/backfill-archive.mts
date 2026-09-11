@@ -19,7 +19,11 @@ import { drizzle } from "drizzle-orm/better-sqlite3";
 
 import { DB_PATH, openDatabase } from "@/db/client";
 import { type Vendor, VENDORS } from "@/db/schema";
-import { backfillFromArchive, type Scope } from "@/ingest/mtgjson-archive.mjs";
+import {
+  backfillFromArchive,
+  type Scope,
+  tuneForBulkLoad,
+} from "@/ingest/mtgjson-archive.mjs";
 
 const args = process.argv.slice(2);
 
@@ -62,6 +66,7 @@ function numericFlag(name: string): number | undefined {
 }
 
 const sqlite = openDatabase(DB_PATH);
+tuneForBulkLoad(sqlite);
 
 try {
   const result = await backfillFromArchive(
