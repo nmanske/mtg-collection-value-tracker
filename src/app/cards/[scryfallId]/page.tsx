@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import { CardPriceChart } from "@/components/card-price-chart";
+import { RangePicker } from "@/components/range-picker";
 import { VendorQuotes } from "@/components/vendor-quotes";
 import { db } from "@/db";
 import { holdingsForPrinting } from "@/db/queries/holdings";
@@ -14,6 +15,7 @@ import {
 import { vendorQuotes } from "@/db/queries/vendors";
 import { FINISHES, type Finish } from "@/db/schema";
 import { FINISH_LABEL, formatUsd, printingCode } from "@/lib/format";
+import { rangeStart, resolveRange, spanInDays } from "@/lib/ranges";
 
 export const dynamic = "force-dynamic";
 
@@ -46,7 +48,19 @@ export default async function CardPage(props: PageProps<"/cards/[scryfallId]">) 
       : (printing.finishes[0] ?? "nonfoil");
 
   const points = priceHistory(db, printing.id, finish);
-  const stats = priceStats(points);
+
+  // The range governs every figure in the price panel, not just the chart: a
+  // "high" that ignored the selected window would contradict the line drawn
+  // beside it. `lookback` is the whole window, so the change tile reads as the
+  // change across what is shown -- which is why its label is the range too.
+  const first = points[0]?.date ?? null;
+  const last = points.at(-1)?.date ?? null;
+  const spanDays = first && last ? spanInDays(first, last) : 0;
+  const requestedRange = typeof search.range === "string" ? search.range : undefined;
+  const range = resolveRange(requestedRange, spanDays, last);
+  const from = last ? rangeStart(range, last) : null;
+  const visible = from ? points.filter((point) => point.date >= from) : points;
+  const stats = priceStats(visible, Math.max(visible.length - 1, 1));
   const owned = holdingsForPrinting(db, printing.id);
   const quotes = vendorQuotes(db, printing.id, finish);
   const others = otherPrintings(db, printing.oracleId, printing.scryfallId);
@@ -154,7 +168,9 @@ export default async function CardPage(props: PageProps<"/cards/[scryfallId]">) 
 
           <dl className="flex flex-wrap gap-x-8 gap-y-3 text-sm">
             <div>
-              <dt className="text-xs text-neutral-500">30 days</dt>
+              <dt className="text-xs text-neutral-500">
+                {range.window === null ? "All time" : range.description}
+              </dt>
               <dd
                 className={`font-medium tabular-nums ${
                   stats.changeCents == null || stats.changeCents === 0
@@ -202,7 +218,26 @@ export default async function CardPage(props: PageProps<"/cards/[scryfallId]">) 
           </dl>
         </div>
 
-        <CardPriceChart points={points} />
+        <div className="mb-3 flex justify-end">
+          <RangePicker
+            active={range.id}
+            spanDays={spanDays}
+            lastDate={last}
+            hrefFor={(id) =>
+              `/cards/${printing.scryfallId}?finish=${finish}&range=${id}`
+            }
+          />
+        </div>
+
+        <CardPriceChart points={visible} />
+
+        {points.length > 0 ? (
+          <p className="mt-3 text-xs text-neutral-500">
+            {range.window === null
+              ? `History begins ${points[0].date}, the earliest price data for this printing.`
+              : `Showing ${visible.length} day${visible.length === 1 ? "" : "s"} to ${last}; ${spanDays} days are available in total.`}
+          </p>
+        ) : null}
       </section>
 
       <section className="mb-8 rounded-lg border border-neutral-200 p-5 dark:border-neutral-800">
