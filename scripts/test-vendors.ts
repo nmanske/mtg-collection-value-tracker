@@ -9,12 +9,15 @@ import { drizzle } from "drizzle-orm/better-sqlite3";
 import { migrate } from "drizzle-orm/better-sqlite3/migrator";
 
 import { openDatabase } from "@/db/client";
+import { countHoldings } from "@/db/queries/holdings";
 import {
   collectionByVendor,
   hasVendorData,
   vendorQuotes,
   vendorSeries,
 } from "@/db/queries/vendors";
+import { and, eq } from "drizzle-orm";
+
 import { holdings, priceSnapshots, printings, vendorPrices } from "@/db/schema";
 
 const PATH = "./data/test-vendors.db";
@@ -92,8 +95,9 @@ db.insert(vendorPrices)
   .values([
     { printingKey: ALPHA, finish: "nonfoil", vendor: "cardkingdom", side: "retail", date: "2026-01-02", priceCents: 1_200 },
     { printingKey: ALPHA, finish: "nonfoil", vendor: "cardkingdom", side: "buylist", date: "2026-01-02", priceCents: 600 },
-    // TCGplayer's buylist exists only in archived MTGJSON builds. It belongs
-    // in vendor_prices even though its retail counterpart does not.
+    // TCGplayer's buylist ended in 2022 and is no longer a series the app
+    // reports. A stray row must be ignored rather than surfaced as a quote --
+    // the archive still contains them, so this is the realistic case.
     { printingKey: ALPHA, finish: "nonfoil", vendor: "tcgplayer", side: "buylist", date: "2026-01-02", priceCents: 700 },
   ])
   .run();
@@ -102,22 +106,24 @@ assert.equal(hasVendorData(db), true);
 
 // --- per-card quotes ---
 const quotes = vendorQuotes(db, ALPHA, "nonfoil");
-// tcgplayer retail + tcgplayer buylist + cardkingdom retail + cardkingdom
-// buylist, gathered from both tables.
-assert.equal(quotes.length, 4);
+// tcgplayer retail (from price_snapshots) plus Card Kingdom's two sides.
+assert.equal(quotes.length, 3);
 
 const tcg = quotes.find((q) => q.vendor === "tcgplayer" && q.side === "retail")!;
 // The later day wins, not the first or the cheapest.
 assert.equal(tcg.priceCents, 1_000);
 assert.equal(tcg.date, "2026-01-02");
 
-// Both vendors' buylists surface, including TCGplayer's archive-only one.
+// Card Kingdom is the only buylist reported; the stray TCGplayer row is not.
 const buylists = new Map(
   quotes.filter((q) => q.side === "buylist").map((q) => [q.vendor, q]),
 );
-assert.equal(buylists.size, 2);
+assert.equal(buylists.size, 1);
 assert.equal(buylists.get("cardkingdom")!.priceCents, 600);
-assert.equal(buylists.get("tcgplayer")!.priceCents, 700);
+assert.ok(
+  !buylists.has("tcgplayer"),
+  "a discontinued series must not be quoted, however recent its stored date",
+);
 
 // A finish with no vendor data returns nothing rather than another finish's.
 assert.equal(vendorQuotes(db, ALPHA, "foil").length, 0);
@@ -143,11 +149,9 @@ assert.equal(
   "a vendor that quotes part of the collection must report the shortfall",
 );
 
-// TCGplayer's buylist total comes from vendor_prices while its retail total
-// comes from price_snapshots: the split is invisible to the caller.
-const tcgBuylist = byKey.get("tcgplayer.buylist")!;
-assert.equal(tcgBuylist.totalCents, 2 * 700);
-assert.equal(tcgBuylist.covered, 1);
+// The discontinued series contributes no total either, even though a row for
+// it sits in the table.
+assert.equal(byKey.has("tcgplayer.buylist"), false);
 
 // Retail rows sort before buylist ones, so the ordering never reads a
 // what-you-pay figure against a what-you-get one.
@@ -157,6 +161,47 @@ assert.deepEqual(
   [...sideOrder].sort((a, b) => (a === b ? 0 : a === "retail" ? -1 : 1)),
   "retail rows must group before buylist rows",
 );
+
+// --- the union must not double-count ---
+
+// The regression this guards: vendor_prices is meant to hold only what
+// price_snapshots does not, but the archive ingest wrote TCGplayer retail to
+// both. Every held card was then counted twice and the collection's TCGplayer
+// total read $27,484 against a real $15,187. Coverage above the holding count
+// is the signature, so assert on it directly -- a total alone looks plausible
+// and would not have failed.
+db.insert(vendorPrices)
+  .values([
+    // Exactly the mistake: the canonical series, written here as well.
+    { printingKey: ALPHA, finish: "nonfoil", vendor: "tcgplayer", side: "retail", date: "2026-01-02", priceCents: 999 },
+  ])
+  .run();
+
+const doubled = collectionByVendor(db);
+const tcgRetailRows = doubled.filter(
+  (row) => row.vendor === "tcgplayer" && row.side === "retail",
+);
+assert.equal(
+  tcgRetailRows.length,
+  1,
+  "a vendor and side must yield exactly one row, not one per source table",
+);
+for (const row of doubled) {
+  assert.ok(
+    row.covered <= countHoldings(db),
+    `${row.vendor}.${row.side} covers ${row.covered} of ${countHoldings(db)} holdings -- a series counted twice`,
+  );
+}
+
+db.delete(vendorPrices)
+  .where(
+    and(
+      eq(vendorPrices.printingKey, ALPHA),
+      eq(vendorPrices.vendor, "tcgplayer"),
+      eq(vendorPrices.side, "retail"),
+    ),
+  )
+  .run();
 
 // --- series ---
 const series = vendorSeries(db, ALPHA, "nonfoil", "tcgplayer", "retail");

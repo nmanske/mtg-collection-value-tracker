@@ -41,7 +41,6 @@ import {
   printings,
   syncMeta,
   type Vendor,
-  VENDORS,
   vendorPrices,
 } from "@/db/schema";
 
@@ -60,6 +59,16 @@ export const IDS_SYNC_KEY = "mtgjson_identifiers_version";
  * or Cardsphere would put a vendor-switch step in the middle of every chart.
  */
 const VENDOR = "tcgplayer";
+
+/**
+ * Vendors written to `vendor_prices`. Deliberately not `VENDORS`.
+ *
+ * TCGplayer retail is the canonical series and belongs to `price_snapshots`
+ * alone; writing it here as well puts it on both sides of the union the vendor
+ * comparison runs, which counts every held card twice. Its buylist ended in
+ * 2022 and is not kept either — see the note in `mtgjson-archive.mts`.
+ */
+const VENDOR_PRICE_VENDORS: readonly Vendor[] = ["cardkingdom"];
 
 /** MTGJSON's finish keys, mapped onto ours. `normal` is Scryfall's `nonfoil`. */
 export const FINISH_BY_MTGJSON_KEY: Record<string, Finish> = {
@@ -520,7 +529,9 @@ export async function backfillMtgjsonPrices(
 
       if (wantVendors) {
         for (const [vendorName, body] of Object.entries(item.value?.paper ?? {})) {
-          if (!(VENDORS as readonly string[]).includes(vendorName)) continue;
+          if (!(VENDOR_PRICE_VENDORS as readonly string[]).includes(vendorName)) {
+            continue;
+          }
           const vendor = vendorName as Vendor;
 
           // Both kept vendors quote USD. A build that ever said otherwise is

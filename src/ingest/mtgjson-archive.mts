@@ -78,18 +78,23 @@ const SNAPSHOT_VENDOR = "tcgplayer";
  * - Manapool only appears in recent builds, so it cannot contribute the deep
  *   history that is the whole point of reading an archive.
  *
- * Both kept vendors carry a buylist, but not over the same span. Card Kingdom's
- * runs throughout. TCGplayer's exists in the early builds and is gone from
- * current MTGJSON — scanning build 0001 (2021-03-10) found
- * `paper.tcgplayer.buylist` on 39,093 of 55,479 uuids, while the live data has
- * none. The archive is the only place that series survives, so the loop below
- * takes whatever sides a build actually has rather than assuming a fixed set;
- * later builds simply contribute no TCGplayer buylist.
+ * TCGplayer is absent from this list for two separate reasons, and both matter:
+ *
+ * - Its retail series is the canonical one and already lives in
+ *   `price_snapshots`. Writing it here too put the same series on both sides of
+ *   the vendor-comparison union, which counted every held card twice and
+ *   reported a collection total of $27,484 against a real $15,187.
+ * - Its buylist stops at 2022-01-04 — MTGJSON discontinued the series — so the
+ *   only place it could appear is a "latest quote" panel, where a four-year-old
+ *   price sits beside current ones and reads as an offer that still stands.
+ *   Archived builds still contain it, so this is a decision not to keep it
+ *   rather than an absence of data; re-adding it is a one-line change and a
+ *   re-run.
  *
  * Only `paper` is read. Builds also carry `mtgo.cardhoarder`, priced in event
  * tickets, which does not belong in a dollar total.
  */
-const ARCHIVE_VENDORS: readonly Vendor[] = ["tcgplayer", "cardkingdom"];
+const ARCHIVE_VENDORS: readonly Vendor[] = ["cardkingdom"];
 
 /** Highest archive build already ingested, so 280 files can resume. */
 export const ARCHIVE_VERSION_KEY = "mtgjson_archive_version";

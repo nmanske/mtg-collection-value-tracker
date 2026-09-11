@@ -21,9 +21,8 @@ import type { Db } from "./printings";
  *
  * The series are split across two tables and every query here reunites them.
  * `price_snapshots` holds TCGplayer retail — the canonical series the portfolio
- * is valued from — and `vendor_prices` holds everything else: Card Kingdom's
- * two sides, and TCGplayer's buylist where an archived build supplied one.
- * Storing TCGplayer retail in both was the simpler shape while this covered one
+ * is valued from — and `vendor_prices` holds Card Kingdom's two sides. Storing
+ * TCGplayer retail in both was the simpler shape while this covered one
  * collection over 90 days; across every printing and five years the copy is
  * ~355 million rows, so the union is bought instead.
  *
@@ -48,12 +47,56 @@ const TCG_RETAIL_FROM_SNAPSHOTS = `
     from price_snapshots
    where source != ${PRICE_SOURCE_CODES.manual}`;
 
-/** Both tables as one logical vendor series. */
-const ALL_VENDOR_PRICES = `
+/**
+ * The half of the vendor series that `vendor_prices` owns.
+ *
+ * TCGplayer retail is excluded here rather than merely being absent: the two
+ * tables must partition the series between them, and if the same one appears in
+ * both it is counted twice. That is not hypothetical — an ingest bug wrote
+ * TCGplayer retail into `vendor_prices` for 25 million rows, and the collection
+ * total read $27,484 against a real $15,187. Excluding it in the query makes
+ * the split hold regardless of what is in the table.
+ */
+const OTHER_VENDOR_PRICES = `
   select printing_key, finish, vendor, side, date, price_cents
     from vendor_prices
-  union all
-  ${TCG_RETAIL_FROM_SNAPSHOTS}`;
+   where not (vendor = ${VENDOR_CODES.tcgplayer} and side = ${SIDE_CODES.retail})`;
+
+/**
+ * Every (vendor, side) that exists, and which table supplies it.
+ *
+ * The one place the split is written down. Anything reading "all vendor
+ * series" goes through this rather than assuming a table.
+ */
+const SERIES: { vendor: Vendor; side: MarketSide; source: string }[] = [
+  { vendor: "tcgplayer", side: "retail", source: TCG_RETAIL_FROM_SNAPSHOTS },
+  {
+    vendor: "cardkingdom",
+    side: "retail",
+    source: `${OTHER_VENDOR_PRICES} and vendor = ${VENDOR_CODES.cardkingdom} and side = ${SIDE_CODES.retail}`,
+  },
+  {
+    vendor: "cardkingdom",
+    side: "buylist",
+    source: `${OTHER_VENDOR_PRICES} and vendor = ${VENDOR_CODES.cardkingdom} and side = ${SIDE_CODES.buylist}`,
+  },
+];
+
+/**
+ * Every reported series as one relation, built from SERIES.
+ *
+ * Derived rather than written out again, so a series the app no longer reports
+ * cannot leak back in through a second definition. A stray TCGplayer buylist
+ * row — the archive is full of them — is absent here because it is absent from
+ * SERIES, not because a WHERE clause somewhere remembers to exclude it.
+ */
+const ALL_VENDOR_PRICES = SERIES.map(
+  ({ vendor, side, source }) => `
+  select printing_key, finish,
+         ${VENDOR_CODES[vendor]} as vendor, ${SIDE_CODES[side]} as side,
+         date, price_cents
+    from (${source})`,
+).join("\n  union all\n");
 
 function client(db: Db) {
   return (db as unknown as { $client: import("better-sqlite3").Database })
@@ -126,57 +169,44 @@ export interface CollectionTotalsByVendor {
  * collection is not comparable to a retail total over all of it.
  */
 export function collectionByVendor(db: Db): CollectionTotalsByVendor[] {
-  // Written by hand: the shape is a latest-per-series subquery joined back to
-  // holdings, which Drizzle's builder cannot express, and the plan is what
-  // keeps each branch of the union on its own primary key.
-  // Each branch of the union is restricted to held series *before* it
-  // aggregates. Grouping first and joining after is the obvious shape and is
-  // what the single-table version did, but it makes the price_snapshots branch
-  // reduce all 12.9 million rows to find the ~3,700 that a collection needs —
-  // measured at 8.2 seconds against 0.2 for this.
-  const rows = client(db)
-    .prepare(
-      `with held as (select distinct printing_key, finish from holdings)
-       select latest.vendor    as vendor,
-              latest.side      as side,
-              sum(h.quantity * latest.price_cents) as totalCents,
-              count(*)         as covered,
-              max(latest.date) as date
-         from holdings h
-         join (
-           select vp.printing_key, vp.finish, vp.vendor, vp.side,
-                  max(vp.date) as date, vp.price_cents
-             from vendor_prices vp
-             join held on held.printing_key = vp.printing_key
-                      and held.finish = vp.finish
-            group by vp.printing_key, vp.finish, vp.vendor, vp.side
-           union all
-           select ps.printing_key, ps.finish,
-                  ${VENDOR_CODES.tcgplayer}, ${SIDE_CODES.retail},
-                  max(ps.date), ps.price_cents
-             from price_snapshots ps
-             join held on held.printing_key = ps.printing_key
-                      and held.finish = ps.finish
-            where ps.source != ${PRICE_SOURCE_CODES.manual}
-            group by ps.printing_key, ps.finish
-         ) latest
-           on latest.printing_key = h.printing_key
-          and latest.finish = h.finish
-        group by latest.vendor, latest.side`,
-    )
-    .all() as (Omit<RawQuote, "priceCents"> & {
-    totalCents: number;
-    covered: number;
-  })[];
+  // One correlated lookup per holding per series, rather than grouping the
+  // price tables and joining the result back.
+  //
+  // The grouping shape reads better and was fast at 13 million snapshots; at 34
+  // million and climbing it takes 7.9 seconds, because finding the latest date
+  // per series means visiting every date in that series. Each subquery here
+  // instead matches the full primary-key prefix — (printing_key, finish) on
+  // snapshots, plus (vendor, side) on vendor_prices — and reads one row.
+  const selects = SERIES.map(({ vendor, side, source }) => {
+    const latest = (column: string) => `(
+      select ${column} from (${source}) x
+       where x.printing_key = h.printing_key and x.finish = h.finish
+       order by x.date desc limit 1)`;
+    return `select ${VENDOR_CODES[vendor]} as vendor, ${SIDE_CODES[side]} as side,
+                   sum(quantity * cents) as totalCents,
+                   count(cents) as covered,
+                   max(seen) as date
+              from (select h.quantity as quantity,
+                           ${latest("x.price_cents")} as cents,
+                           ${latest("x.date")} as seen
+                      from holdings h)`;
+  }).join("\n  union all\n  ");
+
+  const rows = client(db).prepare(selects).all() as (Omit<
+    RawQuote,
+    "priceCents"
+  > & { totalCents: number | null; covered: number })[];
 
   const totalHoldings =
     db.select({ n: sql<number>`count(*)` }).from(holdings).get()?.n ?? 0;
 
   return rows
+    // A series nothing quotes yields a row of nulls rather than no row at all.
+    .filter((row) => row.covered > 0)
     .map((row) => ({
       vendor: VENDOR_BY_CODE.get(row.vendor)!,
       side: SIDE_BY_CODE.get(row.side)!,
-      totalCents: row.totalCents,
+      totalCents: row.totalCents ?? 0,
       covered: row.covered,
       missing: totalHoldings - row.covered,
       date: row.date,
@@ -208,7 +238,7 @@ export function vendorSeries(
     vendor === "tcgplayer" && side === "retail"
       ? TCG_RETAIL_FROM_SNAPSHOTS
       : `select printing_key, finish, vendor, side, date, price_cents
-           from vendor_prices
+           from (${OTHER_VENDOR_PRICES})
           where vendor = ${VENDOR_CODES[vendor]} and side = ${SIDE_CODES[side]}`;
 
   return client(db)
