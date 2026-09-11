@@ -8,6 +8,7 @@ import { sql } from "drizzle-orm";
 
 import { DB_PATH, openDatabase } from "@/db/client";
 import { printings } from "@/db/schema";
+import { ingestMtgjsonToday } from "@/ingest/mtgjson-today.mjs";
 import { ingestScryfallBulk } from "@/ingest/scryfall";
 
 /**
@@ -87,18 +88,29 @@ export async function runIngest(reason: string): Promise<void> {
   const sqlite = openDatabase(DB_PATH);
   try {
     log(`starting ingest (${reason})`);
-    const result = await ingestScryfallBulk(drizzle(sqlite), sqlite, {
+    const db = drizzle(sqlite);
+
+    // Metadata first, and prices second, because a price can only be recorded
+    // against a printing that already exists. On release day the order is the
+    // difference between a new set being priced and being silently skipped.
+    const metadata = await ingestScryfallBulk(db, sqlite, {
       log: (message) => log(message),
     });
+    log(
+      metadata.skipped
+        ? "metadata: upstream build unchanged"
+        : `metadata: ${metadata.printingsUpserted.toLocaleString()} printings`,
+    );
 
-    if (result.skipped) {
-      log("upstream build unchanged; nothing to do");
-    } else {
-      log(
-        `ingest complete: ${result.printingsUpserted.toLocaleString()} printings, ` +
-          `${result.snapshotsWritten.toLocaleString()} prices for ${result.snapshotDate}`,
-      );
-    }
+    const prices = await ingestMtgjsonToday(db, sqlite, {
+      log: (message) => log(message),
+    });
+    log(
+      prices.skipped
+        ? "prices: this MTGJSON build is already recorded"
+        : `prices: ${prices.snapshotsInserted.toLocaleString()} snapshots and ` +
+            `${prices.vendorRowsWritten.toLocaleString()} vendor rows for ${prices.date}`,
+    );
   } catch (error) {
     // Deliberately swallowed. A price refresh is not worth crashing the server
     // for; the collection still renders from the prices already stored.

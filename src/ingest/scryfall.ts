@@ -48,6 +48,16 @@ export interface IngestOptions {
   dryRun?: boolean;
   /** Where downloaded bulk files are cached. */
   cacheDir?: string;
+  /**
+   * Record `prices.usd` alongside the metadata.
+   *
+   * Off by default. MTGJSON is the sole price source, and Scryfall's figures
+   * are TCGplayer's — the same series MTGJSON publishes as `tcgplayer` retail —
+   * so writing them too would mean two providers filling one series, with
+   * whichever ran first owning each day. Scryfall remains essential for card
+   * metadata, which nothing else supplies.
+   */
+  prices?: boolean;
   log?: (message: string) => void;
 }
 
@@ -365,7 +375,7 @@ export async function ingestScryfallBulk(
       });
 
       let priced = false;
-      for (const finish of finishes) {
+      for (const finish of options.prices ? finishes : []) {
         const cents = priceStringToCents(
           card.prices?.[FINISH_PRICE_FIELD[finish]],
         );
@@ -382,7 +392,7 @@ export async function ingestScryfallBulk(
           estimated: false,
         });
       }
-      if (!priced) result.printingsWithNoPrice += 1;
+      if (options.prices && !priced) result.printingsWithNoPrice += 1;
 
       maybeFlush();
 

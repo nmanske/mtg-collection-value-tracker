@@ -31,16 +31,19 @@ Single-user, USD-only, no account system.
 
 ## Data sources
 
-- [Scryfall](https://scryfall.com/docs/api) bulk data — card metadata for every
-  printing, and the ongoing daily price snapshot (`prices.usd` /
-  `prices.usd_foil`). Those figures are TCGplayer's, the same series MTGJSON
-  publishes as `tcgplayer` retail, so the daily job and the historical backfill
-  describe one continuous series rather than two that happen to meet.
-- [MTGJSON](https://mtgjson.com/) `AllPrices` — all price history. The live API
-  serves a rolling ~90-day window; a local archive of past builds reaches back
-  years, because each build carries its own window and consecutive builds
-  overlap enough to stitch together. Joined to Scryfall IDs through MTGJSON's
-  `uuid`.
+- [MTGJSON](https://mtgjson.com/) — **every price, past and present.**
+  `AllPricesToday` (5.2 MB gzipped) is the daily refresh; `AllPrices` fills
+  history, serving a rolling ~90-day window from the live API, or years from a
+  local archive of past builds, since each build carries its own window and
+  consecutive builds overlap enough to stitch together.
+- [Scryfall](https://scryfall.com/docs/api) bulk data — **card metadata only.**
+  Printings, names, sets, collector numbers, images and finishes, which nothing
+  else supplies. Its `prices.usd` is deliberately not read.
+
+One price provider, not two. Scryfall's prices are TCGplayer's, the same series
+MTGJSON publishes as `tcgplayer` retail, so reading both would mean two sources
+filling one series with whichever ran first owning each day. Using MTGJSON alone
+leaves one set of terms to honour and no seam where providers meet.
 
 Only TCGplayer and Card Kingdom are kept. MTGJSON also aggregates Cardmarket,
 which quotes EUR and cannot join a dollar total without exchange-rate history
@@ -62,7 +65,8 @@ Next.js (TypeScript, App Router) · SQLite via Drizzle ORM · Recharts · node-c
 ```bash
 npm install
 npm run db:migrate         # create/upgrade ./data/mtg.db
-npm run ingest:scryfall    # printing metadata + today's prices (~20s)
+npm run ingest:scryfall    # printing metadata (~20s)
+npm run ingest:today       # today's prices from MTGJSON (~20s)
 npm run backfill:mtgjson   # ~90 days of history for cards you hold
 npm run dev
 ```
@@ -71,7 +75,8 @@ npm run dev
 
 | Command | What it does |
 | --- | --- |
-| `npm run ingest:scryfall` | Streams Scryfall's gzipped JSONL `default_cards` bulk file. Upserts printings and writes one day of price snapshots. Idempotent, and skips entirely if that build was already ingested (`--force` overrides). This is what the daily cron will run. |
+| `npm run ingest:scryfall` | Streams Scryfall's gzipped JSONL `default_cards` bulk file and upserts printings. Metadata only — pass `--prices` to also record `prices.usd`, which the daily job does not. Idempotent, and skips entirely if that build was already ingested (`--force` overrides). |
+| `npm run ingest:today` | Today's prices for every printing from MTGJSON's `AllPricesToday`: TCGplayer retail into `price_snapshots`, Card Kingdom's two sides into `vendor_prices`. Measured at 148,446 snapshots and 228,208 vendor rows in ~20s. Never overwrites a day already recorded. |
 | `npm run backfill:mtgjson` | Historical fill from MTGJSON's live `AllPrices` (~90 days), TCGplayer retail only, joined to Scryfall ids through MTGJSON's `uuid`. Scoped to held printings by default; `--all` covers every printing. Never overwrites a day already recorded. |
 | `npm run backfill:archive` | The same, from a local archive of past MTGJSON builds, which reaches back years rather than 90 days. Walks builds oldest-first, records progress after each, and resumes where it stopped. `--snapshots` / `--vendors` take `all`, `held` or `none`; `--ids-only` rebuilds just the uuid map; `--every N` samples builds. |
 | `npm run audit:archive` | Reports which archived builds failed to download, and — the part that matters — whether the gaps leave any date uncovered. Usually they do not: each build carries ~90 days while builds are ~8 days apart, so neighbours cover for a missing one. |
@@ -102,9 +107,10 @@ Then open <http://localhost:3000>.
 The first start is slow on purpose: with no card data yet, the container
 downloads Scryfall's bulk file and ingests ~108,000 printings before the app is
 useful. Watch it with `docker compose logs -f`. After that, a cron inside the
-container refreshes prices once a day (10:15 UTC by default, an hour after
-Scryfall rebuilds its bulk data), and re-running against an unchanged upstream
-build is a no-op.
+container runs once a day (10:15 UTC by default): Scryfall metadata first, so
+that a newly released set exists before prices are attached to it, then
+MTGJSON's `AllPricesToday`. Re-running against an unchanged upstream build is a
+no-op for both.
 
 The database is a single SQLite file bind-mounted at `./data/mtg.db`. Backing up
 the collection is copying that file. Migrations run automatically on every
