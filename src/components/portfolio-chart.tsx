@@ -14,6 +14,9 @@ import {
 } from "recharts";
 
 import type { ValuePoint } from "@/db/queries/valuation";
+import { downsample, pointBudget } from "@/lib/downsample";
+
+import { ChartFrame } from "./chart-frame";
 import { formatUsd } from "@/lib/format";
 
 import { axisMoney, paddedScale, shortDate } from "./chart-utils";
@@ -109,10 +112,12 @@ function ValueTooltip({ active, payload }: TooltipPayload) {
   );
 }
 
-export function PortfolioChart({
+function PortfolioChartBody({
   points,
   basketPoints,
+  width,
 }: {
+  width: number;
   points: ValuePoint[];
   /**
    * The same holdings valued across the whole window regardless of when they
@@ -137,7 +142,7 @@ export function PortfolioChart({
   );
   const showBasket = basketByDate.size > 0;
 
-  const data: ChartPoint[] = points.map((point) => ({
+  const full: ChartPoint[] = points.map((point) => ({
     date: point.date,
     valueCents: point.valueCents,
     holdingsHeld: point.holdingsHeld,
@@ -146,6 +151,20 @@ export function PortfolioChart({
     acquiredHoldings: point.acquiredHoldings,
     acquiredCards: point.acquiredCards,
   }));
+
+  // Thinned to what the plot can actually resolve. Acquisition counts are
+  // summed into the point that survives rather than dropped with the points
+  // that do not, so the bars still total the cards actually bought in the
+  // window -- a chart that quietly lost a purchase would be worse than a
+  // crowded one.
+  const data = downsample(full, pointBudget(width), {
+    value: (point) => point.valueCents,
+    merge: (kept, bucket) => ({
+      ...kept,
+      acquiredHoldings: bucket.reduce((sum, p) => sum + p.acquiredHoldings, 0),
+      acquiredCards: bucket.reduce((sum, p) => sum + p.acquiredCards, 0),
+    }),
+  });
 
   // Only worth a pane if anything was actually acquired inside the window.
   const acquisitions = data.filter((point) => point.acquiredHoldings > 0);
@@ -200,7 +219,7 @@ export function PortfolioChart({
         </figcaption>
       ) : null}
 
-      <div className="h-64 w-full sm:h-72">
+      <div className="h-full w-full">
         <ResponsiveContainer width="100%" height="100%">
           <ComposedChart data={data} margin={CHART_MARGIN}>
             <defs>
@@ -405,5 +424,24 @@ export function PortfolioChart({
         </div>
       </details>
     </figure>
+  );
+}
+
+/**
+ * The value chart.
+ *
+ * Wrapped in a frame that can be expanded to full screen, with the measured
+ * width fed back in: a wider plot resolves more points, so expanding shows more
+ * of the series rather than the same thinned points stretched across more
+ * pixels.
+ */
+export function PortfolioChart(props: {
+  points: ValuePoint[];
+  basketPoints?: ValuePoint[];
+}) {
+  return (
+    <ChartFrame label="of collection value over time">
+      {(width) => <PortfolioChartBody {...props} width={width} />}
+    </ChartFrame>
   );
 }

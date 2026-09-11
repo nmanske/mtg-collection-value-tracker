@@ -17,7 +17,7 @@
     "backfill:archive": "tsx scripts/backfill-archive.mts",
     "audit:archive": "tsx scripts/audit-archive.mts",
     "test:holdings": "tsx scripts/test-holdings.ts",
-    "test": "npm run test:ingest && npm run test:holdings && npm run test:import && npm run test:valuation && npm run test:vendors && npm run test:stats && npm run test:chart && npm run test:ranges && npm run test:export && npm run db:smoke",
+    "test": "npm run test:ingest && npm run test:holdings && npm run test:import && npm run test:valuation && npm run test:vendors && npm run test:stats && npm run test:chart && npm run test:ranges && npm run test:downsample && npm run test:export && npm run db:smoke",
     "import:moxfield": "tsx scripts/import-moxfield.ts",
     "test:import": "tsx scripts/test-import.ts",
     "test:valuation": "tsx scripts/test-valuation.ts",
@@ -25,7 +25,8 @@
     "test:vendors": "tsx scripts/test-vendors.ts",
     "test:export": "tsx scripts/test-export.ts",
     "test:stats": "tsx scripts/test-stats.ts",
-    "test:ranges": "tsx scripts/test-ranges.ts"
+    "test:ranges": "tsx scripts/test-ranges.ts",
+    "test:downsample": "tsx scripts/test-downsample.ts"
   },
   "dependencies": {
     "better-sqlite3": "^13.0.3",

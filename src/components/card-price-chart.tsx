@@ -13,6 +13,9 @@ import {
 } from "recharts";
 
 import type { PricePoint } from "@/db/queries/printings";
+import { downsample, pointBudget } from "@/lib/downsample";
+
+import { ChartFrame } from "./chart-frame";
 import { formatUsd } from "@/lib/format";
 
 import { axisMoney, paddedScale, shortDate } from "./chart-utils";
@@ -68,7 +71,13 @@ function PriceTooltip({ active, payload }: TooltipProps) {
   );
 }
 
-export function CardPriceChart({ points }: { points: PricePoint[] }) {
+function CardPriceChartBody({
+  points,
+  width,
+}: {
+  points: PricePoint[];
+  width: number;
+}) {
   const gradientId = useId();
 
   if (points.length < 2) {
@@ -81,7 +90,7 @@ export function CardPriceChart({ points }: { points: PricePoint[] }) {
     );
   }
 
-  const data: Row[] = points.map((point) => ({
+  const full: Row[] = points.map((point) => ({
     date: point.date,
     priceCents: point.priceCents,
     estimatedCents: point.estimated ? point.priceCents : null,
@@ -89,13 +98,20 @@ export function CardPriceChart({ points }: { points: PricePoint[] }) {
     estimated: point.estimated,
   }));
 
+  // Thinned to the plot's own width. Largest-triangle keeps the turning
+  // points, so a spike that made the card interesting survives instead of
+  // falling between two evenly spaced samples.
+  const data = downsample(full, pointBudget(width), {
+    value: (row) => row.priceCents,
+  });
+
   const last = data[data.length - 1];
   const { domain, ticks } = paddedScale(data.map((row) => row.priceCents));
   const hasEstimates = data.some((row) => row.estimated);
 
   return (
     <figure className="viz-root m-0">
-      <div className="h-56 w-full sm:h-64">
+      <div className="h-full w-full">
         <ResponsiveContainer width="100%" height="100%">
           <AreaChart data={data} margin={{ top: 8, right: 16, bottom: 0, left: 4 }}>
             <defs>
@@ -222,5 +238,14 @@ export function CardPriceChart({ points }: { points: PricePoint[] }) {
         </div>
       </details>
     </figure>
+  );
+}
+
+/** One printing's price history, expandable to full screen. */
+export function CardPriceChart({ points }: { points: PricePoint[] }) {
+  return (
+    <ChartFrame label="of this card's price history" className="h-56 sm:h-64">
+      {(width) => <CardPriceChartBody points={points} width={width} />}
+    </ChartFrame>
   );
 }
