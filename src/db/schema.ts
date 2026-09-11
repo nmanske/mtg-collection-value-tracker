@@ -14,7 +14,30 @@ import type {
   HoldingSource,
 } from "./schema-enums";
 
-export * from "./schema-enums";
+// Re-exported by name rather than with `export *`. The `.mts` ingest modules
+// are ESM importing this CommonJS one, and Node detects a CJS module's named
+// exports by static analysis that does not follow star re-exports: the star
+// form type-checks and passes the CJS-only tests, then fails at runtime with
+// "does not provide an export named 'MARKET_SIDES'".
+export {
+  CONDITIONS,
+  CURRENCIES,
+  FINISH_PRICE_FIELD,
+  FINISHES,
+  HOLDING_SOURCES,
+  MARKET_SIDES,
+  PRICE_SOURCES,
+  VENDORS,
+} from "./schema-enums";
+export type {
+  Condition,
+  Currency,
+  Finish,
+  HoldingSource,
+  MarketSide,
+  PriceSource,
+  Vendor,
+} from "./schema-enums";
 
 /**
  * One row per Scryfall printing.
