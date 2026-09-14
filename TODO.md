@@ -26,11 +26,30 @@ Three kinds, and they need different answers:
   days MTGJSON itself did not publish, or builds that failed to download.
   Probably unfillable; worth confirming against `audit:archive` before assuming.
 
-Wanted: a script that reports gaps (the query above is throwaway), and a way to
-fill a recent one — re-running an archived build covering that date, or
-accepting it and marking the point estimated so the chart can show it honestly.
-Note `price_snapshots.estimated` already exists for exactly this and is
-currently always false.
+**Reporting is done** — `npm run audit:gaps` classifies every run by cause, so
+the list is actionable rather than 1,400 bare dates. Latest run:
+
+```
+677 days of prices, 2020-12-15 .. 2026-09-11
+40 gap(s), 1,420 missing days
+  1,351  backfill has not reached these builds yet   (fills itself)
+     68  MTGJSON published no prices these days      (unfillable)
+      1  the daily job did not run                   (2026-09-10)
+      0  no archived build covers these days
+```
+
+That last line matters: the three Kaggle packages permanently missing upstream
+cost nothing, because neighbouring builds' windows cover their dates.
+
+**Still to do:** fill 2026-09-10. No archived build reaches it — the newest is
+2026-09-04 — but MTGJSON's live `AllPrices` serves a rolling ~90-day window that
+does, so `backfill:mtgjson -- --all --vendors` should recover it along with any
+day since. Worth doing before that window rolls past it, and worth noting the
+window is why a missed run is urgent rather than merely untidy.
+
+Beyond that, days with no upstream data can only ever be interpolated.
+`price_snapshots.estimated` exists for exactly this and is currently always
+false; the chart already draws estimated points differently.
 
 ### 2. Daily cron to load the database
 
