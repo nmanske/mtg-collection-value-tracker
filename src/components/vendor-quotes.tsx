@@ -107,7 +107,7 @@ export function VendorQuotes({ quotes }: { quotes: VendorQuote[] }) {
         </tbody>
       </table>
 
-      <p className="mt-3 text-xs text-neutral-500">
+      <p className="mt-3 max-w-prose text-xs text-neutral-500">
         {buylist.length === 0
           ? "No vendor publishes a buylist price for this printing."
           : `"Pays" is what that shop offers for the card, not the market.`}

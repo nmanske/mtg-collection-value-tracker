@@ -31,6 +31,10 @@ Single-user, USD-only, no account system.
 
 Planned work and known issues are in [TODO.md](TODO.md).
 
+The layout widens in steps to 1,760px on large displays. Tables and charts get
+better with width — a wider plot resolves more of a multi-year series — while
+explanatory text stays at a readable measure rather than stretching with it.
+
 ## Data sources
 
 - [MTGJSON](https://mtgjson.com/) — **every price, past and present.**

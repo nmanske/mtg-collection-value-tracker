@@ -73,7 +73,7 @@ export default async function CardPage(props: PageProps<"/cards/[scryfallId]">) 
   );
 
   return (
-    <main className="mx-auto w-full max-w-4xl px-6 py-10">
+    <main className="page-shell py-10">
       <nav className="mb-6 text-sm text-neutral-500">
         <Link href="/" className="underline-offset-4 hover:underline">
           Collection

@@ -47,7 +47,7 @@ export function VendorTotals({
       >
         By vendor
       </h2>
-      <p className="mt-1 mb-4 text-sm text-neutral-500">
+      <p className="mt-1 mb-4 max-w-prose text-sm text-neutral-500">
         What each shop asks for your cards, and what it would pay for them,
         using the most recent price recorded for each card.
       </p>
@@ -147,7 +147,7 @@ export function VendorTotals({
         </tbody>
       </table>
 
-      <p className="mt-4 text-xs text-neutral-500">
+      <p className="mt-4 max-w-prose text-xs text-neutral-500">
         Totals only span the holdings a vendor actually quotes, so a smaller
         figure may mean thinner coverage rather than a lower price — check the
         &ldquo;covers&rdquo; column before reading it as a discount.

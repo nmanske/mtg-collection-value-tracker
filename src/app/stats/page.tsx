@@ -151,7 +151,7 @@ export default async function StatsPage() {
   );
 
   return (
-    <main className="mx-auto w-full max-w-5xl px-6 py-10">
+    <main className="page-shell py-10">
       <header className="mb-8 flex items-baseline justify-between gap-4">
         <h1 className="text-2xl font-semibold tracking-tight">Statistics</h1>
         <Link
@@ -186,7 +186,7 @@ export default async function StatsPage() {
         />
       </dl>
 
-      <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
+      <div className="grid grid-cols-1 gap-5 lg:grid-cols-2 3xl:grid-cols-3">
         <Panel
           title="The long tail"
           note="Most collections are a few good cards and a mountain of commons. Here is the shape of yours."

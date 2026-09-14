@@ -172,7 +172,7 @@ export function PortfolioSummaryPanel({
         // below drops it, because "what would they pay today" must not quote a
         // price nobody would honour. Said out loud, because a reader comparing
         // the two would otherwise reasonably conclude one is broken.
-        <p className="mt-3 text-xs text-neutral-500">
+        <p className="mt-3 max-w-prose text-xs text-neutral-500">
           {staleHoldings.toLocaleString()} holding
           {staleHoldings === 1 ? " is" : "s are"} valued here from a quote{" "}
           {PRICE_VENDOR_LABEL[priceSource]} has not refreshed in over{" "}
@@ -183,7 +183,7 @@ export function PortfolioSummaryPanel({
       ) : null}
 
       {visible.some((point) => point.inferredHoldings > 0) ? (
-        <p className="mt-3 text-xs text-amber-700 dark:text-amber-400">
+        <p className="mt-3 max-w-prose text-xs text-amber-700 dark:text-amber-400">
           {visible[0].inferredHoldings.toLocaleString()} holding
           {visible[0].inferredHoldings === 1 ? " is" : "s are"} counted from the
           start of this window because their acquisition date is unknown.
@@ -195,7 +195,7 @@ export function PortfolioSummaryPanel({
       ) : null}
 
       {summary.points.length > 0 ? (
-        <p className="mt-3 text-xs text-neutral-500">
+        <p className="mt-3 max-w-prose text-xs text-neutral-500">
           {range.window === null
             ? `History begins ${summary.points[0].date}, the earliest price data available.`
             : `Showing ${visible.length} day${visible.length === 1 ? "" : "s"} to ${last?.date}; ${spanDays} days of history are available in total.`} Cards acquired before then count from that date onward.

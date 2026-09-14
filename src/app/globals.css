@@ -10,6 +10,48 @@
   --color-foreground: var(--foreground);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
+  /* Tailwind stops at 2xl (1536px), which leaves a 4K display two thirds
+     empty. 120rem is 1920px: the width at which a third column of panels
+     fits without any of them becoming cramped. */
+  --breakpoint-3xl: 120rem;
+}
+
+/*
+ * How wide a data-heavy page gets.
+ *
+ * Defined once rather than repeated per page, because the pages drifted:
+ * the dashboard, stats and search each carried their own max-width and had
+ * to be kept in step by hand.
+ *
+ * It grows in steps rather than filling the viewport. Tables and charts get
+ * better with width — a chart resolves more of a 2,000-point series, a table
+ * stops wrapping — but prose does not, which is why the text inside these
+ * pages is constrained separately rather than inheriting this.
+ */
+.page-shell {
+  margin-inline: auto;
+  width: 100%;
+  max-width: 64rem;
+  padding-inline: 1.5rem;
+}
+
+@media (min-width: 80rem) {
+  .page-shell {
+    max-width: 76rem;
+  }
+}
+
+@media (min-width: 96rem) {
+  .page-shell {
+    max-width: 92rem;
+  }
+}
+
+@media (min-width: 120rem) {
+  .page-shell {
+    max-width: 110rem;
+    padding-inline: 2.5rem;
+  }
 }
 
 /* Guarded like the chart tokens, so data-theme="light" forces light mode

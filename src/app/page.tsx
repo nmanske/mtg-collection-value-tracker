@@ -58,7 +58,7 @@ export default async function CollectionPage(props: PageProps<"/">) {
   const vendorTotals = collectionByVendor(db);
 
   return (
-    <main className="mx-auto w-full max-w-5xl px-6 py-10">
+    <main className="page-shell py-10">
       <header className="mb-8 flex flex-wrap items-baseline justify-between gap-4">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Collection</h1>

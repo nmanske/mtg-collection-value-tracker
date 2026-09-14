@@ -27,7 +27,7 @@ export default async function SearchPage(props: PageProps<"/search">) {
   const totalPrintings = countPrintings(db);
 
   return (
-    <main className="mx-auto w-full max-w-5xl px-6 py-10">
+    <main className="page-shell py-10">
       <header className="mb-8 flex items-baseline justify-between gap-4">
         <h1 className="text-2xl font-semibold tracking-tight">Add cards</h1>
         <Link
@@ -85,7 +85,11 @@ export default async function SearchPage(props: PageProps<"/search">) {
               : `${results.length} printing${results.length === 1 ? "" : "s"}.`}
           </p>
 
-          <ul className="flex flex-col gap-3">
+          {/* A single column of full-width cards wastes most of a wide display
+              on empty space beside each one. Two fit comfortably from 1536px
+              and three from 1920px, each still wide enough for the image, the
+              details and the add form to sit in one row. */}
+          <ul className="grid grid-cols-1 gap-3 2xl:grid-cols-2 3xl:grid-cols-3">
             {results.map((printing) => (
               <li
                 key={printing.id}
