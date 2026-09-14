@@ -109,10 +109,12 @@ Then open <http://localhost:3000>.
 The first start is slow on purpose: with no card data yet, the container
 downloads Scryfall's bulk file and ingests ~108,000 printings before the app is
 useful. Watch it with `docker compose logs -f`. After that, a cron inside the
-container runs once a day (10:15 UTC by default): Scryfall metadata first, so
-that a newly released set exists before prices are attached to it, then
-MTGJSON's `AllPricesToday`. Re-running against an unchanged upstream build is a
-no-op for both.
+container refreshes card metadata once a day (10:15 UTC by default), and
+re-running against an unchanged upstream build is a no-op.
+
+Prices are a separate step for now: `npm run ingest:today` reads MTGJSON's
+`AllPricesToday`. It is not yet wired into the in-process scheduler — see
+[TODO.md](TODO.md) item 2 for why and what the options are.
 
 The database is a single SQLite file bind-mounted at `./data/mtg.db`. Backing up
 the collection is copying that file. Migrations run automatically on every

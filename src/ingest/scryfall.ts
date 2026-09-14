@@ -158,9 +158,12 @@ export async function downloadBulkFile(
  * The image to show for a printing. Multi-faced layouts carry no top-level
  * `image_uris`, so fall back to the front face.
  */
-function imageUriFor(card: ScryfallCard): string | null {
+function imageUriFor(
+  card: ScryfallCard,
+  size: "normal" | "large",
+): string | null {
   return (
-    card.image_uris?.normal ?? card.card_faces?.[0]?.image_uris?.normal ?? null
+    card.image_uris?.[size] ?? card.card_faces?.[0]?.image_uris?.[size] ?? null
   );
 }
 
@@ -369,7 +372,10 @@ export async function ingestScryfallBulk(
         setCode: card.set,
         setName: card.set_name,
         collectorNumber: card.collector_number,
-        imageUri: imageUriFor(card),
+        imageUri: imageUriFor(card, "normal"),
+        // Read from Scryfall rather than derived from the normal URL; see the
+        // column's note in the schema.
+        imageUriLarge: imageUriFor(card, "large"),
         finishes: finishes.length > 0 ? finishes : ["nonfoil"],
         updatedAt: ingestedAt,
       });

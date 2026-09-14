@@ -19,6 +19,7 @@ export interface HoldingRow {
   setName: string;
   collectorNumber: string;
   imageUri: string | null;
+  imageUriLarge: string | null;
   quantity: number;
   finish: Finish;
   condition: Condition;
@@ -134,6 +135,7 @@ export function listHoldings(db: Db, page = 1): CollectionPage {
       setName: printings.setName,
       collectorNumber: printings.collectorNumber,
       imageUri: printings.imageUri,
+      imageUriLarge: printings.imageUriLarge,
       quantity: holdings.quantity,
       finish: holdings.finish,
       condition: holdings.condition,
@@ -166,6 +168,7 @@ export function listHoldings(db: Db, page = 1): CollectionPage {
       setName: row.setName,
       collectorNumber: row.collectorNumber,
       imageUri: row.imageUri,
+      imageUriLarge: row.imageUriLarge,
       quantity: row.quantity,
       finish: row.finish,
       condition: row.condition,

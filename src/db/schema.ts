@@ -62,6 +62,16 @@ export const printings = sqliteTable(
     collectorNumber: text("collector_number").notNull(),
     /** Scryfall `image_uris.normal`, or the front face's for split layouts. */
     imageUri: text("image_uri"),
+    /**
+     * Scryfall `image_uris.large`, for the zoomed view.
+     *
+     * Stored rather than derived from `imageUri`. The URLs differ only in a
+     * path segment today, but Scryfall documents image URIs as opaque and
+     * reserves the right to change them, and the variants already disagree on
+     * file extension (`png` is `.png`, the newer sizes are `.webp`). Null until
+     * the next metadata ingest, so readers must fall back to `imageUri`.
+     */
+    imageUriLarge: text("image_uri_large"),
     /** Scryfall `finishes`, as a JSON array of {@link Finish}. */
     finishes: text("finishes", { mode: "json" })
       .$type<Finish[]>()

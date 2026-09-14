@@ -8,7 +8,6 @@ import { sql } from "drizzle-orm";
 
 import { DB_PATH, openDatabase } from "@/db/client";
 import { printings } from "@/db/schema";
-import { ingestMtgjsonToday } from "@/ingest/mtgjson-today.mjs";
 import { ingestScryfallBulk } from "@/ingest/scryfall";
 
 /**
@@ -102,14 +101,23 @@ export async function runIngest(reason: string): Promise<void> {
         : `metadata: ${metadata.printingsUpserted.toLocaleString()} printings`,
     );
 
-    const prices = await ingestMtgjsonToday(db, sqlite, {
-      log: (message) => log(message),
-    });
+    // Prices are deliberately NOT ingested here, and this is a limitation
+    // rather than a preference.
+    //
+    // The MTGJSON ingest lives in `.mts` modules using `.mjs` import
+    // specifiers, the form TypeScript's NodeNext resolution requires for
+    // `stream-json`, which is ESM-only. Turbopack cannot follow those
+    // specifiers, so importing the ingest from here breaks the instrumentation
+    // hook and the whole server fails to start. `serverExternalPackages` does
+    // not help: the unresolvable module is ours, not a dependency.
+    //
+    // So the daily price refresh is a CLI step for now — `npm run ingest:today`
+    // — and wiring it to run automatically is TODO #2. Said out loud on every
+    // run, because a price job that silently never happens is exactly the
+    // failure the gap audit exists to catch.
     log(
-      prices.skipped
-        ? "prices: this MTGJSON build is already recorded"
-        : `prices: ${prices.snapshotsInserted.toLocaleString()} snapshots and ` +
-            `${prices.vendorRowsWritten.toLocaleString()} vendor rows for ${prices.date}`,
+      "prices: not run here — see TODO #2. Run `npm run ingest:today` " +
+        "(or schedule it outside the app) to record today's prices.",
     );
   } catch (error) {
     // Deliberately swallowed. A price refresh is not worth crashing the server

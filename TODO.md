@@ -40,18 +40,48 @@ Partly built already, so the work is smaller than it looks. `src/lib/scheduler.t
 runs in-process via `node-cron` on `CRON_SCHEDULE` (10:15 UTC), and as of the
 MTGJSON switch it does Scryfall metadata then `AllPricesToday`.
 
-What is missing: it has **never been verified end to end in Docker**. Nothing
+**Prices are not part of it, and currently do not run automatically at all.**
+The MTGJSON ingest lives in `.mts` modules with `.mjs` import specifiers — what
+TypeScript's NodeNext resolution requires for the ESM-only `stream-json` — and
+Turbopack cannot follow those specifiers. Importing the ingest from the
+scheduler broke the instrumentation hook and the server refused to start;
+`serverExternalPackages` does not help, because the unresolvable module is ours
+rather than a dependency. So the scheduler does metadata only and logs that
+prices were skipped.
+
+Options, roughly in order of appeal:
+
+1. Run the ingest as a container-level cron calling the CLI. Needs `tsx` in the
+   production image, which was deliberately excluded, or a build step for the
+   scripts.
+2. Give the daily path its own CJS-friendly module that dynamically imports
+   `stream-json` — `AllPricesToday` is 50 MB, so it could even use `JSON.parse`
+   and skip the streaming parser entirely, at the cost of a memory spike inside
+   the web server.
+3. Drop the in-process scheduler and make the price job purely external, which
+   is arguably where a heavy ingest belongs anyway.
+
+Also still true: it has **never been verified end to end in Docker**. Nothing
 proves the container's cron fires, that a failure is visible, or that two
-containers cannot run it at once. Also worth deciding whether a missed day
-should trigger a catch-up rather than being silently skipped (see item 1).
+containers cannot run it at once. And a missed day is only recoverable for ~90
+days before MTGJSON's window rolls past it (see item 1), so silent failure here
+is expensive.
 
-### 3. Click a card to zoom
+### 3. Click a card to zoom — done, pending a re-ingest
 
-Card images are small on the collection and search pages. Clicking should open a
-larger view. `printings.image_uri` currently stores Scryfall's `normal` size;
-a zoom probably wants `large` or `png`, which means either storing another URI
-or deriving it — Scryfall's image URLs are pattern-based, but deriving them is
-an undocumented assumption, so check before relying on it.
+Clicking a card image on the search or card page opens it full size; Escape or
+the backdrop closes it.
+
+`image_uri_large` is stored rather than derived. Scryfall's size variants do
+differ only by a path segment today, but the docs call image URIs opaque and the
+newer variants already disagree on file extension, so substitution would rely on
+a coincidence upstream never promised.
+
+**Remaining:** the column is null for all 108,382 existing rows until a metadata
+ingest repopulates it, so the overlay currently shows the `normal` image
+(488px) rather than `large` (672px). Run `npm run ingest:scryfall` once the
+archive backfill is done — it is a 108k-row upsert and should not compete with
+the backfill for the write lock.
 
 ### 4. Toggle Card Kingdom vs TCGplayer on the collection graph
 

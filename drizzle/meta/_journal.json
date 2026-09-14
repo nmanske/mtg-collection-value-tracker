@@ -29,6 +29,13 @@
       "when": 1789146691926,
       "tag": "0003_coded_price_columns",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "6",
+      "when": 1789395228107,
+      "tag": "0004_image_uri_large",
+      "breakpoints": true
     }
   ]
 }

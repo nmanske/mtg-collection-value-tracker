@@ -1,6 +1,7 @@
 import Link from "next/link";
 
 import { AddHoldingForm } from "@/components/add-holding-form";
+import { CardImage } from "@/components/card-image";
 import { db } from "@/db";
 import {
   SEARCH_LIMIT,
@@ -91,15 +92,11 @@ export default async function SearchPage(props: PageProps<"/search">) {
                 className="flex flex-col gap-3 rounded-lg border border-neutral-200 p-4 sm:flex-row sm:items-start dark:border-neutral-800"
               >
                 {printing.imageUri ? (
-                  // Plain <img>: these are remote Scryfall URLs and this is a
-                  // local single-user app, so next/image's optimizer would add
-                  // a remote-pattern config and a proxy hop for no benefit.
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img
+                  <CardImage
                     src={printing.imageUri}
-                    alt=""
-                    loading="lazy"
-                    className="h-28 w-20 shrink-0 rounded object-cover"
+                    largeSrc={printing.imageUriLarge}
+                    alt={printing.name}
+                    className="h-28 w-20"
                   />
                 ) : (
                   <div className="h-28 w-20 shrink-0 rounded bg-neutral-100 dark:bg-neutral-800" />

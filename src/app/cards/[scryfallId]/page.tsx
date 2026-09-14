@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
+import { CardImage } from "@/components/card-image";
 import { CardPriceChart } from "@/components/card-price-chart";
 import { RangePicker } from "@/components/range-picker";
 import { VendorQuotes } from "@/components/vendor-quotes";
@@ -85,11 +86,11 @@ export default async function CardPage(props: PageProps<"/cards/[scryfallId]">) 
 
       <header className="mb-6 flex flex-col gap-5 sm:flex-row">
         {printing.imageUri ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
+          <CardImage
             src={printing.imageUri}
+            largeSrc={printing.imageUriLarge}
             alt={printing.name}
-            className="h-56 w-40 shrink-0 self-start rounded-lg object-cover"
+            className="h-56 w-40 self-start"
           />
         ) : null}
 
