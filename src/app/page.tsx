@@ -102,6 +102,13 @@ export default async function CollectionPage(props: PageProps<"/">) {
         summary={summary}
         range={typeof range === "string" ? range : undefined}
         priceSource={priceSource}
+        // The retail row for the selected vendor is what the chart is drawn
+        // from, so its stale count is what explains the gap between the two.
+        staleHoldings={
+          vendorTotals.find(
+            (row) => row.vendor === priceSource && row.side === "retail",
+          )?.stale ?? 0
+        }
       />
 
       <VendorTotals totals={vendorTotals} holdingCount={holdingCount} />

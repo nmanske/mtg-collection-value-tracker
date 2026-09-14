@@ -93,12 +93,10 @@ Only retail is offered. A buylist total answers "what could I sell this for
 today", a different question from "what has this been worth", and putting them
 on one axis would invite reading a 50% spread as a crash.
 
-**Remaining:** the vendor totals table and the chart disagree slightly for Card
-Kingdom — $19,780.02 against $19,785.79 — because the totals exclude the three
-stale holdings and the time series does not. That is correct in both places (a
-2023 price is the right value for a 2023 date; it is the wrong value for
-today), but the UI does not explain the gap, and someone comparing the two
-numbers will notice.
+The vendor totals table and the chart disagree slightly for Card Kingdom —
+$19,780.02 against $19,785.39 — because the totals exclude stale holdings and
+the time series does not. Both are right for what they answer, and the chart now
+says so rather than leaving a reader to conclude one is broken.
 
 ### 5. Collection sort, filter and search — done
 

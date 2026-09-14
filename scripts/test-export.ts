@@ -145,12 +145,30 @@ assert.equal(byName.value_usd, "36.00");
 assert.equal(byName.price_source, "scryfall");
 // Vendors are columns, every one of them labelled USD.
 assert.equal(byName.cardkingdom_retail_usd, "15.00");
+// Each price carries the date it came from, so a stale quote does not export
+// looking identical to a current one.
+assert.equal(byName.cardkingdom_retail_date, "2026-01-02");
 assert.equal(byName.cardkingdom_buylist_usd, "7.00");
 // TCGplayer retail is read from price_snapshots rather than vendor_prices, so
 // its column proves the export spans both tables.
 assert.equal(byName.tcgplayer_retail_usd, "12.00");
 // A vendor and side with no data is blank, never zero.
 assert.equal(byName.tcgplayer_buylist_usd, "");
+assert.equal(byName.tcgplayer_buylist_date, "", "no price means no date");
+
+// Whether an acquisition date is a floor rather than a fact travels with the
+// export: without it, 539 inferred holdings read as 539 cards bought that day.
+assert.equal(byName.date_added_inferred, "no");
+
+sqlite
+  .prepare("update holdings set date_added_approx = 1")
+  .run();
+const reparsed = parseCsvTable(render("collection"));
+const inferredRow = Object.fromEntries(
+  reparsed.header.map((name, i) => [name, reparsed.rows[0][i]]),
+);
+assert.equal(inferredRow.date_added_inferred, "yes");
+sqlite.prepare("update holdings set date_added_approx = 0").run();
 
 // A manual override replaces the tracked price and says so.
 db.update(holdings).set({ priceOverrideCents: 5_000 }).run();

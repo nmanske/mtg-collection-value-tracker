@@ -92,13 +92,21 @@ const collection: ExportSpec = {
       "condition",
       "quantity",
       "date_added",
+      // Whether that date is a floor rather than a fact. Without it an export
+      // of 539 inferred holdings reads as 539 cards genuinely bought that day.
+      "date_added_inferred",
       "unit_price_usd",
       "value_usd",
       "price_date",
       "price_source",
       "manual_override_usd",
       "note",
-      ...VENDOR_COLUMNS.map(vendorHeader),
+      ...VENDOR_COLUMNS.flatMap(({ vendor, side }) => [
+        vendorHeader({ vendor, side }),
+        // The date beside each price, so a three-year-old buylist quote does
+        // not export looking identical to today's.
+        `${vendor}_${side}_date`,
+      ]),
     ];
     yield UTF8_BOM + csvRow(header);
 
@@ -115,19 +123,28 @@ const collection: ExportSpec = {
         select ps.price_cents from price_snapshots ps
          where ps.printing_key = h.printing_key and ps.finish = h.finish
          order by ps.date desc limit 1
-      ) as ${vendor}_${side}`
+      ) as ${vendor}_${side}, (
+        select ps.date from price_snapshots ps
+         where ps.printing_key = h.printing_key and ps.finish = h.finish
+         order by ps.date desc limit 1
+      ) as ${vendor}_${side}_date`
         : `(
         select vp.price_cents from vendor_prices vp
          where vp.printing_key = h.printing_key and vp.finish = h.finish
            and vp.vendor = ${VENDOR_CODES[vendor]} and vp.side = ${SIDE_CODES[side]}
          order by vp.date desc limit 1
-      ) as ${vendor}_${side}`,
+      ) as ${vendor}_${side}, (
+        select vp.date from vendor_prices vp
+         where vp.printing_key = h.printing_key and vp.finish = h.finish
+           and vp.vendor = ${VENDOR_CODES[vendor]} and vp.side = ${SIDE_CODES[side]}
+         order by vp.date desc limit 1
+      ) as ${vendor}_${side}_date`,
     ).join(",\n");
 
     const statement = client(db).prepare(`
       select p.name, p.set_code, p.set_name, p.collector_number, p.scryfall_id,
              h.finish, h.condition, h.quantity, h.date_added,
-             h.price_override_cents, h.note,
+             h.date_added_approx, h.price_override_cents, h.note,
              (select ps.price_cents from price_snapshots ps
                where ps.printing_key = h.printing_key and ps.finish = h.finish
                order by ps.date desc limit 1) as unit_cents,
@@ -163,6 +180,7 @@ const collection: ExportSpec = {
         row.condition,
         row.quantity,
         row.date_added,
+        row.date_added_approx ? "yes" : "no",
         moneyCell(unit),
         unit == null ? "" : moneyCell(unit * (row.quantity as number)),
         row.price_override_cents != null ? "" : (row.price_date ?? ""),
@@ -171,9 +189,10 @@ const collection: ExportSpec = {
           : (PRICE_SOURCE_BY_CODE.get(row.price_source as number) ?? ""),
         moneyCell(row.price_override_cents as number | null),
         row.note ?? "",
-        ...VENDOR_COLUMNS.map(({ vendor, side }) =>
+        ...VENDOR_COLUMNS.flatMap(({ vendor, side }) => [
           moneyCell(row[`${vendor}_${side}`] as number | null),
-        ),
+          (row[`${vendor}_${side}_date`] as string | null) ?? "",
+        ]),
       ]);
     }
   },

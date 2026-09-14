@@ -7,6 +7,7 @@ import {
   PRICE_VENDORS,
   type PriceVendor,
 } from "@/db/queries/valuation";
+import { STALE_AFTER_DAYS } from "@/db/queries/vendors";
 import { rangeStart, resolveRange, spanInDays } from "@/lib/ranges";
 
 import { PortfolioChart } from "./portfolio-chart";
@@ -64,10 +65,13 @@ export function PortfolioSummaryPanel({
   summary,
   range: requestedRange,
   priceSource,
+  staleHoldings,
 }: {
   summary: PortfolioSummary;
   range?: string;
   priceSource: PriceVendor;
+  /** Holdings this vendor last quoted too long ago to count as current. */
+  staleHoldings: number;
 }) {
   const last = summary.points.at(-1);
 
@@ -158,6 +162,23 @@ export function PortfolioSummaryPanel({
           {last.unpricedHoldings === 1 ? " has" : "s have"} no price on{" "}
           {last.date} and {last.unpricedHoldings === 1 ? "is" : "are"} excluded
           from these figures.
+        </p>
+      ) : null}
+
+      {staleHoldings > 0 ? (
+        // Two figures on this page disagree, and both are right. The chart
+        // values a card from its last known price whatever its age, because a
+        // 2023 price is the correct value for a 2023 date. The vendor table
+        // below drops it, because "what would they pay today" must not quote a
+        // price nobody would honour. Said out loud, because a reader comparing
+        // the two would otherwise reasonably conclude one is broken.
+        <p className="mt-3 text-xs text-neutral-500">
+          {staleHoldings.toLocaleString()} holding
+          {staleHoldings === 1 ? " is" : "s are"} valued here from a quote{" "}
+          {PRICE_VENDOR_LABEL[priceSource]} has not refreshed in over{" "}
+          {STALE_AFTER_DAYS} days. The vendor table below excludes{" "}
+          {staleHoldings === 1 ? "it" : "them"}, which is why its total is
+          lower.
         </p>
       ) : null}
 
