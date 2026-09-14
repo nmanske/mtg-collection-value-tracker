@@ -286,6 +286,60 @@ summary.basketPoints.forEach((point, index) => {
   );
 });
 
+// --- inferred acquisition dates ---
+
+// Moxfield stamps last-modified, not acquired, so a bulk load dates a whole
+// collection to one day and the chart draws $0 through years the cards
+// demonstrably existed. A holding flagged as inferred is counted from the start
+// of price history instead.
+// Acquisitions before the inferred holding exists, so the comparison below is
+// against this collection rather than against an assumption about it.
+const acquisitionsBefore = portfolioSeries(db, {}).points.reduce(
+  (sum, point) => sum + point.acquiredHoldings,
+  0,
+);
+
+const inferredCard = printing("inf", "Inferred");
+db.insert(priceSnapshots)
+  .values([
+    { printingKey: inferredCard, finish: "nonfoil", date: "2026-01-01", priceCents: 1_000, source: "mtgjson" },
+    { printingKey: inferredCard, finish: "nonfoil", date: "2026-01-05", priceCents: 1_000, source: "mtgjson" },
+  ])
+  .run();
+db.insert(holdings)
+  .values({
+    printingKey: inferredCard,
+    quantity: 1,
+    finish: "nonfoil",
+    condition: "NM",
+    // Stamped late, but flagged: the date is a floor, not a fact.
+    dateAdded: "2026-01-05",
+    dateAddedApprox: true,
+    createdAt: new Date(),
+  })
+  .run();
+
+const withInferred = portfolioSeries(db, {});
+const firstPoint = withInferred.points[0];
+
+// Counted from the first date, not from the day Moxfield was last touched.
+assert.equal(firstPoint.inferredHoldings, 1);
+assert.ok(
+  firstPoint.valueCents >= 1_000,
+  "an inferred holding contributes on the first date rather than showing zero",
+);
+// And on every point after it, so the chart can mark the whole stretch.
+assert.ok(withInferred.points.every((point) => point.inferredHoldings === 1));
+
+// It must not be reported as an acquisition anywhere: nothing was bought, that
+// is only where counting starts, and a tick mark claiming a purchase would be a
+// worse lie than the one this fixes.
+assert.equal(
+  withInferred.points.reduce((sum, point) => sum + point.acquiredHoldings, 0),
+  acquisitionsBefore,
+  "an inferred holding must add no acquisition on any date",
+);
+
 sqlite.close();
 cleanup();
 

@@ -51,6 +51,17 @@ export interface ValuePoint {
    */
   acquiredHoldings: number;
   acquiredCards: number;
+  /**
+   * Of `holdingsHeld`, how many are counted on an inferred date.
+   *
+   * These are holdings whose acquisition date is a floor rather than a fact —
+   * see `holdings.date_added_approx`. They are counted from the start of price
+   * history because that is the least wrong option: the alternative is drawing
+   * a collection as worth nothing during years it demonstrably existed. The
+   * count travels with every point so the chart can say which part of the line
+   * rests on an assumption.
+   */
+  inferredHoldings: number;
 }
 
 export interface ValuationSeries {
@@ -62,7 +73,9 @@ export interface ValuationSeries {
 
 interface HoldingRow {
   quantity: number;
+  /** Effective start date: the stamped one, or history's start when inferred. */
   dateAdded: string;
+  inferred: boolean;
   priceOverrideCents: number | null;
   seriesKey: string;
 }
@@ -154,6 +167,7 @@ export function portfolioSeries(
     .select({
       quantity: holdings.quantity,
       dateAdded: holdings.dateAdded,
+      dateAddedApprox: holdings.dateAddedApprox,
       priceOverrideCents: holdings.priceOverrideCents,
       printingKey: holdings.printingKey,
       finish: holdings.finish,
@@ -171,22 +185,32 @@ export function portfolioSeries(
         unpricedHoldings: 0,
         acquiredHoldings: 0,
         acquiredCards: 0,
+        inferredHoldings: 0,
       })),
       firstDate: dates[0],
       lastDate: dates[dates.length - 1],
     };
   }
 
+  // An inferred date is a floor, so the holding is counted from the beginning
+  // of history rather than from the day Moxfield happened to be updated.
+  const historyStart = dates[0];
   const rows: HoldingRow[] = held.map((row) => ({
     quantity: row.quantity,
-    dateAdded: row.dateAdded,
+    dateAdded: row.dateAddedApprox ? historyStart : row.dateAdded,
+    inferred: row.dateAddedApprox,
     priceOverrideCents: row.priceOverrideCents,
     seriesKey: seriesKey(row.printingKey, FINISH_CODES[row.finish]),
   }));
 
   // Acquisitions per date, counted once rather than re-scanned per point.
+  // Inferred holdings are deliberately excluded: they did not arrive on the
+  // first day of price history, that is merely where we start counting them,
+  // and a tick mark claiming 673 cards were bought that day would be a worse
+  // lie than the one this fixes.
   const acquired = new Map<string, { holdings: number; cards: number }>();
   for (const row of rows) {
+    if (row.inferred) continue;
     const entry = acquired.get(row.dateAdded) ?? { holdings: 0, cards: 0 };
     entry.holdings += 1;
     entry.cards += row.quantity;
@@ -275,11 +299,13 @@ export function portfolioSeries(
     let holdingsHeld = 0;
     let pricedHoldings = 0;
     let unpricedHoldings = 0;
+    let inferredHoldings = 0;
 
     for (let i = 0; i < rows.length; i += 1) {
       const row = rows[i];
       if (!options.constantBasket && row.dateAdded > date) continue;
       holdingsHeld += 1;
+      if (row.inferred) inferredHoldings += 1;
 
       // A manual override applies for the whole life of the holding; it exists
       // for printings no source prices.
@@ -311,6 +337,7 @@ export function portfolioSeries(
       unpricedHoldings,
       acquiredHoldings: added?.holdings ?? 0,
       acquiredCards: added?.cards ?? 0,
+      inferredHoldings,
     };
   });
 

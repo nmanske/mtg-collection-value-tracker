@@ -111,6 +111,14 @@ export interface ImportReport {
   dateAdded: string;
   /** Rows that fell back to the import date because their timestamp was unusable. */
   datesFellBack: number;
+  /**
+   * Rows at the export's earliest date, whose acquisition date is a floor.
+   *
+   * Moxfield stamps last-modified, not acquired, so a bulk load dates the whole
+   * collection to one day. Reported so an import says how much of the history
+   * it is inferring rather than reading.
+   */
+  inferredDates: number;
   /** Earliest and latest acquisition date actually assigned. */
   earliestDate: string | null;
   latestDate: string | null;
@@ -313,6 +321,7 @@ export function importMoxfieldCsv(
     dateSource,
     dateAdded: fallbackDate,
     datesFellBack: 0,
+    inferredDates: 0,
     earliestDate: null,
     latestDate: null,
     dataRows: table.rows.length,
@@ -464,6 +473,23 @@ export function importMoxfieldCsv(
       report.importedCards += count;
     });
   };
+
+  // Rows at the export's earliest date carry an inferred acquisition date.
+  //
+  // Only knowable once the whole file is read, which is why this is a second
+  // pass rather than a decision per row. The rule is narrow on purpose: the
+  // floor is the one date the file proves nothing about, because a
+  // last-modified stamp can only ever have moved *forward*, so a row sitting on
+  // the minimum was acquired then or at any earlier time. Later dates are at
+  // least an upper bound that the file itself distinguishes.
+  if (dateSource === "modified" && report.earliestDate) {
+    for (const holding of desired) {
+      if (holding.dateAdded === report.earliestDate) {
+        holding.dateAddedApprox = true;
+        report.inferredDates += 1;
+      }
+    }
+  }
 
   const mode = options.mode ?? "replace";
 

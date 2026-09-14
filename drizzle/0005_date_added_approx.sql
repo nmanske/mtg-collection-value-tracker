@@ -1,0 +1,11 @@
+-- Marks holdings whose acquisition date is a floor rather than a fact.
+--
+-- Moxfield's CSV exports a last-modified timestamp, not an acquisition date.
+-- It moves forward whenever a row is edited, and a bulk load stamps the whole
+-- collection with one day. Rows at an export's earliest date can only be read
+-- as "acquired then or earlier", so the valuation must not treat that date as
+-- the moment the card appeared.
+--
+-- Defaults to false, so existing rows keep their current meaning until an
+-- import re-classifies them. ADD COLUMN is O(1) in SQLite.
+ALTER TABLE `holdings` ADD `date_added_approx` integer DEFAULT false NOT NULL;

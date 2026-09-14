@@ -117,6 +117,22 @@ export const holdings = sqliteTable(
      */
     dateAdded: text("date_added").notNull(),
     /**
+     * True when `dateAdded` means "on or before", not "on".
+     *
+     * Moxfield's CSV carries only a last-modified timestamp, which moves
+     * forward whenever a row is touched and says nothing about when a card was
+     * acquired. Against a real export, 673 of 3,724 holdings land on the two
+     * days the collection was bulk-loaded into Moxfield — cards owned for years
+     * before, all dated to the day they were first typed in.
+     *
+     * Rows at the export's earliest date are flagged here, because that date is
+     * provably a floor rather than a fact: nothing in the file can be older, so
+     * anything sitting on it was acquired then or earlier, unknowably.
+     */
+    dateAddedApprox: integer("date_added_approx", { mode: "boolean" })
+      .notNull()
+      .default(false),
+    /**
      * Manual price in whole cents, overriding all snapshots for this holding.
      * For printings with no price data at all (see "Case B") the user can set
      * a value rather than have the card silently counted as $0.

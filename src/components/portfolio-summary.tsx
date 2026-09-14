@@ -127,6 +127,18 @@ export function PortfolioSummaryPanel({
         </p>
       ) : null}
 
+      {visible.some((point) => point.inferredHoldings > 0) ? (
+        <p className="mt-3 text-xs text-amber-700 dark:text-amber-400">
+          {visible[0].inferredHoldings.toLocaleString()} holding
+          {visible[0].inferredHoldings === 1 ? " is" : "s are"} counted from the
+          start of this window because their acquisition date is unknown.
+          Moxfield exports a last-modified timestamp rather than a purchase
+          date, so cards already owned when a collection was first uploaded all
+          carry that day. They are valued throughout rather than appearing to
+          arrive at once, and are not counted as acquisitions.
+        </p>
+      ) : null}
+
       {summary.points.length > 0 ? (
         <p className="mt-3 text-xs text-neutral-500">
           {range.window === null

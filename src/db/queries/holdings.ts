@@ -236,6 +236,8 @@ export interface DesiredHolding {
   finish: Finish;
   condition: Condition;
   dateAdded: string;
+  /** See `holdings.date_added_approx`. */
+  dateAddedApprox?: boolean;
 }
 
 export interface ReconcileResult {
@@ -288,6 +290,7 @@ export function reconcileHoldings(
       finish: holdings.finish,
       condition: holdings.condition,
       dateAdded: holdings.dateAdded,
+      dateAddedApprox: holdings.dateAddedApprox,
     })
     .from(holdings)
     .where(eq(holdings.source, source))
@@ -314,9 +317,18 @@ export function reconcileHoldings(
       continue;
     }
 
-    if (target.quantity !== row.quantity) {
+    // The flag is refreshed on every import, not only on insert: which rows sit
+    // at the export's floor changes as the collection is edited, and a row that
+    // stops being the oldest must stop claiming an inferred date.
+    if (
+      target.quantity !== row.quantity ||
+      (target.dateAddedApprox ?? false) !== row.dateAddedApprox
+    ) {
       db.update(holdings)
-        .set({ quantity: target.quantity })
+        .set({
+          quantity: target.quantity,
+          dateAddedApprox: target.dateAddedApprox ?? false,
+        })
         .where(eq(holdings.id, row.id))
         .run();
       result.updated += 1;
