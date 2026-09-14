@@ -16,7 +16,12 @@ import {
   portfolioValueAt,
   priceDates,
 } from "@/db/queries/valuation";
-import { holdings, priceSnapshots, printings } from "@/db/schema";
+import {
+  holdings,
+  priceSnapshots,
+  printings,
+  vendorPrices,
+} from "@/db/schema";
 
 const PATH = "./data/test-valuation.db";
 const cleanup = () => {
@@ -338,6 +343,52 @@ assert.equal(
   withInferred.points.reduce((sum, point) => sum + point.acquiredHoldings, 0),
   acquisitionsBefore,
   "an inferred holding must add no acquisition on any date",
+);
+
+// --- valuing from a different vendor ---
+
+// Card Kingdom's retail series lives in vendor_prices, not price_snapshots, so
+// switching vendor changes the source table rather than adding a filter.
+db.insert(vendorPrices)
+  .values([
+    { printingKey: ALPHA, finish: "nonfoil", vendor: "cardkingdom", side: "retail", date: "2026-01-01", priceCents: 2_000 },
+    { printingKey: ALPHA, finish: "nonfoil", vendor: "cardkingdom", side: "retail", date: "2026-01-05", priceCents: 2_500 },
+    // A buylist row for the same card must never be picked up by a retail
+    // valuation, however recent it is.
+    { printingKey: ALPHA, finish: "nonfoil", vendor: "cardkingdom", side: "buylist", date: "2026-01-05", priceCents: 9 },
+  ])
+  .run();
+
+const tcg = portfolioSeries(db, { priceSource: "tcgplayer" });
+const ck = portfolioSeries(db, { priceSource: "cardkingdom" });
+
+// Same spine, so the two lines are directly comparable.
+assert.deepEqual(
+  ck.points.map((point) => point.date),
+  tcg.points.map((point) => point.date),
+  "both vendors are drawn against the same date axis",
+);
+
+// The Card Kingdom series reflects Card Kingdom prices, not TCGplayer's.
+const ckLast = ck.points.at(-1)!;
+const tcgLast = tcg.points.at(-1)!;
+assert.notEqual(ckLast.valueCents, tcgLast.valueCents);
+assert.ok(
+  ckLast.valueCents > 0,
+  "a vendor with its own series must produce a real total",
+);
+
+// The buylist row is 9 cents; if it leaked in, the total would collapse.
+assert.ok(
+  ckLast.valueCents > 1_000,
+  "a retail valuation must not pick up buylist rows",
+);
+
+// An unknown vendor is not reachable through the type, and the default stays
+// TCGplayer, so an absent option cannot silently change the headline figure.
+assert.equal(
+  portfolioSeries(db, {}).points.at(-1)!.valueCents,
+  tcgLast.valueCents,
 );
 
 sqlite.close();

@@ -1,5 +1,12 @@
+import Link from "next/link";
+
 import type { Change, PortfolioSummary } from "@/db/queries/valuation";
 import { formatUsd } from "@/lib/format";
+import {
+  PRICE_VENDOR_LABEL,
+  PRICE_VENDORS,
+  type PriceVendor,
+} from "@/db/queries/valuation";
 import { rangeStart, resolveRange, spanInDays } from "@/lib/ranges";
 
 import { PortfolioChart } from "./portfolio-chart";
@@ -56,9 +63,11 @@ function ChangeTile({ label, change }: { label: string; change: Change }) {
 export function PortfolioSummaryPanel({
   summary,
   range: requestedRange,
+  priceSource,
 }: {
   summary: PortfolioSummary;
   range?: string;
+  priceSource: PriceVendor;
 }) {
   const last = summary.points.at(-1);
 
@@ -107,7 +116,32 @@ export function PortfolioSummaryPanel({
         </dl>
       </div>
 
-      <div className="mb-3 flex justify-end">
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+        {/* Which shop's asking price the whole panel is computed from. Placed
+            beside the range rather than near the hero figure, because it
+            changes the same thing the range does: what the chart is showing,
+            not what the collection is. */}
+        <nav aria-label="Price source" className="flex flex-wrap gap-1">
+          {PRICE_VENDORS.map((vendor) => {
+            const current = vendor === priceSource;
+            return (
+              <Link
+                key={vendor}
+                href={`/?prices=${vendor}${requestedRange ? `&range=${requestedRange}` : ""}`}
+                scroll={false}
+                aria-current={current ? "true" : undefined}
+                className={`rounded-md border px-2.5 py-1 text-xs transition-colors ${
+                  current
+                    ? "border-neutral-900 bg-neutral-900 text-white dark:border-neutral-100 dark:bg-neutral-100 dark:text-neutral-900"
+                    : "border-neutral-300 hover:bg-neutral-50 dark:border-neutral-700 dark:hover:bg-neutral-900"
+                }`}
+              >
+                {PRICE_VENDOR_LABEL[vendor]}
+              </Link>
+            );
+          })}
+        </nav>
+
         <RangePicker
           active={range.id}
           spanDays={spanDays}

@@ -2,9 +2,46 @@ import { and, lte, sql } from "drizzle-orm";
 
 import { holdings, priceSnapshots } from "@/db/schema";
 
-import { FINISH_CODES } from "@/db/codec";
+import {
+  FINISH_CODES,
+  PRICE_SOURCE_CODES,
+  SIDE_CODES,
+  VENDOR_CODES,
+} from "@/db/codec";
 
 import type { Db } from "./printings";
+
+/**
+ * Vendors the portfolio can be valued from.
+ *
+ * Only retail: a buylist total answers "what could I sell this for today",
+ * which is a different question from "what has this been worth", and drawing
+ * them on one axis would invite reading a 50% spread as a crash.
+ */
+export const PRICE_VENDORS = ["tcgplayer", "cardkingdom"] as const;
+export type PriceVendor = (typeof PRICE_VENDORS)[number];
+
+export const PRICE_VENDOR_LABEL: Record<PriceVendor, string> = {
+  tcgplayer: "TCGplayer",
+  cardkingdom: "Card Kingdom",
+};
+
+/**
+ * Where each vendor's retail series lives.
+ *
+ * The two tables partition the series between them — TCGplayer retail is the
+ * canonical one in `price_snapshots`, everything else is in `vendor_prices` —
+ * so valuing from a different vendor is a change of source table, not a filter.
+ */
+const PRICE_SOURCE_SQL: Record<PriceVendor, string> = {
+  tcgplayer: `select printing_key, finish, date, price_cents
+                from price_snapshots
+               where source != ${PRICE_SOURCE_CODES.manual}`,
+  cardkingdom: `select printing_key, finish, date, price_cents
+                  from vendor_prices
+                 where vendor = ${VENDOR_CODES.cardkingdom}
+                   and side = ${SIDE_CODES.retail}`,
+};
 
 /**
  * Portfolio valuation over time.
@@ -155,6 +192,20 @@ export function portfolioSeries(
      * collection is broad.
      */
     constantBasket?: boolean;
+    /**
+     * Which vendor's retail series to value from. Defaults to TCGplayer.
+     *
+     * The date axis stays TCGplayer's either way, so the two lines are drawn
+     * against the same spine and are directly comparable; a Card Kingdom price
+     * missing on some date is carried forward exactly as a gap in its own
+     * series would be.
+     *
+     * The staleness rule that governs the vendor *totals* deliberately does not
+     * apply here. A 2023 price is the correct value for a 2023 date — staleness
+     * is only a question about what "latest" means, and a time series never
+     * asks it.
+     */
+    priceSource?: PriceVendor;
   } = {},
 ): ValuationSeries {
   const sqlite = clientOf(db);
@@ -263,7 +314,7 @@ export function portfolioSeries(
   const statement = sqlite.prepare(
     `select ps.printing_key, ps.finish, ps.date, ps.price_cents
        from (select distinct printing_key, finish from holdings) h
-       join price_snapshots ps
+       join (${PRICE_SOURCE_SQL[options.priceSource ?? "tcgplayer"]}) ps
          on ps.printing_key = h.printing_key and ps.finish = h.finish
       where ps.date <= ?
       order by ps.printing_key, ps.finish, ps.date`,
@@ -416,10 +467,14 @@ function changeOver(points: ValuePoint[], days: number): Change {
   };
 }
 
-export function portfolioSummary(db: Db): PortfolioSummary {
-  const { points } = portfolioSeries(db);
+export function portfolioSummary(
+  db: Db,
+  priceSource: PriceVendor = "tcgplayer",
+): PortfolioSummary {
+  const { points } = portfolioSeries(db, { priceSource });
   const { points: basketPoints } = portfolioSeries(db, {
     constantBasket: true,
+    priceSource,
   });
   const last = points.at(-1);
 

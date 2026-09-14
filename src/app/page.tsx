@@ -5,7 +5,11 @@ import { PortfolioSummaryPanel } from "@/components/portfolio-summary";
 import { VendorTotals } from "@/components/vendor-totals";
 import { RemoveHoldingButton } from "@/components/remove-holding-button";
 import { listHoldings } from "@/db/queries/holdings";
-import { portfolioSummary } from "@/db/queries/valuation";
+import {
+  portfolioSummary,
+  PRICE_VENDORS,
+  type PriceVendor,
+} from "@/db/queries/valuation";
 import { collectionByVendor } from "@/db/queries/vendors";
 import {
   FINISH_LABEL,
@@ -19,10 +23,14 @@ export const dynamic = "force-dynamic";
 
 export default async function CollectionPage(props: PageProps<"/">) {
   // searchParams is a Promise in Next 16.
-  const { page, range } = await props.searchParams;
+  const { page, range, prices } = await props.searchParams;
+  const priceSource: PriceVendor =
+    typeof prices === "string" && (PRICE_VENDORS as readonly string[]).includes(prices)
+      ? (prices as PriceVendor)
+      : "tcgplayer";
   const { rows, totalCards, unpricedCount, holdingCount, pageCount, page: current } =
     listHoldings(db, Number(page) || 1);
-  const summary = portfolioSummary(db);
+  const summary = portfolioSummary(db, priceSource);
   const vendorTotals = collectionByVendor(db);
 
   return (
@@ -69,6 +77,7 @@ export default async function CollectionPage(props: PageProps<"/">) {
       <PortfolioSummaryPanel
         summary={summary}
         range={typeof range === "string" ? range : undefined}
+        priceSource={priceSource}
       />
 
       <VendorTotals totals={vendorTotals} holdingCount={holdingCount} />

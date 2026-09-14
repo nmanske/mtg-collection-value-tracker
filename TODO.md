@@ -83,16 +83,22 @@ ingest repopulates it, so the overlay currently shows the `normal` image
 archive backfill is done — it is a 108k-row upsert and should not compete with
 the backfill for the write lock.
 
-### 4. Toggle Card Kingdom vs TCGplayer on the collection graph
+### 4. Toggle Card Kingdom vs TCGplayer on the collection graph — done
 
-The portfolio chart is TCGplayer retail only. Card Kingdom retail now has the
-same five-year depth in `vendor_prices`, so the series can be drawn.
+`?prices=cardkingdom` values the whole panel — hero figure, change tiles, chart,
+both lines — from Card Kingdom retail instead. The date axis stays TCGplayer's
+so the two are drawn against the same spine and are directly comparable.
 
-Two things to get right. The valuation query reads `price_snapshots`
-exclusively and is the fast path (~230ms); pointing it at `vendor_prices`
-instead is not a one-line change. And Card Kingdom's coverage is not identical
-— 3,663 of 3,724 holdings on the buylist side — so the two lines span slightly
-different collections, which the UI has to say rather than imply.
+Only retail is offered. A buylist total answers "what could I sell this for
+today", a different question from "what has this been worth", and putting them
+on one axis would invite reading a 50% spread as a crash.
+
+**Remaining:** the vendor totals table and the chart disagree slightly for Card
+Kingdom — $19,780.02 against $19,785.79 — because the totals exclude the three
+stale holdings and the time series does not. That is correct in both places (a
+2023 price is the right value for a 2023 date; it is the wrong value for
+today), but the UI does not explain the gap, and someone comparing the two
+numbers will notice.
 
 ## Known issues
 
