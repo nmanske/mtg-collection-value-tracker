@@ -173,11 +173,25 @@ export function listHoldings(
   if (search) {
     // Matched against the set name too: "ravnica" is how people look for a
     // set, and the code alone would not find it.
-    const like = `%${search.toLowerCase()}%`;
+    //
+    // `%` and `_` are LIKE wildcards, and a search box is a place people type
+    // literal characters. Unescaped, "100%" silently matched anything starting
+    // "100", and "_____" matched every holding in the collection — five
+    // single-character wildcards. The term is already bound as a parameter, so
+    // this is a correctness fix rather than an injection one, but a search that
+    // quietly returns everything is its own kind of wrong.
+    // The backslash must be escaped first, or it would double the escapes
+    // added for % and _ on the next two lines.
+    const escaped = search
+      .toLowerCase()
+      .replaceAll("\\", "\\\\")
+      .replaceAll("%", "\\%")
+      .replaceAll("_", "\\_");
+    const like = `%${escaped}%`;
     conditions.push(
-      sql`(lower(${printings.name}) like ${like}
-           or lower(${printings.setName}) like ${like}
-           or lower(${printings.setCode}) like ${like})`,
+      sql`(lower(${printings.name}) like ${like} escape '\\'
+           or lower(${printings.setName}) like ${like} escape '\\'
+           or lower(${printings.setCode}) like ${like} escape '\\')`,
     );
   }
 

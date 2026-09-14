@@ -367,6 +367,24 @@ const searched = listHoldings(db, {
 assert.ok(searched.rows.some((row) => row.name === firstName));
 assert.equal(searched.matched, searched.rows.length);
 assert.equal(listHoldings(db, { search: "zzzznotacard" }).matched, 0);
+
+// LIKE wildcards in the search box are literal characters, not operators. A
+// user typing "100%" means a card called that; unescaped, "_____" matched
+// every holding in the collection, since each underscore matches any one
+// character. The term is bound as a parameter either way -- this is
+// correctness, not injection -- but a search that silently returns everything
+// is its own kind of wrong.
+assert.equal(listHoldings(db, { search: "_____" }).matched, 0);
+assert.equal(listHoldings(db, { search: "%" }).matched, 0);
+assert.equal(listHoldings(db, { search: "\\" }).matched, 0);
+// And escaping must not break ordinary searches.
+assert.ok(listHoldings(db, { search: firstName.slice(0, 4) }).matched > 0);
+
+// Hostile input is data, never SQL: the table survives and nothing matches.
+for (const hostile of ["' or 1=1 --", "'; drop table holdings; --"]) {
+  assert.equal(listHoldings(db, { search: hostile }).matched, 0);
+}
+assert.equal(countHoldings(db), all.holdingCount, "the table is intact");
 // An empty result still clamps to a valid page rather than reporting page 0.
 assert.equal(listHoldings(db, { search: "zzzznotacard" }).page, 1);
 
