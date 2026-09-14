@@ -11,6 +11,7 @@
     "db:migrate": "tsx scripts/migrate.ts",
     "db:studio": "drizzle-kit studio",
     "db:smoke": "tsx scripts/smoke.ts",
+    "smoke:http": "tsx scripts/smoke-http.mts",
     "ingest:scryfall": "tsx scripts/ingest-scryfall.ts",
     "ingest:today": "tsx scripts/ingest-today.mts",
     "test:ingest": "tsx scripts/test-ingest.ts",
