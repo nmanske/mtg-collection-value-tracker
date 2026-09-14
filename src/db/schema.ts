@@ -256,6 +256,42 @@ export const vendorPrices = sqliteTable(
 );
 
 /**
+ * Precomputed portfolio totals, one row per date per view.
+ *
+ * The value series depends only on the holdings and the price history, both of
+ * which change about once a day — yet it was recomputed on every page load,
+ * walking a holdings-by-dates matrix each time. That cost 230ms over 89 days
+ * and 5.6 seconds over 930, and the archive backfill is still adding dates.
+ *
+ * Keyed by view as well as date because there are four of them: two price
+ * sources times as-held and constant-basket. That is ~8,000 rows against a
+ * matrix of several million cells, so the whole cache is smaller than one
+ * request used to allocate.
+ *
+ * A cache that can go stale silently is worse than no cache, so the reader
+ * compares a fingerprint of the inputs and recomputes when it does not match.
+ * See `portfolio-cache.ts`.
+ */
+export const portfolioDaily = sqliteTable(
+  "portfolio_daily",
+  {
+    /** Vendor code; see `codec.ts`. */
+    priceSource: integer("price_source").notNull(),
+    /** 1 for the constant-basket view, 0 for as-held. */
+    basket: integer("basket", { mode: "boolean" }).notNull(),
+    date: text("date").notNull(),
+    valueCents: integer("value_cents").notNull(),
+    holdingsHeld: integer("holdings_held").notNull(),
+    pricedHoldings: integer("priced_holdings").notNull(),
+    unpricedHoldings: integer("unpriced_holdings").notNull(),
+    inferredHoldings: integer("inferred_holdings").notNull(),
+    acquiredHoldings: integer("acquired_holdings").notNull(),
+    acquiredCards: integer("acquired_cards").notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.priceSource, t.basket, t.date] })],
+);
+
+/**
  * Printings with no usable price from any source, so they can be surfaced in
  * the UI as "price unavailable" instead of being silently valued at zero.
  *

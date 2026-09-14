@@ -43,6 +43,13 @@
       "when": 1789398867725,
       "tag": "0005_date_added_approx",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "6",
+      "when": 1789401328944,
+      "tag": "0006_portfolio_daily",
+      "breakpoints": true
     }
   ]
 }

@@ -9,6 +9,7 @@ import {
   VENDOR_CODES,
 } from "@/db/codec";
 
+import { cachedPortfolioSeries } from "./portfolio-cache";
 import type { Db } from "./printings";
 
 /**
@@ -471,8 +472,12 @@ export function portfolioSummary(
   db: Db,
   priceSource: PriceVendor = "tcgplayer",
 ): PortfolioSummary {
-  const { points } = portfolioSeries(db, { priceSource });
-  const { points: basketPoints } = portfolioSeries(db, {
+  // Through the cache: this is the dashboard's hot path, and recomputing both
+  // series per request is what took 5.6 seconds over 930 dates. Falls back to
+  // computing when the cache is cold or stale, so it costs time, never
+  // correctness.
+  const { points } = cachedPortfolioSeries(db, { priceSource });
+  const { points: basketPoints } = cachedPortfolioSeries(db, {
     constantBasket: true,
     priceSource,
   });
