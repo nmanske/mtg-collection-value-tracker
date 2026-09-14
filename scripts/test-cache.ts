@@ -53,6 +53,9 @@ db.insert(priceSnapshots)
   .values([
     { printingKey: A, finish: "nonfoil", date: "2026-01-01", priceCents: 100, source: "mtgjson" },
     { printingKey: A, finish: "nonfoil", date: "2026-01-02", priceCents: 200, source: "mtgjson" },
+    // A later date, so a gap fill at 2026-01-03 sits strictly inside the range
+    // and moves neither end.
+    { printingKey: A, finish: "nonfoil", date: "2026-01-06", priceCents: 300, source: "mtgjson" },
   ])
   .run();
 db.insert(vendorPrices)
@@ -161,6 +164,30 @@ const checks: [string, () => void][] = [
   ["a removed holding", () => {
     sqlite.prepare("delete from holdings where printing_key = ?").run(B);
   }],
+  // The case that actually escaped. An archive backfill fills dates in the
+  // *middle* of the range, moving neither the newest nor the oldest, so a
+  // fingerprint built from max(date) read as fresh for hours while the
+  // database gained 715 days of history. A real backfill also advances its
+  // watermark after every build, which is what makes it detectable.
+  ["an archive backfill filling a gap", () => {
+    sqlite
+      .prepare(
+        "insert into price_snapshots (printing_key, finish, date, price_cents, source, estimated) values (?, 0, '2026-01-03', 42, 1, 0)",
+      )
+      .run(A);
+    sqlite
+      .prepare(
+        "insert into sync_meta (key, value, updated_at) values ('mtgjson_archive_max_date', '2099-01-01', 0) on conflict(key) do update set value = excluded.value",
+      )
+      .run();
+  }],
+  ["a daily ingest recording a new build", () => {
+    sqlite
+      .prepare(
+        "insert into sync_meta (key, value, updated_at) values ('mtgjson_today_version', '9.9.9', 0) on conflict(key) do update set value = excluded.value",
+      )
+      .run();
+  }],
 ];
 
 for (const [what, mutate] of checks) {
@@ -169,6 +196,25 @@ for (const [what, mutate] of checks) {
   mutate();
   assert.equal(cacheIsFresh(db), false, `${what} must invalidate the cache`);
 }
+
+// --- a known limitation, asserted rather than left implicit ---
+
+// Detecting *any* price change without a watermark would mean counting 120
+// million rows on every page load. So the contract is narrower: every ingest
+// path is detected, and a hand-written INSERT that advances no watermark is
+// not. Asserted so the boundary is visible and a future change to it fails
+// here rather than surprising someone.
+rebuildPortfolioCache(db);
+sqlite
+  .prepare(
+    "insert into price_snapshots (printing_key, finish, date, price_cents, source, estimated) values (?, 0, '2026-01-04', 7, 1, 0)",
+  )
+  .run(A);
+assert.equal(
+  cacheIsFresh(db),
+  true,
+  "a bare mid-range insert is NOT detected — run cache:portfolio after one",
+);
 
 sqlite.close();
 cleanup();

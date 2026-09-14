@@ -39,8 +39,20 @@ export const CACHE_FINGERPRINT_KEY = "portfolio_cache_fingerprint";
  * `sum(printing_key)` and `sum(quantity)` catch substitutions that leave the
  * count unchanged; `date_added` and its approximate flag are included because
  * both move points; `price_override_cents` because it replaces a price
- * outright. The newest price date completes it, since that is the only way the
- * price side can grow.
+ * outright.
+ *
+ * The price side is the part that was wrong first time. It used only the newest
+ * date on each table, on the reasoning that prices can only grow forwards --
+ * which is exactly false while an archive backfill is running, because that
+ * fills the *middle*. The cache read as fresh for hours while the database
+ * gained 715 days of history, and the dashboard quietly served the old series.
+ *
+ * So the ingest watermarks in `sync_meta` are included too. Every path that
+ * writes prices advances one of them: the archive backfill after each build,
+ * the daily job per MTGJSON version, the Scryfall metadata run. They are also
+ * a handful of short rows, where counting 120 million price rows per page load
+ * would not be. The residual gap is a hand-written INSERT that touches no
+ * watermark; `npm run cache:portfolio` forces a rebuild for that case.
  *
  * It is a fingerprint, not a hash: two genuinely different collections could in
  * principle collide. Against a single user editing their own cards that is not
@@ -60,14 +72,32 @@ export function cacheFingerprint(db: Db): string {
     .from(holdings)
     .get();
 
-  const priceMax = (
-    db as unknown as { $client: import("better-sqlite3").Database }
-  ).$client
+  const client = (db as unknown as {
+    $client: import("better-sqlite3").Database;
+  }).$client;
+
+  // Both ends of each series, so history extending backwards is noticed as
+  // well as forwards.
+  const priceRange = client
     .prepare(
-      `select (select max(date) from price_snapshots) as snapshots,
-              (select max(date) from vendor_prices) as vendors`,
+      `select (select min(date) from price_snapshots) as snapFirst,
+              (select max(date) from price_snapshots) as snapLast,
+              (select min(date) from vendor_prices) as vendorFirst,
+              (select max(date) from vendor_prices) as vendorLast`,
     )
-    .get() as { snapshots: string | null; vendors: string | null };
+    .get() as Record<string, string | null>;
+
+  // Every ingest advances one of these, including one that only fills gaps.
+  const watermarks = (
+    client
+      .prepare("select key, value from sync_meta order by key")
+      .all() as { key: string; value: string }[]
+  )
+    // The cache's own fingerprint is excluded, or storing it would change the
+    // value it was computed from and nothing would ever read as fresh.
+    .filter((row) => row.key !== CACHE_FINGERPRINT_KEY)
+    .map((row) => `${row.key}=${row.value}`)
+    .join(",");
 
   // The date list is summarised rather than carried whole: a few hundred
   // distinct dates would make this string kilobytes long for no extra safety.
@@ -83,8 +113,11 @@ export function cacheFingerprint(db: Db): string {
     h?.overrides ?? 0,
     h?.approx ?? 0,
     dateHash,
-    priceMax.snapshots ?? "-",
-    priceMax.vendors ?? "-",
+    priceRange.snapFirst ?? "-",
+    priceRange.snapLast ?? "-",
+    priceRange.vendorFirst ?? "-",
+    priceRange.vendorLast ?? "-",
+    watermarks,
   ].join(":");
 }
 
