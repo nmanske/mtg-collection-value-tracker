@@ -166,6 +166,26 @@ time, and a uuid the map cannot resolve is skipped silently, taking that card's
 history with it. Merging every build's `AllIdentifiers.json` first recovered
 30,691 mappings against a map built from the current build alone.
 
+### After a backfill
+
+`npm run finalize` runs everything a long backfill leaves outstanding, in the
+order the steps actually depend on each other:
+
+```bash
+npm run finalize -- collection.csv   # or --skip-import
+npm run finalize -- --dry-run        # say what would run, change nothing
+```
+
+The ordering is the point. The collection import has to precede the cache
+rebuild, because it can change which holdings carry an inferred acquisition
+date and that moves every point in the series. The cache rebuild has to precede
+the smoke test, or the test measures a cold cache recomputing and reports the
+app as slow. `VACUUM` comes last because everything above it writes.
+
+Steps needing a file or a decision are skipped with an explanation rather than
+guessed at — importing the wrong CSV would reconcile the collection against it
+and remove holdings it does not mention.
+
 ### Backing up
 
 The database is the backup. Copy `data/mtg.db` — it holds the collection and

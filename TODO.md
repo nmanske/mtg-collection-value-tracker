@@ -136,10 +136,15 @@ cards having been lost — and the count of matches says what is on screen.
 
 ## Housekeeping
 
-- **`VACUUM` after the archive backfill finishes.** The migration showed ~50%
-  reclaimed from B-tree churn; this run writes far more.
-- **Re-measure the dashboard against the full dataset** once the backfill ends.
-  Both slow queries so far only appeared past a certain row count.
+- **Run `npm run finalize` when the backfill ends.** Gap audit, collection
+  import, cache rebuild, smoke test and `VACUUM INTO`, in dependency order.
+  Replaces the five steps that used to live in a chat log.
+- **The dashboard is slow while a bulk load runs** — 88s to no-response-in-120s
+  during the backfill, against 0.9s with a warm cache. The backfill advances a
+  watermark after every build, which correctly invalidates the cache, so every
+  page load recomputes 3,706 holdings across 1,700 dates against a table being
+  written to. Correct but unusable. Worth deciding whether a stale-but-labelled
+  cache would be better than a live recompute while an ingest is running.
 - **~78 GB of `AllIdentifiers.json`** across the archive is no longer needed —
   the uuid map is merged and complete (108,379 of 108,382 printings reachable).
   Deletable whenever disk matters.
