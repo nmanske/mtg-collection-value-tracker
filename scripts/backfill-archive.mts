@@ -89,6 +89,18 @@ try {
     },
   );
 
+  if (result.unreadable.length > 0) {
+    console.log(`
+${result.unreadable.length} build(s) could not be read:`);
+    for (const build of result.unreadable) {
+      console.log(`  ${build.label}: ${build.message}`);
+    }
+    console.log(
+      "Re-download them, or check `npm run audit:archive` — a missing build " +
+        "usually costs no coverage, because neighbours' windows overlap it.",
+    );
+  }
+
   console.log("");
   console.table({
     "builds processed": result.builds.length.toLocaleString(),

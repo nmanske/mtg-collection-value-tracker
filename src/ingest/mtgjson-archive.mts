@@ -640,6 +640,8 @@ export async function ingestArchiveBuild(
 
 export interface ArchiveResult {
   builds: VersionResult[];
+  /** Builds whose price file could not be parsed. Skipped, not fatal. */
+  unreadable: { label: string; message: string }[];
   snapshotsInserted: number;
   vendorRowsWritten: number;
   earliestDate: string | null;
@@ -703,6 +705,7 @@ export async function backfillFromArchive(
 
   const results: ArchiveResult = {
     builds: [],
+    unreadable: [],
     snapshotsInserted: 0,
     vendorRowsWritten: 0,
     earliestDate: null,
@@ -748,15 +751,32 @@ export async function backfillFromArchive(
     // Nothing past here touches the price file, the expensive half of a build.
     if (options.idsOnly) continue;
 
-    const outcome = await ingestArchiveBuild(
-      db,
-      sqlite,
-      build,
-      uuidToPrinting,
-      held,
-      watermark,
-      options,
-    );
+    // A build that cannot be parsed is skipped, not fatal.
+    //
+    // A corrupt download killed a seven-hour run at build 165 of 277 with
+    // "Parser cannot parse input: expected ':'" — the file was the right size
+    // and ended correctly, so the damage was somewhere in the middle. Losing
+    // the remaining 112 builds to one bad file is far worse than losing the
+    // file: consecutive builds overlap by ~90 days against a ~7 day spacing, so
+    // a single missing build costs no coverage at all. `audit:archive` reports
+    // whether that assumption still holds.
+    let outcome: VersionResult;
+    try {
+      outcome = await ingestArchiveBuild(
+        db,
+        sqlite,
+        build,
+        uuidToPrinting,
+        held,
+        watermark,
+        options,
+      );
+    } catch (error) {
+      const message = (error as Error).message;
+      log(`  UNREADABLE ${build.label}: ${message}`);
+      results.unreadable.push({ label: build.label, message });
+      continue;
+    }
 
     log(
       `  ${outcome.version} (${outcome.buildDate}): ` +
