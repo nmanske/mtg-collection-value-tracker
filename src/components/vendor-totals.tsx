@@ -1,4 +1,7 @@
-import type { CollectionTotalsByVendor } from "@/db/queries/vendors";
+import {
+  type CollectionTotalsByVendor,
+  STALE_AFTER_DAYS,
+} from "@/db/queries/vendors";
 import type { MarketSide, Vendor } from "@/db/schema";
 import { formatUsd } from "@/lib/format";
 
@@ -92,6 +95,20 @@ export function VendorTotals({
                       shapes; the number only matters when it is short. */}
                   {row.missing === 0 ? (
                     <span>all {holdingCount.toLocaleString()}</span>
+                  ) : row.stale > 0 ? (
+                    // Named rather than folded into "missing": a card the shop
+                    // never quotes and one it quoted three years ago are
+                    // different facts, and only the second looks like a bug
+                    // when the totals move.
+                    <span className="text-amber-600 dark:text-amber-400">
+                      {row.covered.toLocaleString()} of{" "}
+                      {holdingCount.toLocaleString()}
+                      <span className="text-neutral-500">
+                        {" "}
+                        · {row.stale.toLocaleString()} last quoted over{" "}
+                        {STALE_AFTER_DAYS} days ago, excluded
+                      </span>
+                    </span>
                   ) : (
                     <span
                       className={
@@ -134,8 +151,10 @@ export function VendorTotals({
         Totals only span the holdings a vendor actually quotes, so a smaller
         figure may mean thinner coverage rather than a lower price — check the
         &ldquo;covers&rdquo; column before reading it as a discount.
-        &ldquo;Priced&rdquo; is the date these prices come from; a card a shop
-        has stopped listing keeps its last price rather than dropping out.
+        &ldquo;Priced&rdquo; is the date these prices come from. A card a shop
+        has not quoted in {STALE_AFTER_DAYS} days is left out of the total
+        rather than counted at a price nobody would honour today, which is why
+        a buylist figure can cover fewer cards than a retail one.
       </p>
     </section>
   );

@@ -45,8 +45,17 @@ function Row({
       <td className="py-1.5 pr-4 text-right text-xs tabular-nums text-neutral-500">
         {ratio != null ? `${Math.round(ratio * 100)}% of retail` : ""}
       </td>
-      <td className="py-1.5 text-right text-xs tabular-nums text-neutral-400">
+      <td
+        className={`py-1.5 text-right text-xs tabular-nums ${
+          quote.stale
+            ? "text-amber-600 dark:text-amber-400"
+            : "text-neutral-400"
+        }`}
+      >
         {quote.date}
+        {quote.stale ? (
+          <span className="ml-1 font-medium">not current</span>
+        ) : null}
       </td>
     </tr>
   );
@@ -102,6 +111,10 @@ export function VendorQuotes({ quotes }: { quotes: VendorQuote[] }) {
         {buylist.length === 0
           ? "No vendor publishes a buylist price for this printing."
           : `"Pays" is what that shop offers for the card, not the market.`}
+        {quotes.some((quote) => quote.stale)
+          ? " A quote marked not current is the last price that shop published" +
+            " for this card; it is shown here but left out of collection totals."
+          : ""}
       </p>
     </div>
   );

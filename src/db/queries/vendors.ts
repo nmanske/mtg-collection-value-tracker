@@ -98,6 +98,24 @@ const ALL_VENDOR_PRICES = SERIES.map(
     from (${source})`,
 ).join("\n  union all\n");
 
+/**
+ * How far behind a series' own newest date a quote may be and still count.
+ *
+ * Measured against the newest date *that series* has anywhere, not against
+ * today. Both alternatives are wrong: "today" would mark everything stale the
+ * moment the daily job misses a run, and a global newest date would penalise a
+ * vendor whose feed lags. A per-series baseline moves with the data, so a hole
+ * in our own history shifts the baseline and every card together and changes
+ * nothing.
+ *
+ * Thirty days because these vendors publish roughly daily, so a month of
+ * silence on one card means it was delisted rather than that the feed paused.
+ * The real distribution is nowhere near the line: against a real collection the
+ * split is 3,555 holdings quoted within a day against 122 last quoted three
+ * years ago, so any threshold between a month and a year picks the same cards.
+ */
+export const STALE_AFTER_DAYS = 30;
+
 function client(db: Db) {
   return (db as unknown as { $client: import("better-sqlite3").Database })
     .$client;
@@ -108,6 +126,16 @@ export interface VendorQuote {
   side: MarketSide;
   priceCents: number;
   date: string;
+  /**
+   * Too far behind this series' newest data to be treated as current.
+   *
+   * Flagged here rather than dropped, which is the opposite of what the
+   * collection totals do with the same quote. A total is a sum and must not
+   * silently include a price nobody would honour; a single card's page is
+   * answering "what is this worth", and "last quoted three years ago" is a
+   * better answer than showing nothing at all.
+   */
+  stale: boolean;
 }
 
 interface RawQuote {
@@ -134,18 +162,27 @@ export function vendorQuotes(
     .prepare(
       `select vendor, side,
               -- SQLite takes the non-aggregated columns from the max() row.
-              max(date) as date, price_cents as priceCents
-         from (${ALL_VENDOR_PRICES})
+              max(date) as date, price_cents as priceCents,
+              -- Judged against the whole series, not this card: the question is
+              -- whether the vendor has priced *this card* recently, and only
+              -- the series says what recent means.
+              (select date(max(date), '-${STALE_AFTER_DAYS} day')
+                 from (${ALL_VENDOR_PRICES}) c
+                where c.vendor = s.vendor and c.side = s.side) as cutoff
+         from (${ALL_VENDOR_PRICES}) s
         where printing_key = ? and finish = ?
         group by vendor, side`,
     )
-    .all(printingKey, FINISH_CODES[finish]) as RawQuote[];
+    .all(printingKey, FINISH_CODES[finish]) as (RawQuote & {
+    cutoff: string | null;
+  })[];
 
   return rows.map((row) => ({
     vendor: VENDOR_BY_CODE.get(row.vendor)!,
     side: SIDE_BY_CODE.get(row.side)!,
     priceCents: row.priceCents,
     date: row.date,
+    stale: row.cutoff != null && row.date < row.cutoff,
   }));
 }
 
@@ -157,6 +194,8 @@ export interface CollectionTotalsByVendor {
   covered: number;
   /** Holdings it does not, which are simply absent from the total. */
   missing: number;
+  /** Holdings this vendor quotes, but too long ago to count. Excluded above. */
+  stale: number;
   /** The most recent quote in the total. */
   date: string | null;
   /**
@@ -187,16 +226,34 @@ export function collectionByVendor(db: Db): CollectionTotalsByVendor[] {
   // per series means visiting every date in that series. Each subquery here
   // instead matches the full primary-key prefix — (printing_key, finish) on
   // snapshots, plus (vendor, side) on vendor_prices — and reads one row.
+  // Each series' cutoff, resolved once here rather than as a scalar subquery
+  // re-evaluated per holding.
+  const cutoffs = new Map<string, string | null>();
+  for (const { vendor, side, source } of SERIES) {
+    const row = client(db)
+      .prepare(
+        `select date(max(date), '-${STALE_AFTER_DAYS} day') as cutoff
+           from (${source})`,
+      )
+      .get() as { cutoff: string | null } | undefined;
+    cutoffs.set(`${vendor}.${side}`, row?.cutoff ?? null);
+  }
+
   const selects = SERIES.map(({ vendor, side, source }) => {
     const latest = (column: string) => `(
       select ${column} from (${source}) x
        where x.printing_key = h.printing_key and x.finish = h.finish
        order by x.date desc limit 1)`;
+    const cutoff = cutoffs.get(`${vendor}.${side}`);
+    // With no data at all there is nothing for a quote to be stale against.
+    const fresh = cutoff ? `seen >= '${cutoff}'` : "1";
+
     return `select ${VENDOR_CODES[vendor]} as vendor, ${SIDE_CODES[side]} as side,
-                   sum(quantity * cents) as totalCents,
-                   count(cents) as covered,
-                   max(seen) as date,
-                   min(seen) as oldestDate
+                   sum(case when ${fresh} then quantity * cents end) as totalCents,
+                   count(case when ${fresh} then cents end) as covered,
+                   count(case when cents is not null and not (${fresh}) then 1 end) as stale,
+                   max(case when ${fresh} then seen end) as date,
+                   min(case when ${fresh} then seen end) as oldestDate
               from (select h.quantity as quantity,
                            ${latest("x.price_cents")} as cents,
                            ${latest("x.date")} as seen
@@ -209,6 +266,7 @@ export function collectionByVendor(db: Db): CollectionTotalsByVendor[] {
   > & {
     totalCents: number | null;
     covered: number;
+    stale: number;
     oldestDate: string | null;
   })[];
 
@@ -223,6 +281,8 @@ export function collectionByVendor(db: Db): CollectionTotalsByVendor[] {
       side: SIDE_BY_CODE.get(row.side)!,
       totalCents: row.totalCents ?? 0,
       covered: row.covered,
+      stale: row.stale,
+      // A stale holding is missing from the total, because it is.
       missing: totalHoldings - row.covered,
       date: row.date,
       oldestDate: row.oldestDate,

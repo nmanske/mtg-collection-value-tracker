@@ -96,12 +96,13 @@ different collections, which the UI has to say rather than imply.
 
 ## Known issues
 
-- **Stale vendor quotes.** If a shop stops listing a card, its last price stays
-  in the totals and on the card page forever. Two holdings are currently priced
-  from January 2022 this way. The "Priced" column discloses the newest date and
-  carries the oldest as a tooltip, but nothing excludes or flags a stale figure.
-  A "drop quotes more than N days behind the newest data" rule would fix the
-  class.
+- ~~**Stale vendor quotes.**~~ Done. A quote more than `STALE_AFTER_DAYS` (30)
+  behind its own series' newest date is excluded from collection totals and
+  flagged "not current" on the card page. Measured against a real collection
+  that removes 188 Card Kingdom buylist holdings, last quoted in 2023, from a
+  figure that had been presenting them as today's offer. Threshold is measured
+  per series rather than against today, so a missed daily run does not mark the
+  whole collection stale.
 - **`next build` runs out of memory.** Fails with `memory allocation of
   ~950 MB failed`, including with the backfill stopped, so it is not the
   ingest's page cache. Untriaged. `next dev` is unaffected.

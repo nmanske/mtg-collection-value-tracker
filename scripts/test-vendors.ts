@@ -203,6 +203,68 @@ db.delete(vendorPrices)
   )
   .run();
 
+// --- stale quotes ---
+
+// A shop that stops listing a card keeps its last price forever. Counting it
+// in a total presents a price nobody would honour as today's, so it is
+// excluded -- but the card page still shows it, because "last quoted three
+// years ago" beats showing nothing for a single card.
+const GAMMA = printing("3", "Gamma");
+db.insert(holdings)
+  .values({
+    printingKey: GAMMA,
+    quantity: 5,
+    finish: "nonfoil",
+    condition: "NM",
+    dateAdded: "2026-01-01",
+    source: "moxfield",
+    createdAt: new Date(),
+  })
+  .run();
+db.insert(priceSnapshots)
+  .values({ printingKey: GAMMA, finish: "nonfoil", date: "2026-01-02", priceCents: 100, source: "mtgjson" })
+  .run();
+db.insert(vendorPrices)
+  .values([
+    // Well past the cutoff relative to Card Kingdom's newest date (2026-01-02).
+    { printingKey: GAMMA, finish: "nonfoil", vendor: "cardkingdom", side: "retail", date: "2023-05-01", priceCents: 9_900 },
+  ])
+  .run();
+
+const withStale = new Map(
+  collectionByVendor(db).map((row) => [`${row.vendor}.${row.side}`, row]),
+);
+const ckRetailNow = withStale.get("cardkingdom.retail")!;
+assert.equal(ckRetailNow.stale, 1, "the delisted card is counted as stale");
+assert.equal(
+  ckRetailNow.totalCents,
+  2 * 1_200,
+  "a stale price must not reach the total, however large",
+);
+assert.ok(
+  !String(ckRetailNow.totalCents).includes("9900"),
+  "sanity: the $99 stale price is nowhere in the sum",
+);
+// Stale holdings are missing from the total, so coverage must say so rather
+// than counting them as served.
+assert.equal(ckRetailNow.covered, 1);
+assert.equal(ckRetailNow.missing, countHoldings(db) - ckRetailNow.covered);
+
+// The series that is fully current reports no stale rows at all.
+assert.equal(withStale.get("tcgplayer.retail")!.stale, 0);
+
+// On a card page the same quote is shown, flagged rather than hidden.
+const gammaQuotes = vendorQuotes(db, GAMMA, "nonfoil");
+const gammaCk = gammaQuotes.find((q) => q.vendor === "cardkingdom")!;
+assert.equal(gammaCk.priceCents, 9_900);
+assert.equal(gammaCk.stale, true, "an old quote is marked, not dropped");
+// And a current one is not flagged.
+assert.equal(
+  vendorQuotes(db, ALPHA, "nonfoil").find((q) => q.vendor === "cardkingdom")!
+    .stale,
+  false,
+);
+
 // --- series ---
 const series = vendorSeries(db, ALPHA, "nonfoil", "tcgplayer", "retail");
 assert.deepEqual(
