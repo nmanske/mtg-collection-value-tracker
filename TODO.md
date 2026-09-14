@@ -6,25 +6,8 @@ Working list. Newest context at the bottom of each item.
 
 ### 1. Fill gaps in the price timeline
 
-The series has holes. Measured 2026-09-11, with the archive backfill still
-running:
-
-```
-628 distinct dates, 2020-12-15 .. 2026-09-11
-39 gaps, 1,469 missing days total
-```
-
-Three kinds, and they need different answers:
-
-- **The 1,397-day hole between 2022-08-13 and 2026-06-11** is just the archive
-  backfill not having reached those builds yet. It closes on its own.
-- **Single missing days near the present** — 2026-09-10, 2026-08-29,
-  2026-08-06. `AllPricesToday` only carries the current day, so a day the job
-  did not run is gone unless an archived build covers it. Nothing currently
-  notices or backfills these.
-- **Runs of 4-14 days in 2021** (the largest: 2020-12-20 to 2021-01-04) are
-  days MTGJSON itself did not publish, or builds that failed to download.
-  Probably unfillable; worth confirming against `audit:archive` before assuming.
+The series has holes, and they have four different causes — only one of which
+is worth acting on.
 
 **Reporting is done** — `npm run audit:gaps` classifies every run by cause, so
 the list is actionable rather than 1,400 bare dates. Latest run:
