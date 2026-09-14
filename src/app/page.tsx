@@ -5,6 +5,12 @@ import { PortfolioSummaryPanel } from "@/components/portfolio-summary";
 import { VendorTotals } from "@/components/vendor-totals";
 import { RemoveHoldingButton } from "@/components/remove-holding-button";
 import { listHoldings } from "@/db/queries/holdings";
+import { CollectionControls } from "@/components/collection-controls";
+import {
+  collectionHref,
+  resolveFilter,
+  resolveSort,
+} from "@/lib/collection-view";
 import {
   portfolioSummary,
   PRICE_VENDORS,
@@ -23,13 +29,31 @@ export const dynamic = "force-dynamic";
 
 export default async function CollectionPage(props: PageProps<"/">) {
   // searchParams is a Promise in Next 16.
-  const { page, range, prices } = await props.searchParams;
+  const { page, range, prices, sort, filter, q } = await props.searchParams;
   const priceSource: PriceVendor =
     typeof prices === "string" && (PRICE_VENDORS as readonly string[]).includes(prices)
       ? (prices as PriceVendor)
       : "tcgplayer";
-  const { rows, totalCards, unpricedCount, holdingCount, pageCount, page: current } =
-    listHoldings(db, Number(page) || 1);
+  const activeSort = resolveSort(typeof sort === "string" ? sort : undefined);
+  const activeFilter = resolveFilter(
+    typeof filter === "string" ? filter : undefined,
+  );
+  const search = typeof q === "string" ? q : "";
+
+  const {
+    rows,
+    totalCards,
+    unpricedCount,
+    holdingCount,
+    pageCount,
+    page: current,
+    matched,
+  } = listHoldings(db, {
+    page: Number(page) || 1,
+    sort: activeSort,
+    filter: activeFilter,
+    search,
+  });
   const summary = portfolioSummary(db, priceSource);
   const vendorTotals = collectionByVendor(db);
 
@@ -89,6 +113,16 @@ export default async function CollectionPage(props: PageProps<"/">) {
           price from any source and {unpricedCount === 1 ? "is" : "are"} excluded
           from the total above.
         </p>
+      ) : null}
+
+      {holdingCount > 0 ? (
+        <CollectionControls
+          sort={activeSort}
+          filter={activeFilter}
+          search={search}
+          matched={matched}
+          total={holdingCount}
+        />
       ) : null}
 
       {rows.length === 0 ? (
@@ -203,7 +237,12 @@ export default async function CollectionPage(props: PageProps<"/">) {
         >
           {current > 1 ? (
             <Link
-              href={`/?page=${current - 1}`}
+              href={collectionHref({
+                sort: activeSort,
+                filter: activeFilter,
+                search,
+                page: current - 1,
+              })}
               className="rounded-md border border-neutral-300 px-3 py-1.5 hover:bg-neutral-50 dark:border-neutral-700 dark:hover:bg-neutral-900"
             >
               Previous
@@ -218,7 +257,12 @@ export default async function CollectionPage(props: PageProps<"/">) {
 
           {current < pageCount ? (
             <Link
-              href={`/?page=${current + 1}`}
+              href={collectionHref({
+                sort: activeSort,
+                filter: activeFilter,
+                search,
+                page: current + 1,
+              })}
               className="rounded-md border border-neutral-300 px-3 py-1.5 hover:bg-neutral-50 dark:border-neutral-700 dark:hover:bg-neutral-900"
             >
               Next

@@ -1,6 +1,13 @@
 import { and, asc, desc, eq, sql } from "drizzle-orm";
 
+import { FINISH_CODES } from "@/db/codec";
 import type { Db } from "@/db/queries/printings";
+import {
+  DEFAULT_FILTER,
+  DEFAULT_SORT,
+  type FilterId,
+  type SortId,
+} from "@/lib/collection-view";
 import {
   type Condition,
   type Finish,
@@ -50,6 +57,15 @@ export interface CollectionPage extends CollectionTotals {
   rows: HoldingRow[];
   page: number;
   pageCount: number;
+  /**
+   * Holdings matching the current filter and search.
+   *
+   * Distinct from `holdingCount`, which stays the whole collection. A filtered
+   * view must not make the headline value drop — that reads as cards having
+   * been lost rather than hidden — so the totals describe everything and this
+   * describes what is on screen.
+   */
+  matched: number;
 }
 
 /** Rows per page. Rendering a whole 4,000-holding collection at once costs
@@ -102,10 +118,22 @@ export function collectionTotals(db: Db): CollectionTotals {
  * grouped scan used for search: a collection is small, and this keeps each
  * lookup on the price table's primary key.
  */
-export function listHoldings(db: Db, page = 1): CollectionPage {
+export interface ListOptions {
+  page?: number;
+  sort?: SortId;
+  filter?: FilterId;
+  /** Case-insensitive substring of the card or set name. */
+  search?: string;
+}
+
+export function listHoldings(
+  db: Db,
+  options: ListOptions = {},
+): CollectionPage {
   const totals = collectionTotals(db);
-  const pageCount = Math.max(1, Math.ceil(totals.holdingCount / PAGE_SIZE));
-  const current = Math.min(Math.max(1, Math.trunc(page) || 1), pageCount);
+  const sort = options.sort ?? DEFAULT_SORT;
+  const filter = options.filter ?? DEFAULT_FILTER;
+  const search = options.search?.trim() ?? "";
 
   const latestPrice = sql<number | null>`(
     select ps.price_cents
@@ -124,6 +152,80 @@ export function listHoldings(db: Db, page = 1): CollectionPage {
     order by ps.date desc
     limit 1
   )`;
+
+  // The filter and search have to be applied before paging, and the count of
+  // matches has to come from the same predicate — otherwise the page count
+  // describes the whole collection while the rows describe a subset, and the
+  // last pages are empty.
+  const unitPrice = sql`coalesce(${holdings.priceOverrideCents}, ${latestPrice})`;
+  const conditions = [];
+
+  if (filter === "foil") {
+    conditions.push(
+      sql`${holdings.finish} in (${FINISH_CODES.foil}, ${FINISH_CODES.etched})`,
+    );
+  } else if (filter === "unpriced") {
+    conditions.push(sql`${unitPrice} is null`);
+  } else if (filter === "inferred") {
+    conditions.push(eq(holdings.dateAddedApprox, true));
+  }
+
+  if (search) {
+    // Matched against the set name too: "ravnica" is how people look for a
+    // set, and the code alone would not find it.
+    const like = `%${search.toLowerCase()}%`;
+    conditions.push(
+      sql`(lower(${printings.name}) like ${like}
+           or lower(${printings.setName}) like ${like}
+           or lower(${printings.setCode}) like ${like})`,
+    );
+  }
+
+  const where = conditions.length > 0 ? and(...conditions) : undefined;
+
+  const matched =
+    db
+      .select({ n: sql<number>`count(*)` })
+      .from(holdings)
+      .innerJoin(printings, eq(printings.id, holdings.printingKey))
+      .where(where)
+      .get()?.n ?? 0;
+
+  const pageCount = Math.max(1, Math.ceil(matched / PAGE_SIZE));
+  const current = Math.min(
+    Math.max(1, Math.trunc(options.page ?? 1) || 1),
+    pageCount,
+  );
+
+  // Every ordering ends with a unique-enough tiebreak. Without one, SQLite is
+  // free to return equal rows in any order, and a holding could appear on two
+  // pages or on none as the reader pages through.
+  const ordering = {
+    // Line value, not unit price: two copies of a $50 card outrank one $80
+    // card in what the collection is actually worth. Nulls last, so unpriced
+    // holdings do not lead a list sorted by value.
+    value: [
+      sql`case when ${unitPrice} is null then 1 else 0 end`,
+      sql`${unitPrice} * ${holdings.quantity} desc`,
+      asc(printings.name),
+      asc(holdings.id),
+    ],
+    name: [asc(printings.name), asc(printings.setCode), asc(holdings.id)],
+    acquired: [
+      desc(holdings.dateAdded),
+      asc(printings.name),
+      asc(holdings.id),
+    ],
+    quantity: [desc(holdings.quantity), asc(printings.name), asc(holdings.id)],
+    set: [
+      asc(printings.setCode),
+      // Collector numbers are text and sort "10" before "9"; padding compares
+      // them as the numbers they are wherever they are numeric.
+      sql`cast(${printings.collectorNumber} as integer)`,
+      asc(printings.collectorNumber),
+      asc(holdings.id),
+    ],
+  }[sort];
 
   const rows = db
     .select({
@@ -146,7 +248,8 @@ export function listHoldings(db: Db, page = 1): CollectionPage {
     })
     .from(holdings)
     .innerJoin(printings, eq(printings.id, holdings.printingKey))
-    .orderBy(desc(holdings.dateAdded), asc(printings.name))
+    .where(where)
+    .orderBy(...ordering)
     .limit(PAGE_SIZE)
     .offset((current - 1) * PAGE_SIZE)
     .all();
@@ -180,7 +283,10 @@ export function listHoldings(db: Db, page = 1): CollectionPage {
     };
   });
 
-  return { ...totals, rows: result, page: current, pageCount };
+  // `totals` stays the whole collection: a filtered view should not make the
+  // headline value drop, which would read as cards having been lost rather
+  // than hidden. `matched` says how much of it is on screen.
+  return { ...totals, rows: result, page: current, pageCount, matched };
 }
 
 /**

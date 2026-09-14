@@ -294,16 +294,16 @@ assert.equal(overriddenLotus.unitPriceCents, 2_500_000);
 // --- paging ---
 // Totals must cover the whole collection regardless of which page is shown,
 // or the headline value would change as the user pages through the table.
-const paged = listHoldings(db, 1);
+const paged = listHoldings(db, { page: 1 });
 assert.equal(paged.page, 1);
 assert.equal(paged.pageCount, 1);
 assert.equal(paged.holdingCount, 4);
 // An out-of-range or nonsense page clamps rather than returning nothing.
-assert.equal(listHoldings(db, 99).page, 1);
-assert.equal(listHoldings(db, 0).page, 1);
-assert.equal(listHoldings(db, -5).page, 1);
-assert.equal(listHoldings(db, Number.NaN).page, 1);
-assert.equal(listHoldings(db, 99).totalValueCents, paged.totalValueCents);
+assert.equal(listHoldings(db, { page: 99 }).page, 1);
+assert.equal(listHoldings(db, { page: 0 }).page, 1);
+assert.equal(listHoldings(db, { page: -5 }).page, 1);
+assert.equal(listHoldings(db, { page: Number.NaN }).page, 1);
+assert.equal(listHoldings(db, { page: 99 }).totalValueCents, paged.totalValueCents);
 
 // The aggregate totals must agree with summing the rows by hand.
 const byHand = paged.rows.reduce(
@@ -316,6 +316,59 @@ assert.equal(paged.totalValueCents, byHand);
 assert.equal(removeHolding(db, first.id), true);
 assert.equal(removeHolding(db, first.id), false);
 assert.equal(countHoldings(db), 3);
+
+// --- sorting, filtering, search ---
+
+// Sorting by value uses the *line* value, not the unit price: two copies of a
+// cheap card can outrank one expensive card in what the collection holds.
+const byValue = listHoldings(db, { sort: "value" }).rows;
+const lineValues = byValue.map((row) => (row.unitPriceCents ?? 0) * row.quantity);
+assert.deepEqual(
+  lineValues.filter((v) => v > 0),
+  [...lineValues.filter((v) => v > 0)].sort((a, b) => b - a),
+  "priced rows descend by line value",
+);
+// Unpriced holdings sort last rather than leading a list of most-valuable
+// cards, which is where a plain descending sort would put a null.
+const firstUnpriced = byValue.findIndex((row) => row.unitPriceCents == null);
+if (firstUnpriced !== -1) {
+  assert.ok(
+    byValue.slice(firstUnpriced).every((row) => row.unitPriceCents == null),
+    "unpriced holdings are grouped at the end",
+  );
+}
+
+const byName = listHoldings(db, { sort: "name" }).rows.map((row) => row.name);
+assert.deepEqual(byName, [...byName].sort((a, b) => a.localeCompare(b)));
+
+// Filters narrow the rows, and the count of matches must come from the same
+// predicate — otherwise the page count describes the collection while the rows
+// describe a subset, and the last pages render empty.
+const foils = listHoldings(db, { filter: "foil" });
+assert.ok(foils.rows.every((row) => row.finish !== "nonfoil"));
+assert.equal(foils.matched, foils.rows.length);
+
+const unpricedOnly = listHoldings(db, { filter: "unpriced" });
+assert.ok(unpricedOnly.rows.every((row) => row.unitPriceCents == null));
+assert.equal(unpricedOnly.matched, unpricedOnly.rows.length);
+
+// The headline totals stay the whole collection whatever is filtered: a view
+// that hides cards must not read as cards having been lost.
+const all = listHoldings(db, {});
+assert.equal(foils.totalValueCents, all.totalValueCents);
+assert.equal(foils.holdingCount, all.holdingCount);
+assert.ok(foils.matched < all.matched, "the filter actually narrowed something");
+
+// Search matches the card name and the set, case-insensitively.
+const firstName = all.rows[0].name;
+const searched = listHoldings(db, {
+  search: firstName.slice(0, 4).toUpperCase(),
+});
+assert.ok(searched.rows.some((row) => row.name === firstName));
+assert.equal(searched.matched, searched.rows.length);
+assert.equal(listHoldings(db, { search: "zzzznotacard" }).matched, 0);
+// An empty result still clamps to a valid page rather than reporting page 0.
+assert.equal(listHoldings(db, { search: "zzzznotacard" }).page, 1);
 
 sqlite.close();
 cleanup();

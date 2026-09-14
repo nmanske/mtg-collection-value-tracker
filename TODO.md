@@ -100,6 +100,24 @@ stale holdings and the time series does not. That is correct in both places (a
 today), but the UI does not explain the gap, and someone comparing the two
 numbers will notice.
 
+### 5. Collection sort, filter and search — done
+
+The list was 3,724 holdings at 100 a page ordered by acquisition date, with no
+other control: 38 pages, and no way to answer "what are my most valuable cards"
+or "show me my foils". `/search` did not help — it searches every printing that
+exists, not the ones you own.
+
+`?sort=` takes value, name, acquired, quantity or set; `?filter=` takes foil,
+unpriced or inferred-date; `?q=` matches card name, set name or set code. All
+are links rather than a form, so every view has a shareable URL and the page
+still works without JavaScript.
+
+Sorting by value uses the *line* value, so two copies of a cheap card can
+outrank one expensive one, and unpriced holdings sort last rather than leading
+a most-valuable list. The headline totals deliberately stay the whole
+collection when a filter is active — a view that hides cards must not read as
+cards having been lost — and the count of matches says what is on screen.
+
 ## Known issues
 
 - ~~**Stale vendor quotes.**~~ Done. A quote more than `STALE_AFTER_DAYS` (30)
