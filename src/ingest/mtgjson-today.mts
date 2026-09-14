@@ -45,6 +45,15 @@ export const TODAY_SYNC_KEY = "mtgjson_today_version";
 export interface TodayOptions {
   /** Re-run even if this build was already recorded. */
   force?: boolean;
+  /**
+   * Read this file instead of downloading.
+   *
+   * The only seam the tests need: everything downstream — the meta read, the
+   * skip-if-unchanged check, the parse, the sync key — runs unchanged against a
+   * fixture. Without it the daily job could only be verified by hitting the
+   * network, which is why it had no tests at all.
+   */
+  fixturePath?: string;
   dryRun?: boolean;
   cacheDir?: string;
   log?: (message: string) => void;
@@ -99,8 +108,8 @@ export async function ingestMtgjsonToday(
   const cacheDir = options.cacheDir ?? "./data/cache";
   await mkdir(cacheDir, { recursive: true });
 
-  const path = join(cacheDir, "AllPricesToday.json.gz");
-  await download(path, log);
+  const path = options.fixturePath ?? join(cacheDir, "AllPricesToday.json.gz");
+  if (!options.fixturePath) await download(path, log);
 
   // Read from the file's own header rather than a separate Meta.json request:
   // one fetch, and no chance of pairing a version string with a file built at
@@ -127,7 +136,7 @@ export async function ingestMtgjsonToday(
 
   if (lastRun?.value === version && !options.force) {
     log("Already recorded this build; nothing to do.");
-    await unlink(path).catch(() => {});
+    if (!options.fixturePath) await unlink(path).catch(() => {});
     return { ...result, skipped: true };
   }
 
@@ -189,7 +198,8 @@ export async function ingestMtgjsonToday(
       .run();
   }
 
-  await unlink(path).catch(() => {});
+  // A fixture belongs to the caller; only a downloaded file is ours to remove.
+  if (!options.fixturePath) await unlink(path).catch(() => {});
   return result;
 }
 

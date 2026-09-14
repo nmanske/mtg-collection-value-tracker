@@ -137,7 +137,10 @@ export interface RebuildResult {
  * All four views in one transaction: a half-written cache that still matched
  * its fingerprint would serve a Card Kingdom line against TCGplayer totals.
  */
-export function rebuildPortfolioCache(db: Db, log = (_: string) => {}): RebuildResult {
+export function rebuildPortfolioCache(
+  db: Db,
+  log: (message: string) => void = () => {},
+): RebuildResult {
   const started = Date.now();
   const sqlite = (db as unknown as { $client: import("better-sqlite3").Database })
     .$client;

@@ -112,10 +112,11 @@ numbers will notice.
 - **`next build` runs out of memory.** Fails with `memory allocation of
   ~950 MB failed`, including with the backfill stopped, so it is not the
   ingest's page cache. Untriaged. `next dev` is unaffected.
-- **No automated test for the daily ingest.** `mtgjson-today.mts` is
-  network-bound and the suite has no fixtures for that. The parser beneath it
-  is covered by the archive tests; the download, skip-if-unchanged and sync-key
-  paths are not.
+- ~~**No automated test for the daily ingest.**~~ Done. `test:today` drives the
+  whole job from a gzipped fixture: an unmapped uuid, a build already recorded,
+  `--force`, a new build, a dry run that must not mark the build done, and the
+  vendor rules (Cardmarket's euros and MTGO's ticket prices excluded, TCGplayer
+  retail kept out of `vendor_prices`). Only the HTTP fetch itself is unexercised.
 
 ## Housekeeping
 
