@@ -58,6 +58,10 @@ function printReport(report: ImportReport) {
           : `import date (${report.dateAdded})`,
     "  date range": `${report.earliestDate ?? "-"} .. ${report.latestDate ?? "-"}`,
     "  fell back to import date": report.datesFellBack,
+    // The floor cluster: rows on the export's earliest date, whose acquisition
+    // date is a lower bound rather than a fact. Reported because it is the
+    // difference between the chart showing years of history and showing zero.
+    "  acquisition date inferred": report.inferredDates,
     "data rows": report.dataRows,
     "rows imported": report.importedRows,
     "  of which merged": report.mergedRows,

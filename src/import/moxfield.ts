@@ -472,24 +472,28 @@ export function importMoxfieldCsv(
       report.importedRows += 1;
       report.importedCards += count;
     });
-  };
 
-  // Rows at the export's earliest date carry an inferred acquisition date.
-  //
-  // Only knowable once the whole file is read, which is why this is a second
-  // pass rather than a decision per row. The rule is narrow on purpose: the
-  // floor is the one date the file proves nothing about, because a
-  // last-modified stamp can only ever have moved *forward*, so a row sitting on
-  // the minimum was acquired then or at any earlier time. Later dates are at
-  // least an upper bound that the file itself distinguishes.
-  if (dateSource === "modified" && report.earliestDate) {
-    for (const holding of desired) {
-      if (holding.dateAdded === report.earliestDate) {
-        holding.dateAddedApprox = true;
-        report.inferredDates += 1;
+    // Rows at the export's earliest date carry an inferred acquisition date.
+    //
+    // Inside `apply`, after the loop, because the earliest date is only known
+    // once every row has been read — and because `desired` is empty until
+    // `apply` runs, which is what made the first attempt at this silently flag
+    // nothing at all.
+    //
+    // The rule is narrow on purpose: the floor is the one date the file proves
+    // nothing about, since a last-modified stamp can only ever have moved
+    // *forward*, so a row sitting on the minimum was acquired then or at any
+    // earlier time. Later dates are at least an upper bound the file itself
+    // distinguishes.
+    if (dateSource === "modified" && report.earliestDate) {
+      for (const holding of desired) {
+        if (holding.dateAdded === report.earliestDate) {
+          holding.dateAddedApprox = true;
+          report.inferredDates += 1;
+        }
       }
     }
-  }
+  };
 
   const mode = options.mode ?? "replace";
 

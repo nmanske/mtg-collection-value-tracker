@@ -225,6 +225,33 @@ assert.equal(dated.datesFellBack, 0);
 assert.equal(dated.earliestDate, "2024-12-17");
 assert.equal(dated.latestDate, "2026-01-28");
 
+// Rows on the export's earliest date carry a floor, not a fact: a
+// last-modified stamp only ever moves forward, so the minimum says "then or
+// earlier" and nothing more. Exactly one row here sits on it.
+assert.equal(dated.inferredDates, 1);
+
+// Two rows sharing the floor are both flagged — this is what a bulk upload
+// looks like, and against a real export it is 539 of 4,500 rows.
+const twoAtFloor = importMoxfieldCsv(
+  db,
+  [
+    HEADER,
+    lmRow("1", "Forest", "blb", "280", "2024-12-17 04:22:33.483000"),
+    lmRow("1", "Jace, the Mind Sculptor", "wwk", "31", "2024-12-17 09:00:00.000000"),
+    lmRow("1", "Fire // Ice", "apc", "128", "2026-01-28 02:18:06.483000"),
+  ].join("\n"),
+  { dryRun: true },
+);
+assert.equal(twoAtFloor.inferredDates, 2);
+
+// A fixed date is a decision the user made, not a floor the file implies, so
+// nothing is inferred.
+assert.equal(
+  importMoxfieldCsv(db, datedCsv, { dryRun: true, dateAdded: "2020-01-01" })
+    .inferredDates,
+  0,
+);
+
 // The time component is dropped: price snapshots are daily.
 const written = importMoxfieldCsv(db, datedCsv, {});
 assert.equal(written.importedRows, 3);
