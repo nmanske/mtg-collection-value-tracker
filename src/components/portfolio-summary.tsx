@@ -184,13 +184,14 @@ export function PortfolioSummaryPanel({
 
       {visible.some((point) => point.inferredHoldings > 0) ? (
         <p className="mt-3 max-w-prose text-xs text-amber-700 dark:text-amber-400">
-          {visible[0].inferredHoldings.toLocaleString()} holding
-          {visible[0].inferredHoldings === 1 ? " is" : "s are"} counted from the
-          start of this window because their acquisition date is unknown.
-          Moxfield exports a last-modified timestamp rather than a purchase
-          date, so cards already owned when a collection was first uploaded all
-          carry that day. They are valued throughout rather than appearing to
-          arrive at once, and are not counted as acquisitions.
+          {visible.at(-1)!.inferredHoldings.toLocaleString()} holding
+          {visible.at(-1)!.inferredHoldings === 1 ? "" : "s"} carry an
+          acquisition date that is a floor rather than a fact. Moxfield exports
+          a last-modified timestamp, not a purchase date, so cards already owned
+          when the collection was first uploaded all share that day — which is
+          the step in the line, not a day of buying. They are counted from that
+          date, so anything owned earlier is missing from the line before it,
+          and they are not marked as acquisitions.
         </p>
       ) : null}
 

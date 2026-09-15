@@ -93,11 +93,10 @@ export interface ValuePoint {
    * Of `holdingsHeld`, how many are counted on an inferred date.
    *
    * These are holdings whose acquisition date is a floor rather than a fact —
-   * see `holdings.date_added_approx`. They are counted from the start of price
-   * history because that is the least wrong option: the alternative is drawing
-   * a collection as worth nothing during years it demonstrably existed. The
-   * count travels with every point so the chart can say which part of the line
-   * rests on an assumption.
+   * see `holdings.date_added_approx`. They are counted from that date, which
+   * is an upper bound on when they were acquired, so the line understates
+   * rather than invents. The count travels with every point so the chart can
+   * say which part of it rests on a date the source could not give.
    */
   inferredHoldings: number;
 }
@@ -244,22 +243,37 @@ export function portfolioSeries(
     };
   }
 
-  // An inferred date is a floor, so the holding is counted from the beginning
-  // of history rather than from the day Moxfield happened to be updated.
-  const historyStart = dates[0];
+  // An inferred date is counted as given, not pulled back to the start of
+  // history.
+  //
+  // It was pulled back at first, reasoning that drawing $0 through years the
+  // cards demonstrably existed was the worse error. That was wrong twice over.
+  // Moxfield's floor says a card was acquired on or *before* that day and
+  // nothing more, so valuing 539 holdings from 2020 asserts three years of
+  // ownership the file cannot support — it replaced a known-wrong number with
+  // an unknowable one, and inflated the early history by roughly $900 to
+  // $1,200 in the process.
+  //
+  // And it duplicated the constant-basket line, which already answers "what
+  // would today's cards have been worth over this window" precisely by
+  // ignoring acquisition dates. The as-held line exists to answer the other
+  // question, and it cannot do that while quietly holding cards it has no
+  // evidence were held.
+  //
+  // The flag is still carried, because the date being a floor is worth saying.
   const rows: HoldingRow[] = held.map((row) => ({
     quantity: row.quantity,
-    dateAdded: row.dateAddedApprox ? historyStart : row.dateAdded,
+    dateAdded: row.dateAdded,
     inferred: row.dateAddedApprox,
     priceOverrideCents: row.priceOverrideCents,
     seriesKey: seriesKey(row.printingKey, FINISH_CODES[row.finish]),
   }));
 
   // Acquisitions per date, counted once rather than re-scanned per point.
-  // Inferred holdings are deliberately excluded: they did not arrive on the
-  // first day of price history, that is merely where we start counting them,
-  // and a tick mark claiming 673 cards were bought that day would be a worse
-  // lie than the one this fixes.
+  // Inferred holdings are deliberately excluded: the floor date is when the
+  // collection was typed into Moxfield, not when 539 cards were bought, and a
+  // tick mark that tall would read as a spending spree that never happened.
+  // The step in the line is explained in words instead.
   const acquired = new Map<string, { holdings: number; cards: number }>();
   for (const row of rows) {
     if (row.inferred) continue;

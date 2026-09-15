@@ -327,14 +327,23 @@ db.insert(holdings)
 const withInferred = portfolioSeries(db, {});
 const firstPoint = withInferred.points[0];
 
-// Counted from the first date, not from the day Moxfield was last touched.
-assert.equal(firstPoint.inferredHoldings, 1);
-assert.ok(
-  firstPoint.valueCents >= 1_000,
-  "an inferred holding contributes on the first date rather than showing zero",
+// Counted from its stamped date, which is an upper bound on when the card was
+// acquired -- never pulled back to the start of history. Doing that asserted
+// years of ownership the export cannot support, and duplicated the
+// constant-basket line, which answers that question properly by ignoring
+// acquisition dates altogether.
+assert.equal(firstPoint.inferredHoldings, 0);
+assert.equal(
+  withInferred.points.find((point) => point.date === "2026-01-05")!
+    .inferredHoldings,
+  1,
 );
-// And on every point after it, so the chart can mark the whole stretch.
-assert.ok(withInferred.points.every((point) => point.inferredHoldings === 1));
+assert.ok(
+  withInferred.points
+    .filter((point) => point.date < "2026-01-05")
+    .every((point) => point.inferredHoldings === 0),
+  "an inferred holding contributes nothing before its stamped date",
+);
 
 // It must not be reported as an acquisition anywhere: nothing was bought, that
 // is only where counting starts, and a tick mark claiming a purchase would be a
