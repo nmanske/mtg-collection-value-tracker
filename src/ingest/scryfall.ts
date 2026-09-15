@@ -254,6 +254,11 @@ export async function ingestScryfallBulk(
             setName: sql`excluded.set_name`,
             collectorNumber: sql`excluded.collector_number`,
             imageUri: sql`excluded.image_uri`,
+            // Every column that is written must also be updated here. Adding
+            // image_uri_large to the insert and not to this list meant a
+            // re-ingest populated it only on printings that happened to be
+            // new: 229 rows of 108,449, with no error anywhere.
+            imageUriLarge: sql`excluded.image_uri_large`,
             finishes: sql`excluded.finishes`,
             updatedAt: sql`excluded.updated_at`,
           },
