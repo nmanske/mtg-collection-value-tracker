@@ -136,9 +136,15 @@ cards having been lost — and the count of matches says what is on screen.
 
 ## Housekeeping
 
-- **Run `npm run finalize` when the backfill ends.** Gap audit, collection
-  import, cache rebuild, smoke test and `VACUUM INTO`, in dependency order.
-  Replaces the five steps that used to live in a chat log.
+- ~~**Run `npm run finalize` when the backfill ends.**~~ Done 2026-09-15.
+  1,952 days of prices, 2020-12-15 .. 2026-09-11. 145 missing days remain, of
+  which 144 were never published upstream and one is the missed daily run on
+  2026-09-10; **zero** are attributable to the corrupt `version_0165`, so
+  skipping it cost nothing. 539 acquisition dates inferred, cache rebuilt to
+  7,808 points, `VACUUM INTO` produced `data/mtg-compact.db` at 25.59 GB
+  (13% smaller).
+- **Replace `data/mtg.db` with `data/mtg-compact.db`** once you have verified
+  it — that file is also the one to copy to a server.
 - **The dashboard is slow while a bulk load runs** — 88s to no-response-in-120s
   during the backfill, against 0.9s with a warm cache. The backfill advances a
   watermark after every build, which correctly invalidates the cache, so every

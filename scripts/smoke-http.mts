@@ -45,7 +45,10 @@ const checks: Check[] = [
   },
   { path: "/?prices=cardkingdom", expect: ["Card Kingdom", "recharts"] },
   { path: "/?sort=value&filter=foil", expect: ["Sort", "Show"] },
-  { path: "/stats", expect: ["recharts", "Most valuable"] },
+  // No chart on this page — the first version of this check asserted one and
+  // failed on a page that was working perfectly. A marker has to be something
+  // the page actually renders.
+  { path: "/stats", expect: ["Most valuable", "Biggest"] },
   { path: "/search?q=sliver", expect: ["printing"] },
   { path: "/export", expect: ["Collection", "Value history"] },
   { path: "/import", expect: ["Moxfield"] },
@@ -58,16 +61,28 @@ async function check({ path, expect, reject }: Check) {
   // A bounded wait, so a hung page is reported as slow rather than hanging the
   // whole run. Generous, because a cold cache legitimately recomputes the
   // series, and that is slow rather than broken.
+  //
+  // Retried once on a timeout. `next dev` compiles a route on its first
+  // request, which made two genuinely working card pages fail a run and pass
+  // the next — a false positive is worse than useless here, because it teaches
+  // you to ignore the tool.
   const started = Date.now();
-  let response: Response;
-  try {
-    response = await fetch(url, { signal: AbortSignal.timeout(TIMEOUT_MS) });
-  } catch (error) {
-    const reason =
-      (error as Error).name === "TimeoutError"
-        ? `no response in ${TIMEOUT_MS / 1000}s`
-        : (error as Error).message;
-    console.log(`  FAIL ${path} — ${reason}`);
+  let response: Response | null = null;
+  let lastReason = "";
+
+  for (let attempt = 0; attempt < 2 && response === null; attempt += 1) {
+    try {
+      response = await fetch(url, { signal: AbortSignal.timeout(TIMEOUT_MS) });
+    } catch (error) {
+      lastReason =
+        (error as Error).name === "TimeoutError"
+          ? `no response in ${TIMEOUT_MS / 1000}s`
+          : (error as Error).message;
+    }
+  }
+
+  if (response === null) {
+    console.log(`  FAIL ${path} — ${lastReason} (twice)`);
     failures += 1;
     return;
   }

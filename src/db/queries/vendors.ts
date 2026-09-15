@@ -121,6 +121,29 @@ function client(db: Db) {
     .$client;
 }
 
+/**
+ * The date before which each series' quotes count as stale, keyed `vendor.side`.
+ *
+ * One indexed `max(date)` per series, resolved once. The first version asked
+ * this as a correlated subquery inside the per-card query, which made SQLite
+ * scan the whole union — 564 million rows — once per output group. The card
+ * page took over 90 seconds; `collectionByVendor` had already avoided the same
+ * trap, and this is that approach shared rather than reimplemented.
+ */
+function seriesCutoffs(db: Db): Map<string, string | null> {
+  const cutoffs = new Map<string, string | null>();
+  for (const { vendor, side, source } of SERIES) {
+    const row = client(db)
+      .prepare(
+        `select date(max(date), '-${STALE_AFTER_DAYS} day') as cutoff
+           from (${source})`,
+      )
+      .get() as { cutoff: string | null } | undefined;
+    cutoffs.set(`${vendor}.${side}`, row?.cutoff ?? null);
+  }
+  return cutoffs;
+}
+
 export interface VendorQuote {
   vendor: Vendor;
   side: MarketSide;
@@ -162,28 +185,31 @@ export function vendorQuotes(
     .prepare(
       `select vendor, side,
               -- SQLite takes the non-aggregated columns from the max() row.
-              max(date) as date, price_cents as priceCents,
-              -- Judged against the whole series, not this card: the question is
-              -- whether the vendor has priced *this card* recently, and only
-              -- the series says what recent means.
-              (select date(max(date), '-${STALE_AFTER_DAYS} day')
-                 from (${ALL_VENDOR_PRICES}) c
-                where c.vendor = s.vendor and c.side = s.side) as cutoff
-         from (${ALL_VENDOR_PRICES}) s
+              max(date) as date, price_cents as priceCents
+         from (${ALL_VENDOR_PRICES})
         where printing_key = ? and finish = ?
         group by vendor, side`,
     )
-    .all(printingKey, FINISH_CODES[finish]) as (RawQuote & {
-    cutoff: string | null;
-  })[];
+    .all(printingKey, FINISH_CODES[finish]) as RawQuote[];
 
-  return rows.map((row) => ({
-    vendor: VENDOR_BY_CODE.get(row.vendor)!,
-    side: SIDE_BY_CODE.get(row.side)!,
-    priceCents: row.priceCents,
-    date: row.date,
-    stale: row.cutoff != null && row.date < row.cutoff,
-  }));
+  // Staleness is judged against the whole series rather than this card: the
+  // question is whether the vendor has priced *this card* recently, and only
+  // the series says what recent means. Resolved once, outside the per-card
+  // query — see seriesCutoffs.
+  const cutoffs = seriesCutoffs(db);
+
+  return rows.map((row) => {
+    const vendor = VENDOR_BY_CODE.get(row.vendor)!;
+    const side = SIDE_BY_CODE.get(row.side)!;
+    const cutoff = cutoffs.get(`${vendor}.${side}`);
+    return {
+      vendor,
+      side,
+      priceCents: row.priceCents,
+      date: row.date,
+      stale: cutoff != null && row.date < cutoff,
+    };
+  });
 }
 
 export interface CollectionTotalsByVendor {
@@ -226,18 +252,7 @@ export function collectionByVendor(db: Db): CollectionTotalsByVendor[] {
   // per series means visiting every date in that series. Each subquery here
   // instead matches the full primary-key prefix — (printing_key, finish) on
   // snapshots, plus (vendor, side) on vendor_prices — and reads one row.
-  // Each series' cutoff, resolved once here rather than as a scalar subquery
-  // re-evaluated per holding.
-  const cutoffs = new Map<string, string | null>();
-  for (const { vendor, side, source } of SERIES) {
-    const row = client(db)
-      .prepare(
-        `select date(max(date), '-${STALE_AFTER_DAYS} day') as cutoff
-           from (${source})`,
-      )
-      .get() as { cutoff: string | null } | undefined;
-    cutoffs.set(`${vendor}.${side}`, row?.cutoff ?? null);
-  }
+  const cutoffs = seriesCutoffs(db);
 
   const selects = SERIES.map(({ vendor, side, source }) => {
     const latest = (column: string) => `(
