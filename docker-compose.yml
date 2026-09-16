@@ -27,6 +27,13 @@ services:
       # A bind mount rather than a named volume: the whole point of SQLite here
       # is that backing up the collection is copying one file, which is a lot
       # easier when you can see it.
+      #
+      # Linux hosts only, in practice. SQLite depends on POSIX advisory locking,
+      # and a bind mount from a Windows or macOS host crosses a filesystem
+      # translation layer where that is emulated rather than native — slow for a
+      # 25 GB database, and not something to trust a WAL to. Develop on the host
+      # with `npm run dev` and run the container where the data actually lives;
+      # if you must run it on a desktop, use a named volume instead.
       - ./data:/app/data
     healthcheck:
       test:

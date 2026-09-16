@@ -47,6 +47,14 @@ ENV DATABASE_PATH=/app/data/mtg.db
 # the ingest from outside the container instead.
 ENV INGEST_COMMAND="node_modules/.bin/tsx scripts/ingest-today.mts --rebuild-cache"
 
+# Both upstreams are HTTPS, so a missing trust store means every ingest fails —
+# daily, and visibly only because the dashboard now reports a failed run. The
+# base image is believed to carry these already; a few hundred KB is a cheap
+# price for removing the doubt.
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends ca-certificates \
+  && rm -rf /var/lib/apt/lists/*
+
 RUN groupadd --system --gid 1001 nodejs \
   && useradd --system --uid 1001 --gid nodejs nextjs
 
@@ -73,6 +81,10 @@ COPY --from=builder --chown=nextjs:nodejs /app/tsconfig.json ./tsconfig.json
 # The database and the cached upstream downloads live here. Declared so a
 # `docker run` without an explicit volume still persists them rather than
 # losing the collection when the container is replaced.
+#
+# On a Linux host a bind-mounted directory keeps its own ownership, which the
+# `nextjs` user must be able to write: `chown -R 1001:1001 ./data` on the host,
+# or the migration at startup fails with SQLITE_CANTOPEN.
 RUN mkdir -p /app/data && chown -R nextjs:nodejs /app/data
 VOLUME /app/data
 
