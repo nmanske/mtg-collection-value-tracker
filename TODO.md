@@ -76,13 +76,7 @@ excluded, alongside the fingerprint key, on the principle that both record what
 the app did rather than what the data is. Measured before and after on the real
 database: 22.4s and 1.4s. `test:cache` asserts it.
 
-**Still unverified: Docker.** The image now carries `tsx`, the source and a
-pruned production `node_modules` (the standalone bundle traces only what the web
-app imports, so `stream-json` and `stream-chain` are absent from it), and sets
-`INGEST_COMMAND` accordingly. None of this has been built or run — Docker is not
-installed on the dev machine and `next build` still OOMs (see Known issues), so
-nothing proves the container's schedule fires or that its ingest can reach the
-database. Treat the Dockerfile change as untested.
+**Docker: reviewed, still never built.** See item 7.
 
 ### 3. Click a card to zoom — done, pending a re-ingest
 
@@ -168,6 +162,39 @@ otherwise win "best year" against everyone else's twelve without saying so.
 Still cross-sectional-only, and worth doing next: **most volatile holding**
 needs a per-card version of the same chain, which the current pass does not
 keep. And **value if buying had stopped in 2023** is close to free now.
+
+### 7. Docker — reviewed and documented, never built
+
+The build OOM that blocked this is fixed (webpack), so the image *can* now be
+built. It has not been: there is no container runtime on the dev machine, and
+the target is a Linux server rather than this desktop, so a Windows dry run
+would prove little. Decided 2026-09-16 not to install one here.
+
+What was verified, by inspecting the real `next build --webpack` output rather
+than by running anything:
+
+- `better-sqlite3` **is** traced into `.next/standalone`.
+- `stream-json` and `tsx` are **not**. The daily ingest therefore cannot run
+  from the standalone bundle alone, which is exactly what the `prod-deps` stage
+  exists to supply. This was the main open question and it is settled.
+- The scheduler and `node-cron` **are** in the bundle, so the cron does get
+  registered in the container.
+- Every bare import under `src/` and the ingest CLI resolves to a production
+  dependency, so nothing in the runtime path vanishes when dev dependencies are
+  pruned.
+
+Also hardened: `ca-certificates` in the runner (both upstreams are HTTPS, and a
+missing trust store is a silent daily failure), and the bind mount is documented
+as Linux-only — SQLite wants POSIX advisory locking, which a Windows or macOS
+bind mount emulates.
+
+**Remaining, and only doable on the host:** build the image, start it, and run
+the four checks under "Verifying a deployment" in the README, then prove the
+schedule fires by temporarily setting `CRON_SCHEDULE="* * * * *"`. Unknowns that
+only a real run can settle: whether the pruned `node_modules` and the standalone
+bundle actually merge as intended in the runner stage, whether `node_modules/.bin/tsx`
+survives the copy with its symlink intact, and whether the host's `./data`
+ownership lets uid 1001 write.
 
 ## Known issues
 

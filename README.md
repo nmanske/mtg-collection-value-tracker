@@ -109,35 +109,120 @@ USD listing at all.
 
 ## Self-hosting with Docker
 
+> **Not yet run end to end.** The image has never been built or started. What
+> follows was verified by inspecting the build output rather than by running a
+> container, so treat the first deployment as a test and check the boxes under
+> "Verifying a deployment" as you go.
+
+Intended for a **Linux host**. SQLite relies on POSIX advisory locking, and a
+bind mount from a Windows or macOS desktop crosses a filesystem translation
+layer that emulates it — slow against a 25 GB database and not something to
+trust a write-ahead log to. Develop on the desktop with `npm run dev`; run the
+container where the data lives.
+
+### First deployment
+
 ```bash
-cp .env.example .env      # optional; the defaults work
-docker compose up -d
+git clone git@github.com:nmanske/mtg-collection-value-tracker.git
+cd mtg-collection-value-tracker
+cp .env.example .env          # optional; the defaults work
+
+mkdir -p data
+sudo chown -R 1001:1001 data  # the container runs as uid 1001
+
+docker compose up -d --build
+docker compose logs -f
 ```
 
 Then open <http://localhost:3000>.
 
-The first start is slow on purpose: with no card data yet, the container
-downloads Scryfall's bulk file and ingests ~108,000 printings before the app is
-useful. Watch it with `docker compose logs -f`. After that, a cron inside the
-container refreshes card metadata and prices once a day (10:15 UTC by default),
-and re-running against an unchanged upstream build is a no-op.
+`chown` is not optional. A bind-mounted directory keeps the host's ownership,
+and the container's unprivileged `nextjs` user must be able to write it, or the
+migration at startup fails with `SQLITE_CANTOPEN`.
 
-The price half runs as a child process rather than inside the web server. It
-parses a 50 MB document and writes a few hundred thousand rows, which has no
-business competing with request handling for memory or for the write lock; as a
-child, the worst case is a non-zero exit code and yesterday's prices still on
-screen. Override `INGEST_COMMAND` to change how it is launched, or set it empty
-to skip prices in the container and drive `ingest:today` from outside.
+If the host is a different architecture from the machine you build on — many
+NAS boxes are arm64 — build on the host itself, or use
+`docker buildx build --platform linux/arm64`. `better-sqlite3` is a native
+module; the build stage carries `python3`, `make` and `g++` so it compiles from
+source when no prebuild matches, which is slow but works.
 
-Every run is written to `sync_meta`, and the dashboard shows a banner when
-prices fall more than two days behind or when the last run failed. This is not
-decoration: a chart missing its newest point looks exactly like a chart, which
-is how a missed day went unnoticed for five days, and MTGJSON only serves about
-90 days of history before a missed day is gone for good.
+### Bringing an existing collection
 
-The database is a single SQLite file bind-mounted at `./data/mtg.db`. Backing up
-the collection is copying that file. Migrations run automatically on every
-start, so pulling a newer image upgrades the schema rather than failing.
+A fresh container starts empty and will spend its first hours rebuilding what
+you already have. Copy the database instead:
+
+```bash
+# On the machine that has it. Never `cp` a live SQLite file — `VACUUM INTO`
+# produces a consistent copy even while the app is reading, and a smaller one.
+node -e "require('better-sqlite3')('data/mtg.db').exec(\"vacuum into 'mtg-compact.db'\")"
+rsync -avP mtg-compact.db user@server:/srv/mtg/data/mtg.db
+sudo chown 1001:1001 /srv/mtg/data/mtg.db
+```
+
+Migrations run on every start, so a database from an older schema upgrades
+itself rather than failing.
+
+### What runs on its own
+
+- **Metadata and prices, daily at 10:15 UTC** (`CRON_SCHEDULE`). Scryfall's
+  bulk file is rebuilt around 09:00 UTC, leaving an hour of slack; MTGJSON's
+  build hour varies, and a run that arrives early finds the same version and
+  skips.
+- **The price half runs as a child process**, not inside the web server. It
+  parses a 50 MB document and writes a few hundred thousand rows, which has no
+  business competing with request handling for memory or for the write lock. As
+  a child, the worst case is a non-zero exit code and yesterday's prices still
+  on screen. `INGEST_COMMAND` changes how it is launched; empty disables it, for
+  driving `ingest:today` from outside the container.
+- **Every run is recorded** in `sync_meta`, and the dashboard banners when
+  prices fall more than two days behind or the last run failed. Not decoration:
+  a chart missing its newest point looks exactly like a chart, which is how a
+  missed day went unnoticed for five days, and MTGJSON serves only ~90 days
+  before a missed day is unrecoverable.
+- **The first start is slow on purpose.** With no card data the container
+  ingests ~108,000 printings before the app is useful.
+
+### Verifying a deployment
+
+The image carries more than the standalone bundle, because the ingest needs it.
+`better-sqlite3` is traced into the bundle but `stream-json` and `tsx` are not,
+so a pruned production `node_modules` is layered underneath. These four checks
+confirm that actually survived into the image:
+
+```bash
+# 1. The ingest runtime and its ESM-only parser are present.
+docker compose exec app ls node_modules/.bin/tsx node_modules/stream-json
+
+# 2. The ingest runs. --dry-run writes nothing. On a container that has never
+#    been backfilled this fails with "No MTGJSON uuid map yet" — which still
+#    proves the runtime and every import resolved, which is the point.
+docker compose exec app node_modules/.bin/tsx scripts/ingest-today.mts --dry-run
+
+# 3. The schedule was registered at boot.
+docker compose logs app | grep "scheduled daily ingest"
+
+# 4. HTTPS works from inside the container — a missing trust store would fail
+#    every ingest, quietly, once a day.
+docker compose exec app node -e "fetch('https://mtgjson.com/api/v5/Meta.json').then(r=>console.log(r.status))"
+```
+
+Then watch the schedule fire once for real, rather than waiting a day to find
+out it does not. Set `CRON_SCHEDULE="* * * * *"` in `.env`, restart, wait for
+one complete run, then put the schedule back:
+
+```bash
+docker compose up -d
+docker compose logs -f app | grep --line-buffered "\[cron\]"
+# expect: starting ingest -> metadata -> prices: running ... -> prices: done
+```
+
+A healthy run takes a couple of minutes: ~150,000 snapshots and ~230,000 vendor
+rows, plus a portfolio cache rebuild. `prices: FAILED` prints the tail of the
+child's output and is also written to `sync_meta` for the dashboard banner.
+
+The database is a single SQLite file at `./data/mtg.db`. Backing up the
+collection is copying that file — see "Backing up" for doing it safely while the
+container is running.
 
 ### Backfilling history and importing a collection
 
