@@ -292,6 +292,36 @@ export const portfolioDaily = sqliteTable(
 );
 
 /**
+ * Month-to-month links for the like-for-like index, cached alongside the daily
+ * totals and rebuilt by the same pass.
+ *
+ * Separate from `portfolio_daily` rather than another column on it: this is one
+ * row per month, not per day, and only for the basket view. Folding it in would
+ * leave the column null on 98% of rows.
+ *
+ * Each row holds the common basket's value at both ends of the step — the
+ * holdings priced on both dates — which is what makes a move mean prices
+ * changed rather than the collection having grown into existence.
+ */
+export const portfolioMonthly = sqliteTable(
+  "portfolio_monthly",
+  {
+    /** Vendor code; see `codec.ts`. */
+    priceSource: integer("price_source").notNull(),
+    /** The later month of the step, `YYYY-MM`. */
+    month: text("month").notNull(),
+    /** The priced dates the step runs between. */
+    date: text("date").notNull(),
+    prevDate: text("prev_date").notNull(),
+    fromCents: integer("from_cents").notNull(),
+    toCents: integer("to_cents").notNull(),
+    compared: integer("compared").notNull(),
+    excluded: integer("excluded").notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.priceSource, t.month] })],
+);
+
+/**
  * Printings with no usable price from any source, so they can be surfaced in
  * the UI as "price unavailable" instead of being silently valued at zero.
  *

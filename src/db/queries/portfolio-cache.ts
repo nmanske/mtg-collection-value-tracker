@@ -1,7 +1,7 @@
 import { eq, sql } from "drizzle-orm";
 
 import { VENDOR_CODES } from "@/db/codec";
-import { holdings, portfolioDaily, syncMeta } from "@/db/schema";
+import { holdings, portfolioDaily, portfolioMonthly, syncMeta } from "@/db/schema";
 import { DAILY_RUN_KEY } from "@/lib/daily-ingest";
 
 import type { Db } from "./printings";
@@ -171,6 +171,8 @@ function rowsFor(db: Db, source: PriceVendor, basket: boolean): ValuePoint[] {
 }
 
 export interface RebuildResult {
+  /** Month links written for the like-for-like index, across all vendors. */
+  months: number;
   views: number;
   points: number;
   seconds: number;
@@ -202,7 +204,14 @@ export function rebuildPortfolioCache(
       computed.push({
         source,
         basket,
-        series: portfolioSeries(db, { priceSource: source, constantBasket: basket }),
+        series: portfolioSeries(db, {
+          priceSource: source,
+          constantBasket: basket,
+          // Only on the basket pass: the links are a property of prices, not
+          // of when cards were bought, and computing them twice per vendor
+          // would produce two identical sets.
+          monthLinks: basket,
+        }),
       });
     }
   }
@@ -214,6 +223,7 @@ export function rebuildPortfolioCache(
 
   sqlite.transaction(() => {
     db.delete(portfolioDaily).run();
+    db.delete(portfolioMonthly).run();
     for (const { source, basket, series } of computed) {
       for (let i = 0; i < series.points.length; i += 500) {
         const slice = series.points.slice(i, i + 500);
@@ -227,6 +237,17 @@ export function rebuildPortfolioCache(
           )
           .run();
         points += slice.length;
+      }
+
+      for (let i = 0; i < (series.links?.length ?? 0); i += 500) {
+        db.insert(portfolioMonthly)
+          .values(
+            series.links!.slice(i, i + 500).map((link) => ({
+              priceSource: VENDOR_CODES[source],
+              ...link,
+            })),
+          )
+          .run();
       }
     }
     db.insert(syncMeta)
@@ -245,6 +266,7 @@ export function rebuildPortfolioCache(
   return {
     views: computed.length,
     points,
+    months: computed.reduce((sum, c) => sum + (c.series.links?.length ?? 0), 0),
     seconds: (Date.now() - started) / 1000,
   };
 }

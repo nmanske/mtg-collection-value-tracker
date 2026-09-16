@@ -9,6 +9,8 @@ import {
   VENDOR_CODES,
 } from "@/db/codec";
 
+import type { MonthLink } from "@/lib/portfolio-history";
+
 import { cachedPortfolioSeries } from "./portfolio-cache";
 import type { Db } from "./printings";
 
@@ -103,6 +105,15 @@ export interface ValuePoint {
 
 export interface ValuationSeries {
   points: ValuePoint[];
+  /**
+   * Month-to-month links for the like-for-like index, when asked for.
+   *
+   * Computed here rather than in its own function because the expensive part —
+   * loading every held printing's price history — is a full scan of a 215
+   * million row table, 23.7s measured. Riding along on a pass that has already
+   * paid for it costs 271,000 array reads.
+   */
+  links?: MonthLink[];
   /** The dates actually available in the price table, ascending. */
   firstDate: string | null;
   lastDate: string | null;
@@ -192,6 +203,13 @@ export function portfolioSeries(
      * collection is broad.
      */
     constantBasket?: boolean;
+    /**
+     * Also return month-to-month links for the like-for-like index.
+     *
+     * Always computed with basket semantics — every holding, regardless of when
+     * it was acquired — because an index measures prices, not buying.
+     */
+    monthLinks?: boolean;
     /**
      * Which vendor's retail series to value from. Defaults to TCGplayer.
      *
@@ -409,9 +427,69 @@ export function portfolioSeries(
 
   return {
     points,
+    // Spread rather than `links: undefined`, so a series computed without them
+    // is deep-equal to one read back from the cache, which has no such key.
+    ...(options.monthLinks ? { links: monthLinks() } : {}),
     firstDate: dates[0],
     lastDate: dates[dates.length - 1],
   };
+
+  /**
+   * One link per month, over the holdings priced at *both* of its ends.
+   *
+   * Comparing only the common holdings is what makes a move mean "prices
+   * changed" rather than "more of my cards had been printed by then" — see
+   * `@/lib/portfolio-history` for why the raw series cannot answer that.
+   */
+  function monthLinks(): MonthLink[] {
+    // The last priced date in each month. Dates are ascending, so the last
+    // write for a month wins.
+    const endOfMonth = new Map<string, number>();
+    dates.forEach((date, offset) => endOfMonth.set(date.slice(0, 7), offset));
+    const months = [...endOfMonth.keys()].sort();
+    const built: MonthLink[] = [];
+
+    for (let m = 1; m < months.length; m += 1) {
+      const prevOffset = endOfMonth.get(months[m - 1])!;
+      const offset = endOfMonth.get(months[m])!;
+      let fromCents = 0;
+      let toCents = 0;
+      let compared = 0;
+      let excluded = 0;
+
+      for (let i = 0; i < rows.length; i += 1) {
+        const row = rows[i];
+        // A manual override is one price for all time. Including it would
+        // contribute an unchanged value to both ends of every link and damp
+        // each move toward zero.
+        if (row.priceOverrideCents != null) {
+          excluded += 1;
+          continue;
+        }
+        const base = rowSeries[i] * dateCount;
+        const before = prices[base + firstColumn + prevOffset];
+        const after = prices[base + firstColumn + offset];
+        if (before === NO_PRICE || after === NO_PRICE) {
+          excluded += 1;
+          continue;
+        }
+        fromCents += before * row.quantity;
+        toCents += after * row.quantity;
+        compared += 1;
+      }
+
+      built.push({
+        month: months[m],
+        date: dates[offset],
+        prevDate: dates[prevOffset],
+        fromCents,
+        toCents,
+        compared,
+        excluded,
+      });
+    }
+    return built;
+  }
 }
 
 /** The collection's value on one date. */

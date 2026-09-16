@@ -133,6 +133,42 @@ a most-valuable list. The headline totals deliberately stay the whole
 collection when a filter is active — a view that hides cards must not read as
 cards having been lost — and the count of matches says what is on screen.
 
+### 6. Stats page: long-horizon history — done
+
+The stats page was built against 89 days of prices and was entirely
+cross-sectional: what the collection looks like *now*. With 5.7 years of
+history it now also answers what it has *done* — year by year, the deepest fall
+from a high and whether it recovered, and the best and worst year and month.
+
+**The methodology is the feature.** Subtracting two points off either existing
+series gives the wrong answer, in opposite directions. The as-held line rises
+because cards were bought. The constant-basket line holds the cards fixed but
+cannot price a card before it was printed: 65% of today's holdings had a price
+in December 2020 against 100% today, so the line rises simply because more of
+it exists. On the real collection the raw basket reads **+58%** since 2020
+where the like-for-like answer is **-13%** — almost the entire apparent gain
+was composition drift.
+
+So each month-to-month step compares only the holdings priced at *both* of its
+ends, and the steps are chained — the standard treatment for an index whose
+constituents change. The chain is anchored at the newest point, which is the
+basket's real value today, so the figure a reader checks against the dashboard
+matches it exactly instead of being the product of seventy ratios.
+
+Cost: the links are computed inside the pass `rebuildPortfolioCache` already
+makes — loading every held printing's history is a scan of a 215M-row table,
+23.7s measured, and riding along costs 271,000 array reads. They are stored in
+`portfolio_monthly` (migration 0007). Reading the whole panel is 9ms.
+
+Monthly resolution, because these are multi-year questions and a daily chain
+would compound 1,953 roundings. The current year is flagged `partial` and
+labelled "so far" wherever it appears — it is a nine-month return that can
+otherwise win "best year" against everyone else's twelve without saying so.
+
+Still cross-sectional-only, and worth doing next: **most volatile holding**
+needs a per-card version of the same chain, which the current pass does not
+keep. And **value if buying had stopped in 2023** is close to free now.
+
 ## Known issues
 
 - ~~**Stale vendor quotes.**~~ Done. A quote more than `STALE_AFTER_DAYS` (30)

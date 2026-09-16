@@ -8,6 +8,8 @@ import {
   type Spread,
   collectionStats,
 } from "@/db/queries/stats";
+import { portfolioHistory } from "@/db/queries/history";
+import type { PeriodChange } from "@/lib/portfolio-history";
 import { FINISH_LABEL, formatUsd, printingCode } from "@/lib/format";
 import type { Finish } from "@/db/schema";
 
@@ -137,8 +139,71 @@ function SpreadList({ spreads }: { spreads: Spread[] }) {
   );
 }
 
+/** A signed percentage, coloured by direction. */
+function Pct({ ratio }: { ratio: number | null }) {
+  if (ratio === null) {
+    return <span className="text-neutral-500">n/a</span>;
+  }
+  const color =
+    ratio > 0
+      ? "text-emerald-700 dark:text-emerald-400"
+      : ratio < 0
+        ? "text-red-700 dark:text-red-400"
+        : "text-neutral-500";
+  return (
+    <span className={`font-medium tabular-nums ${color}`}>
+      {ratio > 0 ? "+" : ""}
+      {(ratio * 100).toFixed(1)}%
+    </span>
+  );
+}
+
+function YearRow({ year, widest }: { year: PeriodChange; widest: number }) {
+  const ratio = year.changeRatio ?? 0;
+  const share = widest > 0 ? Math.min(1, Math.abs(ratio) / widest) : 0;
+  return (
+    <li className="py-1.5 text-sm">
+      <div className="flex items-baseline justify-between gap-3">
+        <span className="tabular-nums">
+          {year.label}
+          {year.partial ? (
+            <span className="ml-1.5 text-xs text-neutral-500">so far</span>
+          ) : null}
+        </span>
+        <span className="shrink-0 tabular-nums">
+          <span className="mr-3 text-xs text-neutral-500">
+            {formatUsd(year.fromCents)} → {formatUsd(year.toCents)}
+          </span>
+          <Pct ratio={year.changeRatio} />
+        </span>
+      </div>
+      {/* A bar per year, signed from the centre, so five years of direction
+          read at a glance rather than as a column of numbers. */}
+      <div className="mt-1 flex h-1 items-stretch" aria-hidden="true">
+        <div className="flex w-1/2 justify-end">
+          {ratio < 0 ? (
+            <div
+              className="rounded-l-sm bg-red-500/60"
+              style={{ width: `${share * 100}%` }}
+            />
+          ) : null}
+        </div>
+        <div className="flex w-1/2 justify-start">
+          {ratio > 0 ? (
+            <div
+              className="rounded-r-sm bg-emerald-500/60"
+              style={{ width: `${share * 100}%` }}
+            />
+          ) : null}
+        </div>
+      </div>
+    </li>
+  );
+}
+
 export default async function StatsPage() {
   const stats = collectionStats(db);
+  const history = portfolioHistory(db);
 
   const sellRatio =
     stats.buylistRetailCents > 0
@@ -148,6 +213,28 @@ export default async function StatsPage() {
   const busiestMonth = Math.max(
     1,
     ...stats.acquisitions.map((month) => month.holdings),
+  );
+  // The whole tracked span, like-for-like: what today's cards were worth at the
+  // start of the index against what they are worth now. This is the headline
+  // number the raw basket line gets most wrong — it reads +58% where the
+  // like-for-like answer is -13%, because two thirds of the drift is cards
+  // that had not been printed in 2020.
+  const allTime =
+    history && history.points.length > 1 && history.points[0].valueCents > 0
+      ? {
+          ratio:
+            history.points[history.points.length - 1].valueCents /
+              history.points[0].valueCents -
+            1,
+          from: history.points[0].date,
+        }
+      : null;
+
+  // The widest year, so the bars are scaled against the biggest move rather
+  // than against 100% — which would leave every bar a sliver.
+  const widestYear = Math.max(
+    0.01,
+    ...(history?.years ?? []).map((year) => Math.abs(year.changeRatio ?? 0)),
   );
 
   return (
@@ -162,7 +249,7 @@ export default async function StatsPage() {
         </Link>
       </header>
 
-      <dl className="mb-8 grid grid-cols-2 gap-6 sm:grid-cols-3 lg:grid-cols-6">
+      <dl className="mb-8 grid grid-cols-2 gap-6 sm:grid-cols-3 lg:grid-cols-7">
         <Stat label="Value" value={formatUsd(stats.totalValueCents)} />
         <Stat
           label="Cards"
@@ -184,7 +271,110 @@ export default async function StatsPage() {
           value={formatUsd(stats.buylistTotalCents)}
           detail={`${Math.round(sellRatio * 100)}% of Card Kingdom's ask`}
         />
+        {allTime ? (
+          <Stat
+            label="Since tracking began"
+            value={`${allTime.ratio > 0 ? "+" : ""}${(allTime.ratio * 100).toFixed(1)}%`}
+            detail={`these cards, from ${allTime.from}`}
+          />
+        ) : null}
       </dl>
+
+      {history ? (
+        <div className="mb-5 grid grid-cols-1 gap-5 lg:grid-cols-2 3xl:grid-cols-3">
+          <Panel
+            title="Year by year"
+            note={`What today's cards were worth at each year end, comparing only the cards priced at both ends of each step. Measured from ${history.points[0].date}.`}
+          >
+            <ul className="flex flex-col divide-y divide-neutral-100 dark:divide-neutral-900">
+              {[...history.years].reverse().map((year) => (
+                <YearRow key={year.label} year={year} widest={widestYear} />
+              ))}
+            </ul>
+            <p className="mt-4 text-xs text-neutral-500">
+              The oldest step covers{" "}
+              {history.earliestCompared.toLocaleString()} of{" "}
+              {history.totalHoldings.toLocaleString()} holdings — the rest had
+              not been printed yet. Each step compares only the cards priced on
+              both of its dates, so a card appearing does not read as a gain.
+            </p>
+          </Panel>
+
+          <Panel
+            title="Peak and trough"
+            note="The deepest fall from a high, by percentage rather than by dollars, so a big decline in a small collection is not hidden by a small one in a large collection."
+          >
+            {history.drawdown ? (
+              <dl className="grid grid-cols-2 gap-6">
+                <Stat
+                  label="Deepest fall"
+                  value={`-${(history.drawdown.depthRatio * 100).toFixed(1)}%`}
+                  detail={`${formatUsd(history.drawdown.peakCents)} → ${formatUsd(history.drawdown.troughCents)}`}
+                />
+                <Stat
+                  label="Took"
+                  value={`${history.drawdown.monthsToTrough} mo`}
+                  detail={`${history.drawdown.peakDate} → ${history.drawdown.troughDate}`}
+                />
+                <Stat
+                  label="Recovered"
+                  value={
+                    history.drawdown.recoveredDate
+                      ? `${history.drawdown.monthsToRecover} mo`
+                      : "Not yet"
+                  }
+                  detail={
+                    history.drawdown.recoveredDate ??
+                    "still below that peak"
+                  }
+                />
+                {history.high ? (
+                  <Stat
+                    label="Below its high"
+                    value={`${(history.high.belowRatio * 100).toFixed(1)}%`}
+                    detail={`peaked ${history.high.date}, ${history.high.monthsSince} months ago`}
+                  />
+                ) : null}
+              </dl>
+            ) : (
+              <p className="text-sm text-neutral-500">
+                The collection has never fallen from a high.
+              </p>
+            )}
+          </Panel>
+
+          <Panel
+            title="Best and worst"
+            note="Ranked by percentage across the whole tracked history."
+          >
+            <dl className="grid grid-cols-2 gap-6">
+              {(
+                [
+                  ["Best year", history.bestYear],
+                  ["Worst year", history.worstYear],
+                  ["Best month", history.bestMonth],
+                  ["Worst month", history.worstMonth],
+                ] as const
+              ).map(([label, period]) => (
+                <Stat
+                  key={label}
+                  label={label}
+                  value={
+                    period
+                      ? `${period.changeRatio! > 0 ? "+" : ""}${(period.changeRatio! * 100).toFixed(1)}%`
+                      : "—"
+                  }
+                  detail={
+                    period
+                      ? `${period.label}${period.partial ? " so far" : ""} · ${formatUsd(period.fromCents)} → ${formatUsd(period.toCents)}`
+                      : "not enough history"
+                  }
+                />
+              ))}
+            </dl>
+          </Panel>
+        </div>
+      ) : null}
 
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-2 3xl:grid-cols-3">
         <Panel

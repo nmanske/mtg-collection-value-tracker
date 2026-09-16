@@ -23,7 +23,8 @@ try {
   console.log(cacheIsFresh(db) ? "Cache is current; rebuilding anyway." : "Cache is stale.");
   const result = rebuildPortfolioCache(db, (message) => console.log(message));
   console.log(
-    `\n${result.views} views, ${result.points.toLocaleString()} points, ${result.seconds.toFixed(1)}s`,
+    `\n${result.views} views, ${result.points.toLocaleString()} points, ` +
+      `${result.months.toLocaleString()} month links, ${result.seconds.toFixed(1)}s`,
   );
 } catch (error) {
   console.error(`Cache rebuild failed: ${(error as Error).message}`);

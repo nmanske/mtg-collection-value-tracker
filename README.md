@@ -17,7 +17,13 @@ Pre-alpha. Phase 0 (project scaffolding) only.
   never stretched across a wide axis.
 - **Statistics** — `/stats`: most valuable cards, biggest risers and fallers,
   what actually moved the collection's value, buylist spreads, where the value
-  sits by set, and the long tail.
+  sits by set, and the long tail. Plus the long view: year by year, the deepest
+  fall from a high and whether it recovered, and the best and worst year and
+  month. Those are computed **like-for-like** — each month-to-month step
+  compares only the cards priced at both of its ends, then the steps are
+  chained — because a card cannot be priced before it was printed, and reading
+  the raw chart instead reports five years of new printings as growth. On a
+  real collection that is the difference between +58% and -13%.
 - **Export** — two CSVs at `/export`: your collection with every vendor's
   current price beside it, and the dashboard's value history. Both are bounded
   by the size of your collection rather than the price tables, which hold 15.7
