@@ -1,4 +1,19 @@
-@import "tailwindcss";
+/*
+ * Sources are pinned instead of auto-detected.
+ *
+ * Tailwind v4 otherwise crawls the whole project for class-name candidates.
+ * That is fine in a normal repo and actively dangerous in this one: the project
+ * root holds `data/` with tens of gigabytes of SQLite, and any stray build or
+ * log directory gets read as source too. A directory of compiled chunks once
+ * produced class names out of binary noise and broke every page with
+ * "Parsing CSS source code failed", and a production build grew to a 38 GB
+ * working set before dying.
+ *
+ * Only hand-written source can contain a class name, so only that is scanned.
+ * Anything added outside `src/` needs adding here.
+ */
+@import "tailwindcss" source(none);
+@source "../**/*.{ts,tsx}";
 
 :root {
   --background: #ffffff;

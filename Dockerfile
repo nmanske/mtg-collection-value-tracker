@@ -30,6 +30,9 @@ COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 # The build must not pick up a developer's local database.
 RUN rm -rf data .next
+# `npm run build` passes --webpack deliberately. The Turbopack build grows to a
+# 42 GB working set and dies; webpack builds the same source in 30s under 0.5 GB.
+# See TODO.md. Without this the image cannot be built at all.
 RUN npm run build
 
 # -------------------------------------------------------------- runtime -----

@@ -178,14 +178,39 @@ keep. And **value if buying had stopped in 2023** is close to free now.
   figure that had been presenting them as today's offer. Threshold is measured
   per series rather than against today, so a missed daily run does not mark the
   whole collection stale.
-- **`next build` runs out of memory.** Fails with `memory allocation of
-  ~950 MB failed`, including with the backfill stopped, so it is not the
-  ingest's page cache. Untriaged. `next dev` is unaffected.
+- ~~**`next build` runs out of memory.**~~ Diagnosed and worked around on
+  2026-09-16. It is a **Turbopack** bug, not this app: the same source builds
+  fine on webpack.
+
+  | builder | result | time | peak RSS |
+  |---|---|---|---|
+  | Turbopack | `memory allocation of 1430734612 bytes failed` | 9.3 min | **42.4 GB** |
+  | webpack | success | **0.5 min** | **0.4 GB** |
+
+  It dies during compilation, before any CSS or app chunk is emitted and before
+  build traces are collected, and a clean `.next` makes no difference. Tailwind
+  was ruled out by pinning its sources and rebuilding — still 42 GB.
+
+  `npm run build` therefore passes `--webpack`. `npm run build:turbopack` keeps
+  the old path for retesting when Next is upgraded; revisit then, because dev is
+  still on Turbopack and is unaffected.
+
+  Note `next start` warns that it does not work with `output: "standalone"` and
+  says to use `node .next/standalone/server.js`. It serves correctly anyway, but
+  the standalone entry point is the one Docker uses and the one to trust.
 - ~~**No automated test for the daily ingest.**~~ Done. `test:today` drives the
   whole job from a gzipped fixture: an unmapped uuid, a build already recorded,
   `--force`, a new build, a dry run that must not mark the build done, and the
   vendor rules (Cardmarket's euros and MTGO's ticket prices excluded, TCGplayer
   retail kept out of `vendor_prices`). Only the HTTP fetch itself is unexercised.
+
+- **Tailwind scans only `src/` now.** Its v4 auto-detection crawls the whole
+  project for class-name candidates, which in this repo means sitting next to
+  `data/` and any stray build directory. A renamed `.next` — not covered by
+  `.gitignore`, unlike `.next` itself — got scanned as source, produced class
+  names out of binary chunks, and broke *every page* with `Parsing CSS source
+  code failed`. `globals.css` now uses `source(none)` plus an explicit
+  `@source`. Anything added outside `src/` must be added there.
 
 ## Housekeeping
 
