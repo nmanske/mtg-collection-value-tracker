@@ -22,7 +22,7 @@
     "audit:gaps": "tsx scripts/audit-gaps.mts",
     "cache:portfolio": "tsx scripts/rebuild-cache.ts",
     "test:holdings": "tsx scripts/test-holdings.ts",
-    "test": "npm run test:ingest && npm run test:holdings && npm run test:import && npm run test:valuation && npm run test:vendors && npm run test:stats && npm run test:chart && npm run test:ranges && npm run test:downsample && npm run test:gaps && npm run test:cache && npm run test:today && npm run test:export && npm run db:smoke",
+    "test": "npm run test:ingest && npm run test:holdings && npm run test:import && npm run test:valuation && npm run test:vendors && npm run test:stats && npm run test:chart && npm run test:ranges && npm run test:downsample && npm run test:gaps && npm run test:cache && npm run test:today && npm run test:daily && npm run test:export && npm run db:smoke",
     "import:moxfield": "tsx scripts/import-moxfield.ts",
     "test:import": "tsx scripts/test-import.ts",
     "test:valuation": "tsx scripts/test-valuation.ts",
@@ -34,7 +34,8 @@
     "test:downsample": "tsx scripts/test-downsample.ts",
     "test:gaps": "tsx scripts/test-gaps.ts",
     "test:cache": "tsx scripts/test-cache.ts",
-    "test:today": "tsx scripts/test-today.mts"
+    "test:today": "tsx scripts/test-today.mts",
+    "test:daily": "tsx scripts/test-daily.ts"
   },
   "dependencies": {
     "better-sqlite3": "^13.0.3",
@@ -46,7 +47,8 @@
     "recharts": "^3.10.1",
     "server-only": "^0.0.1",
     "stream-chain": "^4.2.5",
-    "stream-json": "^3.6.0"
+    "stream-json": "^3.6.0",
+    "tsx": "^4.23.13"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
@@ -58,7 +60,6 @@
     "eslint": "^9",
     "eslint-config-next": "16.3.4",
     "tailwindcss": "^4",
-    "tsx": "^4.23.13",
     "typescript": "^5"
   }
 }

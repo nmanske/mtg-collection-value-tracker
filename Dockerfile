@@ -15,6 +15,15 @@ RUN apt-get update \
 COPY package.json package-lock.json ./
 RUN npm ci
 
+# ---------------------------------------------------------- prod-deps ------
+# The daily price ingest runs as a child process from the source, not from the
+# standalone bundle, so it needs the real dependency tree: `stream-json` and
+# `stream-chain` are never imported by the web app and so are never traced into
+# the bundle. Pruned to production, which now includes `tsx` — it is the
+# runtime for the ingest CLI in the container, not just a dev convenience.
+FROM deps AS prod-deps
+RUN npm prune --omit=dev
+
 # --------------------------------------------------------------- build ------
 FROM base AS builder
 COPY --from=deps /app/node_modules ./node_modules
@@ -29,9 +38,19 @@ ENV NODE_ENV=production
 ENV PORT=3000
 ENV HOSTNAME=0.0.0.0
 ENV DATABASE_PATH=/app/data/mtg.db
+# How the scheduler invokes the daily price ingest. Called directly rather than
+# through `npm run`, which would add a shell and a package manager to the
+# process tree for nothing. Set it empty to disable prices entirely and drive
+# the ingest from outside the container instead.
+ENV INGEST_COMMAND="node_modules/.bin/tsx scripts/ingest-today.mts --rebuild-cache"
 
 RUN groupadd --system --gid 1001 nodejs \
   && useradd --system --uid 1001 --gid nodejs nextjs
+
+# Order matters. The pruned tree goes down first and the standalone bundle
+# overlays it, so Next's traced modules — which it arranges deliberately — win
+# any collision, and the extras the ingest needs survive alongside them.
+COPY --from=prod-deps --chown=nextjs:nodejs /app/node_modules ./node_modules
 
 # The standalone bundle carries its own minimal node_modules, traced from the
 # actual imports; static assets and public files are not included in it.
@@ -41,6 +60,12 @@ COPY --from=builder --chown=nextjs:nodejs /app/public ./public
 
 # Migrations are read from disk at startup, so they must be in the image.
 COPY --from=builder --chown=nextjs:nodejs /app/drizzle ./drizzle
+
+# The ingest CLI is run from source by `tsx`, which needs the path aliases in
+# tsconfig.json to resolve `@/...`.
+COPY --from=builder --chown=nextjs:nodejs /app/scripts ./scripts
+COPY --from=builder --chown=nextjs:nodejs /app/src ./src
+COPY --from=builder --chown=nextjs:nodejs /app/tsconfig.json ./tsconfig.json
 
 # The database and the cached upstream downloads live here. Declared so a
 # `docker run` without an explicit volume still persists them rather than

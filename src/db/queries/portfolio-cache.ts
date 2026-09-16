@@ -2,6 +2,7 @@ import { eq, sql } from "drizzle-orm";
 
 import { VENDOR_CODES } from "@/db/codec";
 import { holdings, portfolioDaily, syncMeta } from "@/db/schema";
+import { DAILY_RUN_KEY } from "@/lib/daily-ingest";
 
 import type { Db } from "./printings";
 import {
@@ -93,9 +94,20 @@ export function cacheFingerprint(db: Db): string {
       .prepare("select key, value from sync_meta order by key")
       .all() as { key: string; value: string }[]
   )
-    // The cache's own fingerprint is excluded, or storing it would change the
-    // value it was computed from and nothing would ever read as fresh.
-    .filter((row) => row.key !== CACHE_FINGERPRINT_KEY)
+    // Two keys are excluded, both for the same reason: they record what the
+    // app did, not what the data is.
+    //
+    // The cache's own fingerprint, or storing it would change the value it was
+    // computed from and nothing would ever read as fresh.
+    //
+    // And the daily run record, which carries a timestamp and a duration that
+    // change on every run. The scheduler writes it *after* the ingest child has
+    // rebuilt the cache, so including it invalidated the cache the moment it
+    // was rebuilt and handed the next visitor a 20-35s recompute — every day,
+    // exactly the cost the rebuild exists to avoid.
+    .filter(
+      (row) => row.key !== CACHE_FINGERPRINT_KEY && row.key !== DAILY_RUN_KEY,
+    )
     .map((row) => `${row.key}=${row.value}`)
     .join(",");
 

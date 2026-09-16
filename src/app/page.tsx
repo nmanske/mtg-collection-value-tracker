@@ -17,6 +17,8 @@ import {
   type PriceVendor,
 } from "@/db/queries/valuation";
 import { collectionByVendor } from "@/db/queries/vendors";
+import { priceFreshness } from "@/db/queries/freshness";
+import { PriceFreshnessBanner } from "@/components/price-freshness-banner";
 import {
   FINISH_LABEL,
   daysAgo,
@@ -56,9 +58,14 @@ export default async function CollectionPage(props: PageProps<"/">) {
   });
   const summary = portfolioSummary(db, priceSource);
   const vendorTotals = collectionByVendor(db);
+  const freshness = priceFreshness(db);
 
   return (
     <main className="page-shell py-10">
+      {/* Above the header: if prices have stopped arriving, that outranks
+          every number on the page, because every number is derived from them. */}
+      <PriceFreshnessBanner freshness={freshness} />
+
       <header className="mb-8 flex flex-wrap items-baseline justify-between gap-4">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Collection</h1>

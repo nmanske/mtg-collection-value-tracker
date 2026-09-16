@@ -197,6 +197,29 @@ for (const [what, mutate] of checks) {
   assert.equal(cacheIsFresh(db), false, `${what} must invalidate the cache`);
 }
 
+// --- what must NOT invalidate it ---
+
+// The daily run record is written *after* the ingest child rebuilds the cache,
+// and its timestamp and duration differ every run. Counting it as an input
+// invalidated the cache the instant it was rebuilt, so the first visitor each
+// morning paid a 20-35s recompute — the exact cost the rebuild exists to
+// avoid. It records what the app did, not what the data is.
+rebuildPortfolioCache(db);
+assert.equal(cacheIsFresh(db), true);
+for (const value of ['{"at":"2026-09-16T14:48:08.004Z","ok":true,"seconds":187.7}',
+                     '{"at":"2026-09-17T10:15:01.000Z","ok":false,"seconds":0.7}']) {
+  sqlite
+    .prepare(
+      "insert into sync_meta (key, value, updated_at) values ('daily_ingest_last_run', ?, 0) on conflict(key) do update set value = excluded.value",
+    )
+    .run(value);
+  assert.equal(
+    cacheIsFresh(db),
+    true,
+    "the daily run record must not invalidate the cache",
+  );
+}
+
 // --- a known limitation, asserted rather than left implicit ---
 
 // Detecting *any* price change without a watermark would mean counting 120

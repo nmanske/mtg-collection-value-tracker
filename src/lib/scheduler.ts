@@ -9,13 +9,19 @@ import { sql } from "drizzle-orm";
 import { DB_PATH, openDatabase } from "@/db/client";
 import { printings } from "@/db/schema";
 import { ingestScryfallBulk } from "@/ingest/scryfall";
+import { recordDailyRun, runDailyPriceIngest } from "@/lib/daily-ingest";
 
 /**
- * The daily price refresh, run inside the app process.
+ * The daily refresh: Scryfall card metadata, then MTGJSON prices.
  *
- * Scryfall rebuilds its bulk files once a day, so this matches that cadence
- * rather than polling. A separate scheduler or queue would be more machinery
- * than a single-user, single-container app needs.
+ * Both upstreams rebuild once a day, so this matches that cadence rather than
+ * polling. A separate scheduler or queue would be more machinery than a
+ * single-user, single-container app needs.
+ *
+ * The schedule lives in this process; the price ingest does not — it is spawned
+ * as a child. See `@/lib/daily-ingest`. Metadata stays in-process because it is
+ * a plain upsert with no ESM-only dependencies, and it is the step a first run
+ * cannot start without.
  */
 
 /**
@@ -23,6 +29,10 @@ import { ingestScryfallBulk } from "@/ingest/scryfall";
  * on the day this was written; an hour of slack means a late build is still
  * picked up, and if it is not, the ingest simply finds the same build and
  * skips, then catches it the next day.
+ *
+ * MTGJSON rebuilds `AllPricesToday` daily too, and the price job skips when the
+ * build version is one already recorded, so a run that lands between the two
+ * upstream builds costs nothing beyond a wasted download.
  */
 const DEFAULT_SCHEDULE = "15 10 * * *";
 
@@ -71,11 +81,11 @@ function isEmpty(): boolean {
 }
 
 /**
- * Runs the Scryfall ingest once.
+ * Runs the daily refresh once: Scryfall metadata, then MTGJSON prices.
  *
  * Never throws: a failed refresh must not take the web app down with it, and
- * yesterday's prices are still perfectly usable. The failure is logged and the
- * next scheduled run tries again.
+ * yesterday's prices are still perfectly usable. The failure is logged, written
+ * to `sync_meta` so the dashboard can say so, and retried on the next tick.
  */
 export async function runIngest(reason: string): Promise<void> {
   if (globalForCron.mtgIngestRunning) {
@@ -101,24 +111,21 @@ export async function runIngest(reason: string): Promise<void> {
         : `metadata: ${metadata.printingsUpserted.toLocaleString()} printings`,
     );
 
-    // Prices are deliberately NOT ingested here, and this is a limitation
-    // rather than a preference.
-    //
-    // The MTGJSON ingest lives in `.mts` modules using `.mjs` import
-    // specifiers, the form TypeScript's NodeNext resolution requires for
-    // `stream-json`, which is ESM-only. Turbopack cannot follow those
-    // specifiers, so importing the ingest from here breaks the instrumentation
-    // hook and the whole server fails to start. `serverExternalPackages` does
-    // not help: the unresolvable module is ours, not a dependency.
-    //
-    // So the daily price refresh is a CLI step for now — `npm run ingest:today`
-    // — and wiring it to run automatically is TODO #2. Said out loud on every
-    // run, because a price job that silently never happens is exactly the
-    // failure the gap audit exists to catch.
-    log(
-      "prices: not run here — see TODO #2. Run `npm run ingest:today` " +
-        "(or schedule it outside the app) to record today's prices.",
-    );
+    // Prices run as a child process rather than an import. See the comment on
+    // `runDailyPriceIngest` for why — briefly, the ingest is ESM-only in a way
+    // Turbopack cannot bundle, and a 50 MB parse does not belong in the server
+    // process regardless.
+    const run = await runDailyPriceIngest(reason, { log: (m) => log(m) });
+    if (run) {
+      // Recorded before it is judged, so a failure leaves a trace. Losing a day
+      // silently is the failure this whole job exists to prevent.
+      recordDailyRun(db, run);
+      log(
+        run.ok
+          ? `prices: done in ${run.seconds.toFixed(1)}s`
+          : `prices: FAILED after ${run.seconds.toFixed(1)}s — ${run.message}`,
+      );
+    }
   } catch (error) {
     // Deliberately swallowed. A price refresh is not worth crashing the server
     // for; the collection still renders from the prices already stored.
@@ -163,7 +170,7 @@ export async function startScheduler(): Promise<void> {
 
   scheduleTask(schedule, () => void runIngest("scheduled"), {
     timezone,
-    name: "scryfall-daily",
+    name: "daily-refresh",
     // node-cron will not start a run while the previous one is still going.
     // The module-level guard covers the other case: the first-run ingest
     // overlapping with a scheduled one.

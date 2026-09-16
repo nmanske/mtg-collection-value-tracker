@@ -82,7 +82,7 @@ npm run dev
 | Command | What it does |
 | --- | --- |
 | `npm run ingest:scryfall` | Streams Scryfall's gzipped JSONL `default_cards` bulk file and upserts printings. Metadata only — pass `--prices` to also record `prices.usd`, which the daily job does not. Idempotent, and skips entirely if that build was already ingested (`--force` overrides). |
-| `npm run ingest:today` | Today's prices for every printing from MTGJSON's `AllPricesToday`: TCGplayer retail into `price_snapshots`, Card Kingdom's two sides into `vendor_prices`. Measured at 148,446 snapshots and 228,208 vendor rows in ~20s. Never overwrites a day already recorded. |
+| `npm run ingest:today` | Today's prices for every printing from MTGJSON's `AllPricesToday`: TCGplayer retail into `price_snapshots`, Card Kingdom's two sides into `vendor_prices`. Measured at 152,160 snapshots and 229,790 vendor rows in ~7s. Never overwrites a day already recorded. This is what the scheduler runs each day, as a child process; `--rebuild-cache` recomputes the portfolio totals afterwards so the first visitor does not pay for it. |
 | `npm run backfill:mtgjson` | Historical fill from MTGJSON's live `AllPrices` (~90 days), TCGplayer retail only, joined to Scryfall ids through MTGJSON's `uuid`. Scoped to held printings by default; `--all` covers every printing. Never overwrites a day already recorded. |
 | `npm run backfill:archive` | The same, from a local archive of past MTGJSON builds, which reaches back years rather than 90 days. Walks builds oldest-first, records progress after each, and resumes where it stopped. `--snapshots` / `--vendors` take `all`, `held` or `none`; `--ids-only` rebuilds just the uuid map; `--every N` samples builds. |
 | `npm run audit:archive` | Reports which archived builds failed to download, and — the part that matters — whether the gaps leave any date uncovered. Usually they do not: each build carries ~90 days while builds are ~8 days apart, so neighbours cover for a missing one. |
@@ -113,12 +113,21 @@ Then open <http://localhost:3000>.
 The first start is slow on purpose: with no card data yet, the container
 downloads Scryfall's bulk file and ingests ~108,000 printings before the app is
 useful. Watch it with `docker compose logs -f`. After that, a cron inside the
-container refreshes card metadata once a day (10:15 UTC by default), and
-re-running against an unchanged upstream build is a no-op.
+container refreshes card metadata and prices once a day (10:15 UTC by default),
+and re-running against an unchanged upstream build is a no-op.
 
-Prices are a separate step for now: `npm run ingest:today` reads MTGJSON's
-`AllPricesToday`. It is not yet wired into the in-process scheduler — see
-[TODO.md](TODO.md) item 2 for why and what the options are.
+The price half runs as a child process rather than inside the web server. It
+parses a 50 MB document and writes a few hundred thousand rows, which has no
+business competing with request handling for memory or for the write lock; as a
+child, the worst case is a non-zero exit code and yesterday's prices still on
+screen. Override `INGEST_COMMAND` to change how it is launched, or set it empty
+to skip prices in the container and drive `ingest:today` from outside.
+
+Every run is written to `sync_meta`, and the dashboard shows a banner when
+prices fall more than two days behind or when the last run failed. This is not
+decoration: a chart missing its newest point looks exactly like a chart, which
+is how a missed day went unnoticed for five days, and MTGJSON only serves about
+90 days of history before a missed day is gone for good.
 
 The database is a single SQLite file bind-mounted at `./data/mtg.db`. Backing up
 the collection is copying that file. Migrations run automatically on every
@@ -131,9 +140,10 @@ has one day of history. `backfill:mtgjson` fills in the ~90 days MTGJSON's live
 API serves. Going back further needs an archive of past MTGJSON builds on disk,
 which `backfill:archive` walks oldest-first — see "Backfilling from an archive".
 
-Both the backfill and the Moxfield import are development CLIs — they run under
-`tsx`, which is a dev dependency and is deliberately not in the production
-image. Run them from a checkout, against the same file the container uses:
+Both the backfill and the Moxfield import are CLIs run under `tsx`. The
+production image carries `tsx` and the source, because the daily price ingest
+runs the same way, so these can be run inside the container too — but running
+them from a checkout against the same file is usually easier:
 
 ```bash
 DATABASE_PATH=./data/mtg.db npm run backfill:mtgjson -- --all
@@ -209,9 +219,11 @@ checkout.
 | Variable | Default | What it does |
 | --- | --- | --- |
 | `DATABASE_PATH` | `./data/mtg.db` | SQLite file location |
-| `CRON_ENABLED` | on in production | Runs the daily price refresh in-process |
+| `CRON_ENABLED` | on in production | Runs the daily refresh on a schedule |
 | `CRON_SCHEDULE` | `15 10 * * *` | Standard five-field cron expression |
 | `CRON_TIMEZONE` | `UTC` | Timezone the schedule is read in |
+| `INGEST_COMMAND` | `npm run ingest:today -- --rebuild-cache` | How the price ingest is launched. Empty disables it |
+| `INGEST_TIMEOUT_MS` | `1800000` | Kills a wedged ingest rather than letting it hold the write lock |
 | `PORT` | `3000` | Host port the container publishes |
 
 ## License
