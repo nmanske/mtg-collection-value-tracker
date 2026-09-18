@@ -52,6 +52,8 @@ export interface ScryfallCard {
   lang: string;
   set: string;
   set_name: string;
+  /** `YYYY-MM-DD`. Present on every paper card. */
+  released_at?: string;
   collector_number: string;
   layout: string;
   /** `paper`, `mtgo`, `arena`. Printings without `paper` have no paper price. */

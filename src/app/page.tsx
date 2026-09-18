@@ -27,6 +27,7 @@ import {
   FINISH_LABEL,
   daysAgo,
   formatUsd,
+  releaseYear,
 } from "@/lib/format";
 
 // Reads the collection on every request; adds and removes must show at once.
@@ -276,6 +277,9 @@ export default async function CollectionPage(props: PageProps<"/">) {
                       </div>
                       <div className="font-mono text-xs text-neutral-600 dark:text-neutral-400">
                         #{row.collectorNumber}
+                        {releaseYear(row.releasedAt) ? (
+                          <> ({releaseYear(row.releasedAt)})</>
+                        ) : null}
                       </div>
                     </td>
                     <td className="py-2 pr-3">{FINISH_LABEL[row.finish]}</td>

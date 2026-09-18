@@ -162,15 +162,21 @@ export function resolveRange(
   requested: string | undefined,
   spanDays: number,
   lastDate: string | null = null,
+  /**
+   * What to fall back to. The collection chart wants "Owned", which starts at
+   * the first purchase; a single card's price history has no owner and no
+   * such date, so card pages pass "all".
+   */
+  fallback: RangeId = DEFAULT_RANGE,
 ): RangeOption {
   const wanted =
     requested && isRangeId(requested)
       ? rangeById(requested)
-      : rangeById(DEFAULT_RANGE);
+      : rangeById(fallback);
 
   // A link to a range the data no longer supports falls back rather than
   // rendering an empty chart.
   return isRangeAvailable(wanted, spanDays, lastDate)
     ? wanted
-    : rangeById(DEFAULT_RANGE);
+    : rangeById(fallback);
 }

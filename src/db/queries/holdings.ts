@@ -26,6 +26,8 @@ export interface HoldingRow {
   name: string;
   setCode: string;
   setName: string;
+  /** The set's release date, `YYYY-MM-DD`; null before a metadata ingest. */
+  releasedAt: string | null;
   collectorNumber: string;
   imageUri: string | null;
   imageUriLarge: string | null;
@@ -257,6 +259,7 @@ export function listHoldings(
       name: printings.name,
       setCode: printings.setCode,
       setName: printings.setName,
+      releasedAt: printings.releasedAt,
       collectorNumber: printings.collectorNumber,
       imageUri: printings.imageUri,
       imageUriLarge: printings.imageUriLarge,
@@ -291,6 +294,7 @@ export function listHoldings(
       name: row.name,
       setCode: row.setCode,
       setName: row.setName,
+      releasedAt: row.releasedAt,
       collectorNumber: row.collectorNumber,
       imageUri: row.imageUri,
       imageUriLarge: row.imageUriLarge,

@@ -277,6 +277,7 @@ export async function ingestScryfallBulk(
             // re-ingest populated it only on printings that happened to be
             // new: 229 rows of 108,449, with no error anywhere.
             imageUriLarge: sql`excluded.image_uri_large`,
+            releasedAt: sql`excluded.released_at`,
             imageUriBack: sql`excluded.image_uri_back`,
             imageUriBackLarge: sql`excluded.image_uri_back_large`,
             finishes: sql`excluded.finishes`,
@@ -401,6 +402,7 @@ export async function ingestScryfallBulk(
         // Read from Scryfall rather than derived from the normal URL; see the
         // column's note in the schema.
         imageUriLarge: imageUriFor(card, "large"),
+        releasedAt: card.released_at ?? null,
         imageUriBack: backImageUriFor(card, "normal"),
         imageUriBackLarge: backImageUriFor(card, "large"),
         finishes: finishes.length > 0 ? finishes : ["nonfoil"],

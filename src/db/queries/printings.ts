@@ -30,6 +30,7 @@ export interface PrintingSearchResult {
   collectorNumber: string;
   imageUri: string | null;
   imageUriLarge: string | null;
+  releasedAt: string | null;
   imageUriBack: string | null;
   imageUriBackLarge: string | null;
   finishes: Finish[];
@@ -110,6 +111,7 @@ const PRINTING_COLUMNS = {
   collectorNumber: printings.collectorNumber,
   imageUri: printings.imageUri,
   imageUriLarge: printings.imageUriLarge,
+  releasedAt: printings.releasedAt,
   imageUriBack: printings.imageUriBack,
   imageUriBackLarge: printings.imageUriBackLarge,
   finishes: printings.finishes,
@@ -242,11 +244,22 @@ export function getPrintingByScryfallId(
 }
 
 /** Other printings of the same card, for cross-linking from a card page. */
+/**
+ * Every other printing of the same card, oldest first.
+ *
+ * Unlimited on purpose. A staple can have forty printings and a capped list
+ * quietly hid the ones a reader was most likely looking for; "every printing"
+ * is the question this answers, so a partial answer is the wrong one.
+ *
+ * Ordered by release date. Set code is alphabetical, which scatters a card's
+ * history — 2XM next to 2ED next to 30A — and the order people hold this in
+ * their heads is chronological. Printings with no date sort last rather than
+ * first, so a gap in the metadata does not head the list.
+ */
 export function otherPrintings(
   db: Db,
   oracleId: string,
   excludeScryfallId: string,
-  limit = 24,
 ): PrintingSearchResult[] {
   const rows = db
     .select(PRINTING_COLUMNS)
@@ -257,8 +270,12 @@ export function otherPrintings(
         sql`${printings.scryfallId} <> ${excludeScryfallId}`,
       ),
     )
-    .orderBy(asc(printings.setCode), asc(printings.collectorNumber))
-    .limit(limit)
+    .orderBy(
+      sql`case when ${printings.releasedAt} is null then 1 else 0 end`,
+      asc(printings.releasedAt),
+      asc(printings.setCode),
+      asc(printings.collectorNumber),
+    )
     .all();
   return withPrices(db, rows);
 }

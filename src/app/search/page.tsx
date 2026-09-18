@@ -118,7 +118,11 @@ export default async function SearchPage(props: PageProps<"/search">) {
                   <p className="text-sm text-neutral-600 dark:text-neutral-400">
                     {printing.setName} ·{" "}
                     <span className="font-mono text-xs">
-                      {printingCode(printing.setCode, printing.collectorNumber)}
+                      {printingCode(
+                        printing.setCode,
+                        printing.collectorNumber,
+                        printing.releasedAt,
+                      )}
                     </span>
                   </p>
 

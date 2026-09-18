@@ -31,7 +31,7 @@ export async function generateMetadata(props: PageProps<"/cards/[scryfallId]">) 
   const printing = getPrintingByScryfallId(db, scryfallId);
   if (!printing) return { title: "Card not found" };
   return {
-    title: `${printing.name} · ${printingCode(printing.setCode, printing.collectorNumber)}`,
+    title: `${printing.name} · ${printingCode(printing.setCode, printing.collectorNumber, printing.releasedAt)}`,
   };
 }
 
@@ -90,7 +90,10 @@ export default async function CardPage(props: PageProps<"/cards/[scryfallId]">) 
   const last = points.at(-1)?.date ?? null;
   const spanDays = first && last ? spanInDays(first, last) : 0;
   const requestedRange = typeof search.range === "string" ? search.range : undefined;
-  const range = resolveRange(requestedRange, spanDays, last);
+  // "All" rather than the collection's "Owned": a card's price history is not
+  // about ownership, and "Owned" has no date to start from here, so it would
+  // silently render the whole series under a label that implies otherwise.
+  const range = resolveRange(requestedRange, spanDays, last, "all");
   const from = last ? rangeStart(range, last) : null;
   const visible = from ? points.filter((point) => point.date >= from) : points;
   const stats = priceStats(visible, Math.max(visible.length - 1, 1));
@@ -135,7 +138,11 @@ export default async function CardPage(props: PageProps<"/cards/[scryfallId]">) 
           <p className="mt-1 text-sm text-neutral-600 dark:text-neutral-400">
             {printing.setName} ·{" "}
             <span className="font-mono text-xs">
-              {printingCode(printing.setCode, printing.collectorNumber)}
+              {printingCode(
+                printing.setCode,
+                printing.collectorNumber,
+                printing.releasedAt,
+              )}
             </span>
           </p>
 
@@ -286,6 +293,7 @@ export default async function CardPage(props: PageProps<"/cards/[scryfallId]">) 
             active={range.id}
             spanDays={spanDays}
             lastDate={last}
+            exclude={["held"]}
             hrefFor={(id) =>
               `/cards/${printing.scryfallId}?finish=${finish}&range=${id}${
                 priceSource === "tcgplayer" ? "" : `&prices=${priceSource}`
@@ -339,7 +347,11 @@ export default async function CardPage(props: PageProps<"/cards/[scryfallId]">) 
                     <span className="min-w-0 truncate">
                       {other.setName}{" "}
                       <span className="font-mono text-xs text-neutral-600 dark:text-neutral-400">
-                        {printingCode(other.setCode, other.collectorNumber)}
+                        {printingCode(
+                          other.setCode,
+                          other.collectorNumber,
+                          other.releasedAt,
+                        )}
                       </span>
                     </span>
                     <span className="shrink-0 tabular-nums text-neutral-600 dark:text-neutral-400">

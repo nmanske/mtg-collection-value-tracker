@@ -26,15 +26,18 @@ export function RangePicker({
   spanDays,
   lastDate,
   hrefFor,
+  exclude = [],
 }: {
   active: RangeId;
   spanDays: number;
   lastDate: string | null;
   hrefFor: (id: RangeId) => string;
+  /** Ranges that make no sense here. A card page has no "Owned". */
+  exclude?: RangeId[];
 }) {
   return (
     <nav aria-label="Chart range" className="flex flex-wrap gap-1">
-      {RANGES.map((range) => {
+      {RANGES.filter((range) => !exclude.includes(range.id)).map((range) => {
         const available = isRangeAvailable(range, spanDays, lastDate);
         const current = range.id === active;
 

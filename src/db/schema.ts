@@ -79,6 +79,14 @@ export const printings = sqliteTable(
      * entry per face instead. Only the front was ever stored, so a transform
      * or modal card could not be turned over.
      */
+    /**
+     * The set's release date, `YYYY-MM-DD`, straight from Scryfall.
+     *
+     * Stored per printing rather than in a sets table: a printing is the only
+     * thing this app has, and the date is what turns "BLB 280" into something
+     * a reader can place in time.
+     */
+    releasedAt: text("released_at"),
     imageUriBack: text("image_uri_back"),
     imageUriBackLarge: text("image_uri_back_large"),
     /** Scryfall `finishes`, as a JSON array of {@link Finish}. */

@@ -26,8 +26,27 @@ export const FINISH_LABEL: Record<Finish, string> = {
 };
 
 /** e.g. "BLB 280" — how players actually identify a printing. */
-export function printingCode(setCode: string, collectorNumber: string): string {
-  return `${setCode.toUpperCase()} ${collectorNumber}`;
+export function printingCode(
+  setCode: string,
+  collectorNumber: string,
+  /** The set's release date, `YYYY-MM-DD`. Omitted before a metadata ingest. */
+  releasedAt?: string | null,
+): string {
+  const base = `${setCode.toUpperCase()} ${collectorNumber}`;
+  const year = releaseYear(releasedAt);
+  return year ? `${base} (${year})` : base;
+}
+
+/**
+ * The year a set came out, or null.
+ *
+ * A set code says nothing about when a card was printed unless you already
+ * know the code, which is most of the value of showing it.
+ */
+export function releaseYear(releasedAt?: string | null): string | null {
+  if (!releasedAt) return null;
+  const year = releasedAt.slice(0, 4);
+  return /^\d{4}$/.test(year) ? year : null;
 }
 
 /** "3 days ago" style staleness for a price date, kept deliberately coarse. */
