@@ -52,6 +52,7 @@ const checks: Check[] = [
   { path: "/search?q=sliver", expect: ["printing"] },
   { path: "/export", expect: ["Collection", "Value history"] },
   { path: "/import", expect: ["Moxfield"] },
+  { path: "/faq", expect: ["How it works", "best year"] },
 ];
 
 let failures = 0;

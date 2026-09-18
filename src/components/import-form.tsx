@@ -43,7 +43,7 @@ export function ImportForm() {
           {/* Defaults on: a preview is the safe first move, and it is what
               reveals how the Condition and Foil columns were mapped. */}
           <input type="checkbox" name="dryRun" defaultChecked />
-          Preview only — show what would be imported without writing
+          Preview only
         </label>
 
         <div>
@@ -113,8 +113,8 @@ export function ImportForm() {
                 Sets with no paper printings
               </h2>
               <p className="mb-2 text-xs text-neutral-500">
-                Digital-only (MTGO) sets price in tix rather than USD, so they
-                cannot be valued here and their rows were not imported.
+                Digital-only sets price in tix, not dollars, so these rows were
+                skipped.
               </p>
               <ul className="flex flex-col gap-1">
                 {report.unknownSets.map((set) => (

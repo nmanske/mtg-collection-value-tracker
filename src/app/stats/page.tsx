@@ -9,6 +9,7 @@ import {
   collectionStats,
 } from "@/db/queries/stats";
 import { portfolioHistory } from "@/db/queries/history";
+import { InfoTip } from "@/components/info-tip";
 import type { PeriodChange } from "@/lib/portfolio-history";
 import { FINISH_LABEL, formatUsd, printingCode } from "@/lib/format";
 import type { Finish } from "@/db/schema";
@@ -44,15 +45,23 @@ function Stat({
 function Panel({
   title,
   note,
+  tip,
   children,
 }: {
   title: string;
+  /** One short line. Anything needing a second sentence belongs in `tip`. */
   note?: string;
+  tip?: React.ReactNode;
   children: React.ReactNode;
 }) {
   return (
     <section className="rounded-lg border border-neutral-200 p-5 dark:border-neutral-800">
-      <h2 className="text-sm font-medium">{title}</h2>
+      {/* The tip is a sibling of the heading, not a child: `details` is flow
+          content and an `h2` takes phrasing content only. */}
+      <div className="text-sm font-medium">
+        <h2 className="inline">{title}</h2>
+        {tip}
+      </div>
       {note ? <p className="mt-1 text-xs text-neutral-500">{note}</p> : null}
       <div className="mt-4">{children}</div>
     </section>
@@ -241,12 +250,20 @@ export default async function StatsPage() {
     <main className="page-shell py-10">
       <header className="mb-8 flex items-baseline justify-between gap-4">
         <h1 className="text-2xl font-semibold tracking-tight">Statistics</h1>
-        <Link
-          href="/"
-          className="text-sm text-neutral-500 underline-offset-4 hover:underline"
-        >
-          Back to collection
-        </Link>
+        <div className="flex items-center gap-4">
+          <Link
+            href="/faq"
+            className="text-sm text-neutral-500 underline-offset-4 hover:underline"
+          >
+            How it works
+          </Link>
+          <Link
+            href="/"
+            className="text-sm text-neutral-500 underline-offset-4 hover:underline"
+          >
+            Back to collection
+          </Link>
+        </div>
       </header>
 
       <dl className="mb-8 grid grid-cols-2 gap-6 sm:grid-cols-3 lg:grid-cols-7">
@@ -284,25 +301,37 @@ export default async function StatsPage() {
         <div className="mb-5 grid grid-cols-1 gap-5 lg:grid-cols-2 3xl:grid-cols-3">
           <Panel
             title="Year by year"
-            note={`What today's cards were worth at each year end, comparing only the cards priced at both ends of each step. Measured from ${history.points[0].date}.`}
+            note={`Like-for-like, from ${history.points[0].date}.`}
+            tip={
+              <InfoTip label="How year by year is measured">
+                Each month compares only the cards priced at both of its ends,
+                and the months are chained, so a card first appearing does not
+                read as a gain. The oldest step covers{" "}
+                {history.earliestCompared.toLocaleString()} of{" "}
+                {history.totalHoldings.toLocaleString()} holdings &mdash; the
+                rest had not been printed yet.{" "}
+                <Link href="/faq#like-for-like" className="underline underline-offset-2">
+                  More
+                </Link>
+              </InfoTip>
+            }
           >
             <ul className="flex flex-col divide-y divide-neutral-100 dark:divide-neutral-900">
               {[...history.years].reverse().map((year) => (
                 <YearRow key={year.label} year={year} widest={widestYear} />
               ))}
             </ul>
-            <p className="mt-4 text-xs text-neutral-500">
-              The oldest step covers{" "}
-              {history.earliestCompared.toLocaleString()} of{" "}
-              {history.totalHoldings.toLocaleString()} holdings — the rest had
-              not been printed yet. Each step compares only the cards priced on
-              both of its dates, so a card appearing does not read as a gain.
-            </p>
           </Panel>
 
           <Panel
             title="Peak and trough"
-            note="The deepest fall from a high, by percentage rather than by dollars, so a big decline in a small collection is not hidden by a small one in a large collection."
+            note="Deepest fall from a high."
+            tip={
+              <InfoTip label="Why drawdowns are ranked by percentage">
+                By percentage, not dollars, so a steep fall in a small
+                collection is not hidden by a shallow one in a large collection.
+              </InfoTip>
+            }
           >
             {history.drawdown ? (
               <dl className="grid grid-cols-2 gap-6">
@@ -345,7 +374,7 @@ export default async function StatsPage() {
 
           <Panel
             title="Best and worst"
-            note="Ranked by percentage across the whole tracked history."
+            note="By percentage, across all history."
           >
             <dl className="grid grid-cols-2 gap-6">
               {(
@@ -379,7 +408,6 @@ export default async function StatsPage() {
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-2 3xl:grid-cols-3">
         <Panel
           title="The long tail"
-          note="Most collections are a few good cards and a mountain of commons. Here is the shape of yours."
         >
           <ul className="flex flex-col gap-3 text-sm">
             <li>
@@ -427,7 +455,7 @@ export default async function StatsPage() {
           </ul>
         </Panel>
 
-        <Panel title="Most valuable" note="Single cards, by unit price.">
+        <Panel title="Most valuable" note="By unit price.">
           <ul className="flex flex-col divide-y divide-neutral-100 dark:divide-neutral-900">
             {stats.mostValuable.map((card) => (
               <CardLine
@@ -445,21 +473,27 @@ export default async function StatsPage() {
 
         <Panel
           title="Biggest risers"
-          note="Since each card was first tracked. Cards under a dollar are excluded — a two-cent move is not news."
+          note="Since first tracked. Under $1 excluded."
         >
           <MoverList movers={stats.gainers} tone="up" />
         </Panel>
 
         <Panel
           title="Biggest fallers"
-          note="Same window. New sets often appear at preorder prices and slide once supply arrives."
+          note="Same window."
+          tip={
+            <InfoTip label="Why new sets dominate the fallers">
+              New sets often list at preorder prices and slide once supply
+              arrives.
+            </InfoTip>
+          }
         >
           <MoverList movers={stats.losers} tone="down" />
         </Panel>
 
         <Panel
           title="Made you the most"
-          note="Ranked by effect on the collection — change times how many you own — rather than by percentage."
+          note="Change × quantity, not percentage."
         >
           {stats.biggestGains.length === 0 ? (
             <p className="text-sm text-neutral-500">Nothing up yet.</p>
@@ -481,7 +515,7 @@ export default async function StatsPage() {
           )}
         </Panel>
 
-        <Panel title="Cost you the most" note="The same, in the other direction.">
+        <Panel title="Cost you the most" note="The same, downward.">
           {stats.biggestLosses.length === 0 ? (
             <p className="text-sm text-neutral-500">Nothing down yet.</p>
           ) : (
@@ -504,7 +538,7 @@ export default async function StatsPage() {
 
         <Panel
           title="Where the value sits"
-          note="Top sets by total value. Bars are relative to the largest."
+          note="By total value."
         >
           <ul className="flex flex-col gap-2">
             {stats.topSets.map((set) => (
@@ -540,7 +574,7 @@ export default async function StatsPage() {
 
         <Panel
           title="Most copies"
-          note="Counted across every printing of the same card."
+          note="Across every printing."
         >
           <ul className="flex flex-col divide-y divide-neutral-100 dark:divide-neutral-900">
             {stats.mostCopies.map((card) => (
@@ -564,7 +598,14 @@ export default async function StatsPage() {
 
         <Panel
           title="Easiest to sell"
-          note={`Card Kingdom's buy price as a share of its own ask, for cards it lists above ${formatUsd(SPREAD_FLOOR_CENTS)}. Below that its flat floor price swamps the ratio.`}
+          note={`Buy price as a share of ask, above ${formatUsd(SPREAD_FLOOR_CENTS)}.`}
+          tip={
+            <InfoTip label="Why cheap cards are excluded">
+              Below {formatUsd(SPREAD_FLOOR_CENTS)} Card Kingdom&rsquo;s flat
+              floor price swamps the ratio and every cheap card shows the same
+              number.
+            </InfoTip>
+          }
         >
           <SpreadList spreads={stats.bestSpreads} />
         </Panel>
@@ -575,7 +616,16 @@ export default async function StatsPage() {
 
         <Panel
           title="When you bought"
-          note={`Holdings by acquisition month, ${stats.firstAcquired ?? ""} to ${stats.lastAcquired ?? ""}. Dates come from Moxfield's Last Modified column, so they are a lower bound.`}
+          note={`${stats.firstAcquired ?? ""} to ${stats.lastAcquired ?? ""}.`}
+          tip={
+            <InfoTip label="Why acquisition dates are approximate">
+              Moxfield exports a last-modified date, not a purchase date, so
+              these are a lower bound.{" "}
+              <Link href="/faq#acquisition-dates" className="underline underline-offset-2">
+                More
+              </Link>
+            </InfoTip>
+          }
         >
           <ul className="flex flex-col gap-1">
             {stats.acquisitions.map((month) => (
@@ -599,7 +649,7 @@ export default async function StatsPage() {
           </ul>
         </Panel>
 
-        <Panel title="Finishes" note="Holdings and value by finish.">
+        <Panel title="Finishes" note="By finish.">
           <ul className="flex flex-col divide-y divide-neutral-100 dark:divide-neutral-900">
             {stats.finishSplit.map((row) => (
               <li

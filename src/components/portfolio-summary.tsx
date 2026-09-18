@@ -10,6 +10,7 @@ import {
 import { STALE_AFTER_DAYS } from "@/db/queries/vendors";
 import { rangeStart, resolveRange, spanInDays } from "@/lib/ranges";
 
+import { InfoTip } from "./info-tip";
 import { PortfolioChart } from "./portfolio-chart";
 import { RangePicker } from "./range-picker";
 
@@ -21,7 +22,15 @@ import { RangePicker } from "./range-picker";
  * place by carrying the trend that the tiles only summarise.
  */
 
-function ChangeTile({ label, change }: { label: string; change: Change }) {
+function ChangeTile({
+  label,
+  change,
+  tip,
+}: {
+  label: string;
+  change: Change;
+  tip?: React.ReactNode;
+}) {
   if (change.changeCents == null) {
     return (
       <div>
@@ -43,7 +52,10 @@ function ChangeTile({ label, change }: { label: string; change: Change }) {
 
   return (
     <div>
-      <div className="text-xs text-neutral-500">{label}</div>
+      <div className="text-xs text-neutral-500">
+        {label}
+        {tip}
+      </div>
       <div className={`text-sm font-medium tabular-nums ${tone}`}>
         {sign}
         {formatUsd(change.changeCents)}
@@ -115,7 +127,27 @@ export function PortfolioSummaryPanel({
           {/* Separated by a rule: this one answers a different question from
               the three beside it — prices only, with buying held out. */}
           <div className="border-l border-neutral-200 pl-8 dark:border-neutral-800">
-            <ChangeTile label="Prices only" change={summary.marketOnly} />
+            <ChangeTile
+              label="Prices only"
+              change={summary.marketOnly}
+              tip={
+                <InfoTip label="What “prices only” means">
+                  Today&rsquo;s cards valued back through time, so buying is held
+                  out and only price movement is left.{" "}
+                  {summary.allTime.changeCents != null &&
+                  summary.marketOnly.changeCents != null ? (
+                    <>
+                      Of the {formatUsd(summary.allTime.changeCents)} all-time
+                      change, {formatUsd(summary.marketOnly.changeCents)} came
+                      from prices and the rest from cards arriving.{" "}
+                    </>
+                  ) : null}
+                  <Link href="/faq#two-lines" className="underline underline-offset-2">
+                    More
+                  </Link>
+                </InfoTip>
+              }
+            />
           </div>
         </dl>
       </div>
@@ -156,63 +188,66 @@ export function PortfolioSummaryPanel({
 
       <PortfolioChart points={visible} basketPoints={visibleBasket} />
 
-      {last && last.unpricedHoldings > 0 ? (
-        <p className="mt-3 text-xs text-amber-700 dark:text-amber-400">
-          {last.unpricedHoldings.toLocaleString()} holding
-          {last.unpricedHoldings === 1 ? " has" : "s have"} no price on{" "}
-          {last.date} and {last.unpricedHoldings === 1 ? "is" : "are"} excluded
-          from these figures.
-        </p>
-      ) : null}
+      {/* One line of footnotes, not four paragraphs. Each states the fact and
+          the consequence; the reasoning lives on /faq. */}
+      {/* Plain inline flow rather than a flex row: an open tip is a block
+          inside an inline `details`, which breaks out to the width of the
+          nearest block. As a flex item that block would be the narrow chip,
+          and the panel would be a squeezed column. */}
+      <div className="mt-3 text-xs leading-relaxed text-neutral-500">
+        {range.window === null
+          ? `From ${summary.points[0]?.date ?? "—"}`
+          : `${visible.length} day${visible.length === 1 ? "" : "s"} to ${last?.date}`}
 
-      {staleHoldings > 0 ? (
-        // Two figures on this page disagree, and both are right. The chart
-        // values a card from its last known price whatever its age, because a
-        // 2023 price is the correct value for a 2023 date. The vendor table
-        // below drops it, because "what would they pay today" must not quote a
-        // price nobody would honour. Said out loud, because a reader comparing
-        // the two would otherwise reasonably conclude one is broken.
-        <p className="mt-3 max-w-prose text-xs text-neutral-500">
-          {staleHoldings.toLocaleString()} holding
-          {staleHoldings === 1 ? " is" : "s are"} valued here from a quote{" "}
-          {PRICE_VENDOR_LABEL[priceSource]} has not refreshed in over{" "}
-          {STALE_AFTER_DAYS} days. The vendor table below excludes{" "}
-          {staleHoldings === 1 ? "it" : "them"}, which is why its total is
-          lower.
-        </p>
-      ) : null}
+        {last && last.unpricedHoldings > 0 ? (
+          <>
+            {" · "}
+            <span className="text-amber-700 dark:text-amber-400">
+              {last.unpricedHoldings.toLocaleString()} unpriced, excluded
+            </span>
+            <InfoTip label="Why unpriced holdings are excluded">
+              No source quotes {last.unpricedHoldings === 1 ? "it" : "them"} on{" "}
+              {last.date}. Left out rather than counted as $0.
+            </InfoTip>
+          </>
+        ) : null}
 
-      {visible.some((point) => point.inferredHoldings > 0) ? (
-        <p className="mt-3 max-w-prose text-xs text-amber-700 dark:text-amber-400">
-          {visible.at(-1)!.inferredHoldings.toLocaleString()} holding
-          {visible.at(-1)!.inferredHoldings === 1 ? "" : "s"} carry an
-          acquisition date that is a floor rather than a fact. Moxfield exports
-          a last-modified timestamp, not a purchase date, so cards already owned
-          when the collection was first uploaded all share that day — which is
-          the step in the line, not a day of buying. They are counted from that
-          date, so anything owned earlier is missing from the line before it,
-          and they are not marked as acquisitions.
-        </p>
-      ) : null}
+        {staleHoldings > 0 ? (
+          <>
+            {" · "}
+            {staleHoldings.toLocaleString()} priced from an old quote
+            <InfoTip label="Why the vendor table totals less">
+              Valued here from {PRICE_VENDOR_LABEL[priceSource]} quotes over{" "}
+              {STALE_AFTER_DAYS} days old. The chart keeps them, the vendor table
+              drops them, which is why its total is lower.{" "}
+              <Link href="/faq#stale" className="underline underline-offset-2">
+                More
+              </Link>
+            </InfoTip>
+          </>
+        ) : null}
 
-      {summary.points.length > 0 ? (
-        <p className="mt-3 max-w-prose text-xs text-neutral-500">
-          {range.window === null
-            ? `History begins ${summary.points[0].date}, the earliest price data available.`
-            : `Showing ${visible.length} day${visible.length === 1 ? "" : "s"} to ${last?.date}; ${spanDays} days of history are available in total.`} Cards acquired before then count from that date onward.
-          {summary.marketOnly.changeCents != null &&
-          summary.allTime.changeCents != null ? (
-            <>
-              {" "}
-              Of the {formatUsd(summary.allTime.changeCents)} all-time change,{" "}
-              {formatUsd(summary.marketOnly.changeCents)} came from prices and
-              the rest from cards entering the collection. The fixed basket is
-              the cards you hold today, so it is chosen with hindsight rather
-              than being a market index.
-            </>
-          ) : null}
-        </p>
-      ) : null}
+        {visible.some((point) => point.inferredHoldings > 0) ? (
+          <>
+            {" · "}
+            <span className="text-amber-700 dark:text-amber-400">
+              {visible.at(-1)!.inferredHoldings.toLocaleString()} estimated dates
+            </span>
+            <InfoTip label="Why some acquisition dates are estimated">
+              Moxfield exports a last-modified date, not a purchase date, so
+              cards owned before your first upload share that day. Counted from
+              then, so the line understates rather than invents.{" "}
+              <Link
+                href="/faq#acquisition-dates"
+                className="underline underline-offset-2"
+              >
+                More
+              </Link>
+            </InfoTip>
+          </>
+        ) : null}
+      </div>
+
     </section>
   );
 }

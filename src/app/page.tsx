@@ -78,6 +78,13 @@ export default async function CollectionPage(props: PageProps<"/">) {
         </div>
 
         <div className="flex items-center gap-3">
+          {/* Quiet, because it is read once and then rarely. */}
+          <Link
+            href="/faq"
+            className="px-1 text-sm text-neutral-500 underline-offset-4 hover:underline"
+          >
+            How it works
+          </Link>
           <Link
             href="/stats"
             className="rounded-md border border-neutral-300 px-4 py-2 text-sm font-medium hover:bg-neutral-50 dark:border-neutral-700 dark:hover:bg-neutral-900"
@@ -123,9 +130,8 @@ export default async function CollectionPage(props: PageProps<"/">) {
       {unpricedCount > 0 ? (
         // Never let an unpriced card quietly count as $0 in the total.
         <p className="mb-6 rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-200">
-          {unpricedCount} holding{unpricedCount === 1 ? " has" : "s have"} no
-          price from any source and {unpricedCount === 1 ? "is" : "are"} excluded
-          from the total above.
+          {unpricedCount} unpriced holding{unpricedCount === 1 ? "" : "s"},
+          excluded from the total.
         </p>
       ) : null}
 

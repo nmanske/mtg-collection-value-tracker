@@ -1,3 +1,6 @@
+import Link from "next/link";
+
+import { InfoTip } from "./info-tip";
 import {
   type CollectionTotalsByVendor,
   STALE_AFTER_DAYS,
@@ -47,9 +50,8 @@ export function VendorTotals({
       >
         By vendor
       </h2>
-      <p className="mt-1 mb-4 max-w-prose text-sm text-neutral-500">
-        What each shop asks for your cards, and what it would pay for them,
-        using the most recent price recorded for each card.
+      <p className="mt-1 mb-4 text-sm text-neutral-500">
+        What each shop asks, and what it would pay.
       </p>
 
       <table className="w-full text-sm">
@@ -147,15 +149,19 @@ export function VendorTotals({
         </tbody>
       </table>
 
-      <p className="mt-4 max-w-prose text-xs text-neutral-500">
-        Totals only span the holdings a vendor actually quotes, so a smaller
-        figure may mean thinner coverage rather than a lower price — check the
-        &ldquo;covers&rdquo; column before reading it as a discount.
-        &ldquo;Priced&rdquo; is the date these prices come from. A card a shop
-        has not quoted in {STALE_AFTER_DAYS} days is left out of the total
-        rather than counted at a price nobody would honour today, which is why
-        a buylist figure can cover fewer cards than a retail one.
-      </p>
+      <div className="mt-4 text-xs text-neutral-500">
+        A lower total often means thinner coverage, not a better price &mdash;
+        check <em>covers</em>.
+        <InfoTip label="How these totals are built">
+          Totals span only the cards a vendor actually quotes, and leave out any
+          quote more than {STALE_AFTER_DAYS} days older than that
+          vendor&rsquo;s newest data.{" "}
+          <Link href="/faq#coverage" className="underline underline-offset-2">
+            More
+          </Link>
+        </InfoTip>
+      </div>
+
     </section>
   );
 }

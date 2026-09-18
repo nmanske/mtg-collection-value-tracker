@@ -65,12 +65,7 @@ export function VendorQuotes({ quotes }: { quotes: VendorQuote[] }) {
   if (quotes.length === 0) {
     return (
       <p className="text-sm text-neutral-500">
-        No vendor comparison for this printing. Vendor data covers cards in your
-        collection only — run{" "}
-        <code className="font-mono text-xs">
-          npm run backfill:mtgjson -- --vendors
-        </code>{" "}
-        after importing.
+        No vendor prices for this printing.
       </p>
     );
   }

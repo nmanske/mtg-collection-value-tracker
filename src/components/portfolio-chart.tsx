@@ -88,7 +88,7 @@ function ValueTooltip({ active, payload }: TooltipPayload) {
           <span className="tabular-nums text-[var(--viz-text)]">
             {formatUsd(point.basketCents)}
           </span>
-          <span className="text-[var(--viz-muted)]">if held throughout</span>
+          <span className="text-[var(--viz-muted)]">prices only</span>
         </div>
       ) : null}
       <div className="mt-0.5 text-[var(--viz-muted)]">
@@ -134,8 +134,7 @@ function PortfolioChartBody({
   if (points.length < 2) {
     return (
       <p className="py-12 text-center text-sm text-[var(--viz-muted)]">
-        Not enough price history yet to chart. Run the daily ingest for a few
-        days, or backfill from MTGJSON.
+        Not enough price history to chart yet.
       </p>
     );
   }
@@ -193,19 +192,13 @@ function PortfolioChartBody({
               className="inline-block h-0.5 w-4 rounded-full bg-[var(--viz-series)]"
             />
             <span className="text-[var(--viz-text)]">As held</span>
-            <span className="text-[var(--viz-muted)]">
-              counts each card from the day you got it
-            </span>
           </span>
           <span className="flex items-center gap-1.5">
             <span
               aria-hidden
               className="inline-block h-0.5 w-4 rounded-full bg-[var(--viz-series-2)]"
             />
-            <span className="text-[var(--viz-text)]">If held throughout</span>
-            <span className="text-[var(--viz-muted)]">
-              today&apos;s cards priced across the whole window
-            </span>
+            <span className="text-[var(--viz-text)]">Prices only</span>
           </span>
           {showAcquisitions ? (
             <span className="flex items-center gap-1.5">
@@ -214,9 +207,6 @@ function PortfolioChartBody({
                 className="inline-block h-2.5 w-2 rounded-sm bg-[var(--viz-mark)] opacity-55"
               />
               <span className="text-[var(--viz-text)]">Cards added</span>
-              <span className="text-[var(--viz-muted)]">
-                taller means more that day
-              </span>
             </span>
           ) : null}
         </figcaption>
@@ -360,10 +350,8 @@ function PortfolioChartBody({
 
       {showAcquisitions ? (
         <p className="mt-2 text-xs text-[var(--viz-muted)]">
-          Grey bars mark days cards were added — taller means more.{" "}
-          {acquisitions.length} day{acquisitions.length === 1 ? "" : "s"} in this
-          window, the largest {busiestDay.toLocaleString()} holdings. They are
-          what the steps in the blue line are.
+          Grey bars are days cards were added &mdash; {acquisitions.length} here,
+          the largest {busiestDay.toLocaleString()} holdings.
         </p>
       ) : null}
 
@@ -387,7 +375,7 @@ function PortfolioChartBody({
                 </th>
                 {showBasket ? (
                   <th scope="col" className="py-1 pr-4 text-right font-medium">
-                    If held throughout
+                    Prices only
                   </th>
                 ) : null}
                 <th scope="col" className="py-1 pr-4 text-right font-medium">

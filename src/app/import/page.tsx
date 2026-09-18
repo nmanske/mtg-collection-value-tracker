@@ -1,5 +1,7 @@
 import Link from "next/link";
 
+import { InfoTip } from "@/components/info-tip";
+
 import { ImportForm } from "@/components/import-form";
 
 export const metadata = { title: "Import collection" };
@@ -21,21 +23,25 @@ export default function ImportPage() {
         </Link>
       </header>
 
-      <p className="mb-6 text-sm text-neutral-500">
-        Export your collection from Moxfield as CSV, then upload it here.
-        Acquisition dates come from the{" "}
-        <code className="font-mono text-xs">Last Modified</code> column. That is
-        strictly an edit timestamp rather than a purchase date — editing a card
-        in Moxfield later moves it forward — so treat it as the earliest date
-        you are known to have held the card. Rows with no usable timestamp fall
-        back to today, and any date can be corrected per holding afterwards.
-      </p>
+      <div className="mb-6 max-w-prose text-sm text-neutral-500">
+        Export your collection from Moxfield as CSV and upload it here. The file
+        is treated as your whole collection: quantities are set from it, and
+        cards it no longer lists are removed. Hand-added cards are left alone.
+        <InfoTip label="How import handles dates and re-imports">
+          Acquisition dates come from Moxfield&rsquo;s{" "}
+          <code className="font-mono">Last Modified</code> column, which is an
+          edit timestamp rather than a purchase date, so treat it as the
+          earliest date you are known to have held the card. Rows with no
+          timestamp fall back to today, and any date can be corrected per
+          holding afterwards. Re-importing the same file changes nothing.{" "}
+          <Link href="/faq#acquisition-dates" className="underline underline-offset-2">
+            More
+          </Link>
+        </InfoTip>
+      </div>
 
       <p className="mb-6 text-sm text-neutral-500">
-        The export is treated as your whole collection: quantities are set from
-        the file, and cards it no longer lists are removed. Re-importing the
-        same file therefore changes nothing. Cards you added by hand are left
-        alone. Preview first to see exactly what would change.
+        Preview first to see exactly what would change.
       </p>
 
       <ImportForm />

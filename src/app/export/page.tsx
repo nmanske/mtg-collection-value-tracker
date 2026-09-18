@@ -1,5 +1,7 @@
 import Link from "next/link";
 
+import { InfoTip } from "@/components/info-tip";
+
 import { db } from "@/db";
 import { EXPORTS, EXPORT_ORDER, exportSizes } from "@/export/datasets";
 
@@ -34,9 +36,7 @@ export default async function ExportPage() {
       </header>
 
       <p className="mb-8 text-sm text-neutral-500">
-        Both exports describe your collection: what you own, and what it has
-        been worth. CSV, UTF-8 with a byte-order mark so spreadsheets read
-        accented card names correctly.
+        CSV, spreadsheet-ready.
       </p>
 
       <ul className="flex flex-col gap-4">
@@ -83,20 +83,17 @@ export default async function ExportPage() {
         })}
       </ul>
 
-      <div className="mt-8 flex flex-col gap-2 text-xs text-neutral-500">
-        <p>
-          Prices are decimal dollars except the Cardmarket columns, which are
-          euros and labelled as such — nothing here converts between
-          currencies. Each vendor is a column rather than extra rows, so the
-          comparison reads across a card.
-        </p>
-        <p>
-          There is deliberately no per-card daily price export. Price providers
-          forbid repackaging their data as a standalone feed or bulk dataset,
-          and a file with one row per card per day is exactly that. To back up
-          the accumulated history, copy the database file itself —{" "}
-          <code className="font-mono">data/mtg.db</code>.
-        </p>
+      <div className="mt-8 text-xs text-neutral-500">
+        Prices in dollars; Cardmarket columns are euros and nothing converts
+        between them.
+        <InfoTip label="Why there is no full price history export">
+          One row per card per day would be a repackaged copy of the
+          providers&rsquo; data, which their terms forbid. To keep the history,
+          copy <code className="font-mono">data/mtg.db</code>.{" "}
+          <Link href="/faq#exports" className="underline underline-offset-2">
+            More
+          </Link>
+        </InfoTip>
       </div>
 
     </main>

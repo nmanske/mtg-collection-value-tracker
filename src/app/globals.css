@@ -131,3 +131,11 @@ body {
   white-space: nowrap;
   border-width: 0;
 }
+
+/*
+ * Safari ignores `list-style: none` on a summary; only this pseudo-element
+ * hides its disclosure triangle. Needed by the InfoTip disclosures.
+ */
+summary::-webkit-details-marker {
+  display: none;
+}
