@@ -25,16 +25,28 @@ import { recordDailyRun, runDailyPriceIngest } from "@/lib/daily-ingest";
  */
 
 /**
- * 10:15 UTC by default. Scryfall's `default_cards` file was built at 09:05 UTC
- * on the day this was written; an hour of slack means a late build is still
- * picked up, and if it is not, the ingest simply finds the same build and
- * skips, then catches it the next day.
+ * 04:30 in `DEFAULT_TIMEZONE` — an hour nobody is looking at the site, so the
+ * ingest has the write lock to itself.
+ *
+ * A named zone rather than a fixed UTC offset, so the run stays at 04:30 local
+ * across daylight saving rather than drifting an hour twice a year. Node ships
+ * full ICU, so the zone resolves without a tzdata package in the image.
+ *
+ * The trade-off is upstream timing. Scryfall's `default_cards` was built at
+ * 09:05 UTC on the day this was written, which leaves about 90 minutes of slack
+ * under CST and only 25 under CDT. If a build is late the ingest finds the
+ * previous one, skips, and catches it the next day; the dashboard only reports
+ * a problem once prices are two days behind. Worth knowing, not worth moving
+ * the schedule for.
  *
  * MTGJSON rebuilds `AllPricesToday` daily too, and the price job skips when the
  * build version is one already recorded, so a run that lands between the two
  * upstream builds costs nothing beyond a wasted download.
  */
-const DEFAULT_SCHEDULE = "15 10 * * *";
+const DEFAULT_SCHEDULE = "30 4 * * *";
+
+/** US Central, which handles CST and CDT without the schedule moving. */
+const DEFAULT_TIMEZONE = "America/Chicago";
 
 /**
  * Guards against double registration. Next calls `register` once per server
@@ -160,7 +172,7 @@ export async function startScheduler(): Promise<void> {
   }
 
   const schedule = process.env.CRON_SCHEDULE ?? DEFAULT_SCHEDULE;
-  const timezone = process.env.CRON_TIMEZONE ?? "UTC";
+  const timezone = process.env.CRON_TIMEZONE ?? DEFAULT_TIMEZONE;
 
   const { schedule: scheduleTask, validate } = await import("node-cron");
   if (!validate(schedule)) {
@@ -168,15 +180,25 @@ export async function startScheduler(): Promise<void> {
     return;
   }
 
-  scheduleTask(schedule, () => void runIngest("scheduled"), {
-    timezone,
-    name: "daily-refresh",
-    // node-cron will not start a run while the previous one is still going.
-    // The module-level guard covers the other case: the first-run ingest
-    // overlapping with a scheduled one.
-    noOverlap: true,
-  });
-  log(`scheduled daily ingest at "${schedule}" (${timezone})`);
+  // An unrecognised timezone throws from here. Caught, because this runs inside
+  // the instrumentation hook: an unhandled throw stops the whole server
+  // booting, and a mistyped zone should cost the schedule, not the site.
+  try {
+    scheduleTask(schedule, () => void runIngest("scheduled"), {
+      timezone,
+      name: "daily-refresh",
+      // node-cron will not start a run while the previous one is still going.
+      // The module-level guard covers the other case: the first-run ingest
+      // overlapping with a scheduled one.
+      noOverlap: true,
+    });
+    log(`scheduled daily ingest at "${schedule}" (${timezone})`);
+  } catch (error) {
+    log(
+      `could not schedule with timezone "${timezone}": ${(error as Error).message}`,
+    );
+    return;
+  }
 
   // A fresh container has no cards at all, so the app would render an empty
   // shell until the first scheduled run. Fill it immediately instead.

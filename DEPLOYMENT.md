@@ -64,7 +64,7 @@ Then open <http://kettlecorn:3010>. Expect 3,868 holdings from that last check
 — if it says 0, the database did not land where `DATA_DIR` points.
 
 Two things worth doing before you walk away: set `CRON_SCHEDULE="* * * * *"`,
-restart, watch one run reach `prices: done`, then put it back to `15 10 * * *`.
+restart, watch one run reach `prices: done`, then put it back to `30 4 * * *`.
 And set up the backup cron in section 8.
 
 ---
@@ -242,7 +242,7 @@ The first build takes a minute or two. Expect to see:
 
 ```
 [cron] database ready at /app/data/mtg.db
-[cron] scheduled daily ingest at "15 10 * * *" (UTC)
+[cron] scheduled daily ingest at "30 4 * * *" (America/Chicago)
 ```
 
 Then open <http://kettlecorn:3010>.
@@ -279,7 +279,7 @@ docker compose exec app node -e \
 
 Then prove the schedule actually fires, rather than waiting a day to find out it
 does not. Set `CRON_SCHEDULE="* * * * *"` in `.env`, restart, and watch one
-complete run before putting it back to `15 10 * * *`:
+complete run before putting it back to `30 4 * * *`:
 
 ```bash
 docker compose up -d

@@ -37,7 +37,7 @@ false; the chart already draws estimated points differently.
 ### 2. Daily cron to load the database — done
 
 `src/lib/scheduler.ts` runs in-process via `node-cron` on `CRON_SCHEDULE`
-(10:15 UTC) and now does Scryfall metadata **and** MTGJSON prices.
+(04:30 US Central) and now does Scryfall metadata **and** MTGJSON prices.
 
 Prices run as a **child process**, not an import. The Turbopack problem was the
 trigger — the ingest lives in `.mts` modules with `.mjs` specifiers, the form
