@@ -46,17 +46,18 @@ assert.equal(isRangeAvailable(byId("3m"), 89), false);
 // A month of data unlocks only the month.
 assert.deepEqual(
   RANGES.filter((range) => isRangeAvailable(range, 30)).map((r) => r.id),
-  ["1m", "all"],
+  // "Owned" is bounded by the data like "All", so it is always offered.
+  ["held", "1m", "all"],
 );
 // A year unlocks up to 1Y, but not the multi-year windows.
 assert.deepEqual(
   RANGES.filter((range) => isRangeAvailable(range, 365)).map((r) => r.id),
-  ["1m", "3m", "6m", "1y", "all"],
+  ["held", "1m", "3m", "6m", "1y", "all"],
 );
 // The archive backfill's ~5.7 years unlocks every fixed window.
 assert.deepEqual(
   RANGES.filter((range) => isRangeAvailable(range, 2_100)).map((r) => r.id),
-  ["1m", "3m", "6m", "1y", "2y", "5y", "all"],
+  ["held", "1m", "3m", "6m", "1y", "2y", "5y", "all"],
 );
 assert.equal(isRangeAvailable(byId("2y"), 730), true);
 assert.equal(isRangeAvailable(byId("2y"), 729), false);
@@ -89,11 +90,19 @@ assert.equal(isRangeAvailable(byId("ytd"), 5_000, "2026-01-02"), true);
 // unsizable YTD would render a chart over a window nobody chose.
 assert.equal(isRangeAvailable(byId("ytd"), 91), false);
 assert.equal(isRangeAvailable(byId("ytd"), 5_000, null), false);
-// A brand new install has only "All".
+// A brand new install has only the two data-bounded ranges.
 assert.deepEqual(
   RANGES.filter((range) => isRangeAvailable(range, 1)).map((r) => r.id),
-  ["all"],
+  ["held", "all"],
 );
+
+// "Owned" starts at the first date anything was held, and falls back to the
+// whole series when nothing is — an empty collection has no first purchase,
+// and truncating to nothing would render a blank chart.
+assert.equal(rangeStart(byId("held"), "2026-09-17", "2023-10-09"), "2023-10-09");
+assert.equal(rangeStart(byId("held"), "2026-09-17", null), null);
+// It is not a fixed window, so it has no day requirement to fail.
+assert.equal(requiredDays(byId("held"), "2026-09-17"), null);
 
 // --- start dates ---
 

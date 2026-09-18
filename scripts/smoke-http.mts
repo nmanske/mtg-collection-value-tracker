@@ -39,12 +39,14 @@ const checks: Check[] = [
   {
     path: "/",
     // The hero figure, the chart's own container, and the collection table.
-    expect: ["Collection value", "recharts", "Sort"],
+    // aria-sort proves the sortable column headers rendered; they replaced
+            // the separate row of sort chips.
+    expect: ["Collection value", "recharts", "aria-sort"],
     // A blank chart still returns 200; an empty plot area does not.
     reject: ["Application error"],
   },
   { path: "/?prices=cardkingdom", expect: ["Card Kingdom", "recharts"] },
-  { path: "/?sort=value&filter=foil", expect: ["Sort", "Show"] },
+  { path: "/?sort=value&dir=asc&filter=foil", expect: ["aria-sort", "Show"] },
   // No chart on this page — the first version of this check asserted one and
   // failed on a page that was working perfectly. A marker has to be something
   // the page actually renders.

@@ -73,7 +73,7 @@ export function CardImage({
           src={src}
           alt={alt}
           loading="lazy"
-          className="h-full w-full rounded object-cover"
+          className="h-full w-full rounded object-contain"
         />
         <span className="sr-only">View larger</span>
       </button>

@@ -38,11 +38,11 @@ function Row({
   return (
     <tr className="border-b border-neutral-100 last:border-0 dark:border-neutral-900">
       <td className="py-1.5 pr-4">{VENDOR_LABEL[quote.vendor]}</td>
-      <td className="py-1.5 pr-4 text-neutral-500">{SIDE_LABEL[quote.side]}</td>
+      <td className="py-1.5 pr-4 text-neutral-600 dark:text-neutral-400">{SIDE_LABEL[quote.side]}</td>
       <td className="py-1.5 pr-4 text-right font-medium tabular-nums">
         {formatUsd(quote.priceCents)}
       </td>
-      <td className="py-1.5 pr-4 text-right text-xs tabular-nums text-neutral-500">
+      <td className="py-1.5 pr-4 text-right text-xs tabular-nums text-neutral-600 dark:text-neutral-400">
         {ratio != null ? `${Math.round(ratio * 100)}% of retail` : ""}
       </td>
       <td
@@ -64,7 +64,7 @@ function Row({
 export function VendorQuotes({ quotes }: { quotes: VendorQuote[] }) {
   if (quotes.length === 0) {
     return (
-      <p className="text-sm text-neutral-500">
+      <p className="text-sm text-neutral-600 dark:text-neutral-400">
         No vendor prices for this printing.
       </p>
     );
@@ -102,10 +102,10 @@ export function VendorQuotes({ quotes }: { quotes: VendorQuote[] }) {
         </tbody>
       </table>
 
-      <p className="mt-3 max-w-prose text-xs text-neutral-500">
+      <p className="mt-3 max-w-prose text-xs text-neutral-600 dark:text-neutral-400">
         {buylist.length === 0
           ? "No vendor publishes a buylist price for this printing."
-          : `"Pays" is what that shop offers for the card, not the market.`}
+          : ""}
         {quotes.some((quote) => quote.stale)
           ? " A quote marked not current is the last price that shop published" +
             " for this card; it is shown here but left out of collection totals."

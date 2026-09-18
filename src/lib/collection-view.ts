@@ -12,36 +12,71 @@
  */
 
 export const SORTS = [
-  { id: "value", label: "Value", description: "most valuable first" },
-  { id: "name", label: "Name", description: "A to Z" },
-  { id: "acquired", label: "Acquired", description: "newest first" },
-  { id: "quantity", label: "Copies", description: "most copies first" },
-  { id: "set", label: "Set", description: "by set, then collector number" },
+  { id: "value", label: "Value", description: "line value", first: "desc" },
+  { id: "unit", label: "Unit", description: "unit price", first: "desc" },
+  { id: "name", label: "Name", description: "card name", first: "asc" },
+  { id: "acquired", label: "Acquired", description: "acquisition date", first: "desc" },
+  { id: "quantity", label: "Copies", description: "copies held", first: "desc" },
+  { id: "set", label: "Set", description: "set, then collector number", first: "asc" },
+  { id: "finish", label: "Finish", description: "finish", first: "asc" },
+  { id: "condition", label: "Cond", description: "condition", first: "asc" },
 ] as const;
 
 export type SortId = (typeof SORTS)[number]["id"];
 export const DEFAULT_SORT: SortId = "acquired";
 
+export type SortDir = "asc" | "desc";
+
+/**
+ * Which way a column sorts when it is first clicked.
+ *
+ * Money and counts open largest-first because "what are my best cards" is the
+ * question being asked; names and dates open in their natural reading order.
+ * Clicking the same column again reverses it.
+ */
+export function defaultDir(sort: SortId): SortDir {
+  return SORTS.find((s) => s.id === sort)!.first as SortDir;
+}
+
+export function isSortDir(value: string): value is SortDir {
+  return value === "asc" || value === "desc";
+}
+
+export function resolveDir(
+  value: string | undefined,
+  sort: SortId,
+): SortDir {
+  return value && isSortDir(value) ? value : defaultDir(sort);
+}
+
+/** The direction a header link should request: flip if already active. */
+export function nextDir(
+  column: SortId,
+  activeSort: SortId,
+  activeDir: SortDir,
+): SortDir {
+  if (column !== activeSort) return defaultDir(column);
+  return activeDir === "asc" ? "desc" : "asc";
+}
+
 /**
  * Narrowings worth offering, as opposed to every column being filterable.
  *
- * Each of these answers a question the collection actually raises: what is
- * foil, what has no price and is therefore missing from every total, and which
- * holdings carry an acquisition date that is inferred rather than known.
+ * Finish, because it is the one property of a holding that is not visible from
+ * the card name and changes what a printing is worth.
+ *
+ * "Unpriced" and "Inferred date" were here and are gone. Unpriced matched
+ * nothing on a real collection — the importer only keeps rows it can identify,
+ * and the dashboard already banners the count if it is ever non-zero. Inferred
+ * date matched most of the collection, because Moxfield's export makes almost
+ * every date a floor, so it narrowed nothing and only invited the question it
+ * could not answer in a button label. /faq explains it instead.
  */
 export const FILTERS = [
   { id: "all", label: "All", description: "every holding" },
-  { id: "foil", label: "Foil", description: "foil and etched printings" },
-  {
-    id: "unpriced",
-    label: "Unpriced",
-    description: "no price from any source, so absent from every total",
-  },
-  {
-    id: "inferred",
-    label: "Inferred date",
-    description: "acquisition date is a floor, not a fact",
-  },
+  { id: "nonfoil", label: "Non-foil", description: "non-foil printings" },
+  { id: "foil", label: "Foil", description: "foil printings" },
+  { id: "etched", label: "Etched", description: "etched foil printings" },
 ] as const;
 
 export type FilterId = (typeof FILTERS)[number]["id"];
@@ -73,12 +108,18 @@ export function resolveFilter(value: string | undefined): FilterId {
  */
 export function collectionHref(params: {
   sort?: SortId;
+  dir?: SortDir;
   filter?: FilterId;
   page?: number;
   search?: string;
 }): string {
   const query = new URLSearchParams();
   if (params.sort && params.sort !== DEFAULT_SORT) query.set("sort", params.sort);
+  // Omitted when it is the column's own default, so the common links stay
+  // short and a shared URL does not pin a direction the reader never chose.
+  if (params.sort && params.dir && params.dir !== defaultDir(params.sort)) {
+    query.set("dir", params.dir);
+  }
   if (params.filter && params.filter !== DEFAULT_FILTER) {
     query.set("filter", params.filter);
   }

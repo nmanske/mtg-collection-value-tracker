@@ -43,7 +43,7 @@ export function AddHoldingForm({
       <input type="hidden" name="printingKey" value={printing.id} />
 
       <label className="flex flex-col gap-1">
-        <span className="text-xs text-neutral-500">Qty</span>
+        <span className="text-xs text-neutral-600 dark:text-neutral-400">Qty</span>
         <input
           type="number"
           name="quantity"
@@ -56,7 +56,7 @@ export function AddHoldingForm({
       </label>
 
       <label className="flex flex-col gap-1">
-        <span className="text-xs text-neutral-500">Finish</span>
+        <span className="text-xs text-neutral-600 dark:text-neutral-400">Finish</span>
         <select
           name="finish"
           defaultValue={printing.finishes[0]}
@@ -73,7 +73,7 @@ export function AddHoldingForm({
       </label>
 
       <label className="flex flex-col gap-1">
-        <span className="text-xs text-neutral-500">Condition</span>
+        <span className="text-xs text-neutral-600 dark:text-neutral-400">Condition</span>
         <select
           name="condition"
           defaultValue="NM"
@@ -88,7 +88,7 @@ export function AddHoldingForm({
       </label>
 
       <label className="flex flex-col gap-1">
-        <span className="text-xs text-neutral-500">Acquired</span>
+        <span className="text-xs text-neutral-600 dark:text-neutral-400">Acquired</span>
         <input
           type="date"
           name="dateAdded"

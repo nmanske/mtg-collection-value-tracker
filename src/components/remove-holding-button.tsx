@@ -12,7 +12,7 @@ function Button({ label }: { label: string }) {
       type="submit"
       disabled={pending}
       aria-label={label}
-      className="rounded px-2 py-1 text-xs text-neutral-500 transition-colors hover:bg-red-50 hover:text-red-600 disabled:opacity-50 dark:hover:bg-red-950"
+      className="rounded px-2 py-1 text-xs text-neutral-600 dark:text-neutral-400 transition-colors hover:bg-red-50 hover:text-red-600 disabled:opacity-50 dark:hover:bg-red-950"
     >
       {pending ? "..." : "Remove"}
     </button>

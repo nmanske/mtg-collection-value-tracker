@@ -4,12 +4,14 @@ import {
   collectionHref,
   FILTERS,
   type FilterId,
-  SORTS,
   type SortId,
 } from "@/lib/collection-view";
 
 /**
- * Sort, filter and search for the collection list.
+ * Filter and search for the collection list.
+ *
+ * Sorting lives on the table's column headers, where a reader looks for it.
+ * A duplicate row of sort chips here was the same control twice.
  *
  * Links rather than a form, so every view has a URL that can be bookmarked,
  * shared or reloaded — and so the whole thing works without JavaScript, which
@@ -65,22 +67,8 @@ export function CollectionControls({
   return (
     <div className="mb-4 flex flex-col gap-3">
       <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
-        <nav aria-label="Sort collection" className="flex flex-wrap items-center gap-1">
-          <span className="mr-1 text-xs text-neutral-500">Sort</span>
-          {SORTS.map((option) => (
-            <Chip
-              key={option.id}
-              href={collectionHref({ sort: option.id, filter, search })}
-              active={option.id === sort}
-              title={option.description}
-            >
-              {option.label}
-            </Chip>
-          ))}
-        </nav>
-
         <nav aria-label="Filter collection" className="flex flex-wrap items-center gap-1">
-          <span className="mr-1 text-xs text-neutral-500">Show</span>
+          <span className="mr-1 text-xs text-neutral-600 dark:text-neutral-400">Show</span>
           {FILTERS.map((option) => (
             <Chip
               key={option.id}
@@ -100,7 +88,7 @@ export function CollectionControls({
               silently reset them. */}
           <input type="hidden" name="sort" value={sort} />
           <input type="hidden" name="filter" value={filter} />
-          <label htmlFor="collection-search" className="text-xs text-neutral-500">
+          <label htmlFor="collection-search" className="text-xs text-neutral-600 dark:text-neutral-400">
             Find
           </label>
           <input
@@ -120,7 +108,7 @@ export function CollectionControls({
         </form>
 
         {narrowed ? (
-          <p className="text-xs text-neutral-500">
+          <p className="text-xs text-neutral-600 dark:text-neutral-400">
             {matched.toLocaleString()} of {total.toLocaleString()} holdings
             {search ? ` matching “${search}”` : ""}.{" "}
             {/* The totals above deliberately still describe the whole

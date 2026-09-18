@@ -18,7 +18,7 @@
  * grows through the year. Everything else is a plain number of days, or `null`
  * for "whatever exists".
  */
-export type RangeWindow = number | "ytd" | null;
+export type RangeWindow = number | "ytd" | "held" | null;
 
 export interface RangeOption {
   id: RangeId;
@@ -28,9 +28,26 @@ export interface RangeOption {
   description: string;
 }
 
-export type RangeId = "1m" | "3m" | "6m" | "ytd" | "1y" | "2y" | "5y" | "all";
+export type RangeId =
+  | "held"
+  | "1m"
+  | "3m"
+  | "6m"
+  | "ytd"
+  | "1y"
+  | "2y"
+  | "5y"
+  | "all";
 
 export const RANGES: RangeOption[] = [
+  // The default. "All" starts in December 2020, where the collection was worth
+  // nothing because none of it had been bought yet, so the chart opened with
+  // three years of flat line before anything happened. This starts at the first
+  // date anything was held, which is the first date the chart says anything.
+  //
+  // Its window is not a number of days — it depends on the data, so the caller
+  // resolves it from the series rather than from a constant here.
+  { id: "held", label: "Owned", window: "held", description: "since your first card" },
   { id: "1m", label: "1M", window: 30, description: "1 month" },
   { id: "3m", label: "3M", window: 90, description: "3 months" },
   { id: "6m", label: "6M", window: 180, description: "6 months" },
@@ -41,7 +58,7 @@ export const RANGES: RangeOption[] = [
   { id: "all", label: "All", window: null, description: "all history" },
 ];
 
-export const DEFAULT_RANGE: RangeId = "all";
+export const DEFAULT_RANGE: RangeId = "held";
 
 const MS_PER_DAY = 86_400_000;
 
@@ -76,7 +93,9 @@ export function requiredDays(
   range: RangeOption,
   lastDate: string | null,
 ): number | null {
-  if (range.window === null) return null;
+  // "All" and "Owned" are both bounded by the data rather than by a count of
+  // days, so neither has a requirement to test.
+  if (range.window === null || range.window === "held") return null;
   if (range.window !== "ytd") return range.window;
   if (!lastDate) return null;
   const end = parseDate(lastDate);
@@ -119,8 +138,13 @@ export function isRangeAvailable(
 export function rangeStart(
   range: RangeOption,
   lastDate: string,
+  /** First date anything was held, for the "Owned" range. */
+  firstHeldDate: string | null = null,
 ): string | null {
   if (range.window === null) return null;
+  // Data-dependent rather than a count of days. Falls through to "everything"
+  // when nothing is held, which is the honest answer for an empty collection.
+  if (range.window === "held") return firstHeldDate;
   const end = parseDate(lastDate);
   if (Number.isNaN(end)) return null;
 

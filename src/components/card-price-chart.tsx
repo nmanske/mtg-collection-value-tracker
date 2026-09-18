@@ -85,7 +85,7 @@ function CardPriceChartBody({
 
   if (points.length < 2) {
     return (
-      <p className="rounded-lg border border-dashed border-neutral-300 py-10 text-center text-sm text-neutral-500 dark:border-neutral-700">
+      <p className="rounded-lg border border-dashed border-neutral-300 py-10 text-center text-sm text-neutral-600 dark:text-neutral-400 dark:border-neutral-700">
         {points.length === 0
           ? "No price history for this printing and finish."
           : "Only one day of price data so far — not enough to chart."}

@@ -32,7 +32,7 @@ export default async function SearchPage(props: PageProps<"/search">) {
         <h1 className="text-2xl font-semibold tracking-tight">Add cards</h1>
         <Link
           href="/"
-          className="text-sm text-neutral-500 underline-offset-4 hover:underline"
+          className="text-sm text-neutral-600 dark:text-neutral-400 underline-offset-4 hover:underline"
         >
           Back to collection
         </Link>
@@ -66,20 +66,20 @@ export default async function SearchPage(props: PageProps<"/search">) {
       ) : null}
 
       {query.trim().length === 1 ? (
-        <p className="text-sm text-neutral-500">
+        <p className="text-sm text-neutral-600 dark:text-neutral-400">
           Type at least two characters.
         </p>
       ) : null}
 
       {query.trim().length >= 2 && results.length === 0 ? (
-        <p className="text-sm text-neutral-500">
+        <p className="text-sm text-neutral-600 dark:text-neutral-400">
           No printings match <strong>{query}</strong>.
         </p>
       ) : null}
 
       {results.length > 0 ? (
         <>
-          <p className="mb-4 text-sm text-neutral-500">
+          <p className="mb-4 text-sm text-neutral-600 dark:text-neutral-400">
             {results.length === SEARCH_LIMIT
               ? `First ${SEARCH_LIMIT} printings — narrow the search to see more.`
               : `${results.length} printing${results.length === 1 ? "" : "s"}.`}
@@ -97,13 +97,13 @@ export default async function SearchPage(props: PageProps<"/search">) {
               >
                 {printing.imageUri ? (
                   <CardImage
-                    src={printing.imageUri}
+                    src={printing.imageUriLarge ?? printing.imageUri}
                     largeSrc={printing.imageUriLarge}
                     alt={printing.name}
-                    className="h-28 w-20"
+                    className="h-64 w-44"
                   />
                 ) : (
-                  <div className="h-28 w-20 shrink-0 rounded bg-neutral-100 dark:bg-neutral-800" />
+                  <div className="h-64 w-44 shrink-0 rounded bg-neutral-100 dark:bg-neutral-800" />
                 )}
 
                 <div className="min-w-0 flex-1">
@@ -115,7 +115,7 @@ export default async function SearchPage(props: PageProps<"/search">) {
                       {printing.name}
                     </Link>
                   </h2>
-                  <p className="text-sm text-neutral-500">
+                  <p className="text-sm text-neutral-600 dark:text-neutral-400">
                     {printing.setName} ·{" "}
                     <span className="font-mono text-xs">
                       {printingCode(printing.setCode, printing.collectorNumber)}
@@ -129,7 +129,7 @@ export default async function SearchPage(props: PageProps<"/search">) {
                       );
                       return (
                         <span key={finish}>
-                          <span className="text-neutral-500">
+                          <span className="text-neutral-600 dark:text-neutral-400">
                             {FINISH_LABEL[finish]}:
                           </span>{" "}
                           {price ? (

@@ -17,13 +17,13 @@ export default function ImportPage() {
         </h1>
         <Link
           href="/"
-          className="text-sm text-neutral-500 underline-offset-4 hover:underline"
+          className="text-sm text-neutral-600 dark:text-neutral-400 underline-offset-4 hover:underline"
         >
           Back to collection
         </Link>
       </header>
 
-      <div className="mb-6 max-w-prose text-sm text-neutral-500">
+      <div className="mb-6 max-w-prose text-sm text-neutral-600 dark:text-neutral-400">
         Export your collection from Moxfield as CSV and upload it here. The file
         is treated as your whole collection: quantities are set from it, and
         cards it no longer lists are removed. Hand-added cards are left alone.
@@ -40,7 +40,7 @@ export default function ImportPage() {
         </InfoTip>
       </div>
 
-      <p className="mb-6 text-sm text-neutral-500">
+      <p className="mb-6 text-sm text-neutral-600 dark:text-neutral-400">
         Preview first to see exactly what would change.
       </p>
 

@@ -345,12 +345,39 @@ assert.deepEqual(byName, [...byName].sort((a, b) => a.localeCompare(b)));
 // predicate — otherwise the page count describes the collection while the rows
 // describe a subset, and the last pages render empty.
 const foils = listHoldings(db, { filter: "foil" });
-assert.ok(foils.rows.every((row) => row.finish !== "nonfoil"));
+assert.ok(foils.rows.every((row) => row.finish === "foil"));
 assert.equal(foils.matched, foils.rows.length);
 
-const unpricedOnly = listHoldings(db, { filter: "unpriced" });
-assert.ok(unpricedOnly.rows.every((row) => row.unitPriceCents == null));
-assert.equal(unpricedOnly.matched, unpricedOnly.rows.length);
+const nonFoils = listHoldings(db, { filter: "nonfoil" });
+assert.ok(nonFoils.rows.every((row) => row.finish === "nonfoil"));
+assert.equal(nonFoils.matched, nonFoils.rows.length);
+
+// Each finish filter is now exact rather than "foil or etched", so the three
+// of them partition the collection.
+const etched = listHoldings(db, { filter: "etched" });
+assert.equal(
+  foils.matched + nonFoils.matched + etched.matched,
+  listHoldings(db, {}).matched,
+  "the finish filters must partition the collection",
+);
+
+// Direction is honoured, and reverses.
+const valueDesc = listHoldings(db, { sort: "value", dir: "desc" }).rows;
+const valueAsc = listHoldings(db, { sort: "value", dir: "asc" }).rows;
+const sortedLineValues = (rows: typeof valueDesc) =>
+  rows.filter((r) => r.unitPriceCents != null).map((r) => r.unitPriceCents! * r.quantity);
+assert.deepEqual(sortedLineValues(valueDesc), [...sortedLineValues(valueDesc)].sort((a, b) => b - a));
+assert.deepEqual(sortedLineValues(valueAsc), [...sortedLineValues(valueAsc)].sort((a, b) => a - b));
+// Unpriced holdings stay last in BOTH directions — leading a "least valuable"
+// list with rows that have no value is its own kind of wrong.
+const tailUnpriced = (rows: typeof valueAsc) =>
+  rows.slice(rows.findIndex((r) => r.unitPriceCents == null)).every(
+    (r) => r.unitPriceCents == null,
+  );
+assert.ok(
+  valueAsc.every((r) => r.unitPriceCents != null) || tailUnpriced(valueAsc),
+  "nulls last when ascending too",
+);
 
 // The headline totals stay the whole collection whatever is filtered: a view
 // that hides cards must not read as cards having been lost.

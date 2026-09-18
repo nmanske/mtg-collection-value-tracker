@@ -115,14 +115,14 @@ export function ImportForm() {
               <h2 className="font-medium text-amber-700 dark:text-amber-400">
                 Sets with no paper printings
               </h2>
-              <p className="mb-2 text-xs text-neutral-500">
+              <p className="mb-2 text-xs text-neutral-600 dark:text-neutral-400">
                 Digital-only sets price in tix, not dollars, so these rows were
                 skipped.
               </p>
               <ul className="flex flex-col gap-1">
                 {report.unknownSets.map((set) => (
                   <li key={set.setCode} className="flex gap-2 font-mono text-xs">
-                    <span className="w-12 shrink-0 text-right tabular-nums text-neutral-500">
+                    <span className="w-12 shrink-0 text-right tabular-nums text-neutral-600 dark:text-neutral-400">
                       {set.rows}
                     </span>
                     <span>{set.setCode.toUpperCase()}</span>
@@ -156,7 +156,7 @@ export function ImportForm() {
 function Stat({ label, value }: { label: string; value: number }) {
   return (
     <div>
-      <dt className="text-xs text-neutral-500">{label}</dt>
+      <dt className="text-xs text-neutral-600 dark:text-neutral-400">{label}</dt>
       <dd className="text-lg font-semibold tabular-nums">
         {value.toLocaleString()}
       </dd>
@@ -176,11 +176,11 @@ function Mapping({
   return (
     <section>
       <h2 className="font-medium">{title}</h2>
-      <p className="mb-2 text-xs text-neutral-500">{note}</p>
+      <p className="mb-2 text-xs text-neutral-600 dark:text-neutral-400">{note}</p>
       <ul className="flex flex-col gap-1">
         {rows.map((row) => (
           <li key={row.raw} className="flex gap-2 font-mono text-xs">
-            <span className="w-12 shrink-0 text-right tabular-nums text-neutral-500">
+            <span className="w-12 shrink-0 text-right tabular-nums text-neutral-600 dark:text-neutral-400">
               {row.count.toLocaleString()}
             </span>
             <span className="w-40 shrink-0 truncate">
@@ -188,7 +188,7 @@ function Mapping({
             </span>
             <span
               className={
-                row.warn ? "text-amber-600 dark:text-amber-400" : "text-neutral-500"
+                row.warn ? "text-amber-600 dark:text-amber-400" : "text-neutral-600 dark:text-neutral-400"
               }
             >
               → {row.mapped}
@@ -219,7 +219,7 @@ function Problems({
       <ul className="mt-2 flex max-h-72 flex-col gap-1 overflow-y-auto">
         {rows.map((row) => (
           <li key={row.line} className="text-xs">
-            <span className="text-neutral-500">line {row.line}:</span>{" "}
+            <span className="text-neutral-600 dark:text-neutral-400">line {row.line}:</span>{" "}
             {row.reason}
           </li>
         ))}

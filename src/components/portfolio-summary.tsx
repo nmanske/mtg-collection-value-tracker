@@ -34,7 +34,7 @@ function ChangeTile({
   if (change.changeCents == null) {
     return (
       <div>
-        <div className="text-xs text-neutral-500">{label}</div>
+        <div className="text-xs text-neutral-600 dark:text-neutral-400">{label}</div>
         <div className="text-sm text-neutral-400">not enough history</div>
       </div>
     );
@@ -44,7 +44,7 @@ function ChangeTile({
   const flat = change.changeCents === 0;
   // Direction is stated in the text and the sign, not by colour alone.
   const tone = flat
-    ? "text-neutral-500"
+    ? "text-neutral-600 dark:text-neutral-400"
     : up
       ? "text-emerald-700 dark:text-emerald-400"
       : "text-red-700 dark:text-red-400";
@@ -52,7 +52,7 @@ function ChangeTile({
 
   return (
     <div>
-      <div className="text-xs text-neutral-500">
+      <div className="text-xs text-neutral-600 dark:text-neutral-400">
         {label}
         {tip}
       </div>
@@ -90,7 +90,13 @@ export function PortfolioSummaryPanel({
   const first = summary.points[0]?.date ?? null;
   const spanDays = first && last ? spanInDays(first, last.date) : 0;
   const range = resolveRange(requestedRange, spanDays, last?.date ?? null);
-  const from = last ? rangeStart(range, last.date) : null;
+
+  // The first date anything was held, taken from the series rather than
+  // queried: every point already carries how many holdings it covers, so the
+  // answer is sitting in the data the chart is drawn from.
+  const firstHeldDate =
+    summary.points.find((point) => point.holdingsHeld > 0)?.date ?? null;
+  const from = last ? rangeStart(range, last.date, firstHeldDate) : null;
 
   // Filtered from the already-computed series rather than re-queried: the full
   // series has carried prices forward from the beginning, so a slice of it is
@@ -109,7 +115,7 @@ export function PortfolioSummaryPanel({
     >
       <div className="mb-5 flex flex-wrap items-end justify-between gap-4">
         <div>
-          <h2 id="portfolio-heading" className="text-xs text-neutral-500">
+          <h2 id="portfolio-heading" className="text-xs text-neutral-600 dark:text-neutral-400">
             Collection value
             {summary.currentDate ? ` · ${summary.currentDate}` : ""}
           </h2>
@@ -194,7 +200,7 @@ export function PortfolioSummaryPanel({
           inside an inline `details`, which breaks out to the width of the
           nearest block. As a flex item that block would be the narrow chip,
           and the panel would be a squeezed column. */}
-      <div className="mt-3 text-xs leading-relaxed text-neutral-500">
+      <div className="mt-3 text-xs leading-relaxed text-neutral-600 dark:text-neutral-400">
         {range.window === null
           ? `From ${summary.points[0]?.date ?? "—"}`
           : `${visible.length} day${visible.length === 1 ? "" : "s"} to ${last?.date}`}
@@ -242,7 +248,9 @@ export function PortfolioSummaryPanel({
         {visible.some((point) => point.inferredHoldings > 0) ? (
           <>
             {" · "}
-            <span className="text-amber-700 dark:text-amber-400">
+            {/* Italic rather than amber. This is a note about provenance, not
+                a warning, and colouring it like one made it shout. */}
+            <span className="italic">
               {visible.at(-1)!.inferredHoldings.toLocaleString()} estimated dates
             </span>
             <InfoTip label="Why some acquisition dates are estimated">

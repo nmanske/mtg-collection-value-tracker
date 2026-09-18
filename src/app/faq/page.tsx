@@ -29,12 +29,12 @@ export default function FaqPage() {
     <main className="page-shell py-10">
       <header className="mb-4 flex items-baseline justify-between gap-4">
         <h1 className="text-2xl font-semibold tracking-tight">How it works</h1>
-        <Link href="/" className="text-sm text-neutral-500 underline-offset-4 hover:underline">
+        <Link href="/" className="text-sm text-neutral-600 dark:text-neutral-400 underline-offset-4 hover:underline">
           Back to collection
         </Link>
       </header>
 
-      <p className="mb-6 max-w-prose text-sm text-neutral-500">
+      <p className="mb-6 max-w-prose text-sm text-neutral-600 dark:text-neutral-400">
         Why some of the numbers here mean less, or more, than they appear to.
       </p>
 
@@ -77,11 +77,19 @@ export default function FaqPage() {
         </p>
       </Q>
 
-      <Q id="coverage" question="Why is one vendor's total lower than another's?">
+      <Q id="coverage" question="What do the vendor columns mean?">
         <p>
-          Usually coverage, not price. Shops list different subsets of a collection, and a total only
-          spans the cards that vendor actually quotes. Check the <em>covers</em> column before reading
-          a smaller number as a discount.
+          <strong className="font-medium text-neutral-700 dark:text-neutral-300">Asks</strong> is what
+          that shop sells the card for.{" "}
+          <strong className="font-medium text-neutral-700 dark:text-neutral-300">Pays</strong> is what
+          it offers to buy the card from you — its buylist price, not the market.{" "}
+          <strong className="font-medium text-neutral-700 dark:text-neutral-300">Covers</strong> is how
+          many of your holdings that vendor quotes at all.
+        </p>
+        <p>
+          A lower total usually means thinner coverage rather than a better price, so read{" "}
+          <em>covers</em> before reading a smaller figure as a discount. Totals also leave out any
+          quote more than {STALE_AFTER_DAYS} days older than that vendor&rsquo;s newest data.
         </p>
       </Q>
 

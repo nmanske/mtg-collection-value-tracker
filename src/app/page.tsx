@@ -8,8 +8,11 @@ import { listHoldings } from "@/db/queries/holdings";
 import { CollectionControls } from "@/components/collection-controls";
 import {
   collectionHref,
+  nextDir,
+  resolveDir,
   resolveFilter,
   resolveSort,
+  type SortId,
 } from "@/lib/collection-view";
 import {
   portfolioSummary,
@@ -29,14 +32,63 @@ import {
 // Reads the collection on every request; adds and removes must show at once.
 export const dynamic = "force-dynamic";
 
+/**
+ * A column heading that sorts.
+ *
+ * A link rather than a button, so the sorted view has a URL that survives a
+ * reload and a share, and so the table still sorts with JavaScript off. The
+ * arrow is the only indicator, and it is paired with `aria-sort` rather than
+ * left to colour or position.
+ */
+function SortHeader({
+  column,
+  label,
+  align,
+  sort,
+  dir,
+  filter,
+  search,
+}: {
+  column: SortId;
+  label: string;
+  align?: "right";
+  sort: SortId;
+  dir: "asc" | "desc";
+  filter: ReturnType<typeof resolveFilter>;
+  search: string;
+}) {
+  const active = column === sort;
+  const target = nextDir(column, sort, dir);
+
+  return (
+    <th
+      scope="col"
+      aria-sort={active ? (dir === "asc" ? "ascending" : "descending") : "none"}
+      className={`py-2 pr-3 font-medium ${align === "right" ? "text-right" : ""}`}
+    >
+      <Link
+        href={collectionHref({ sort: column, dir: target, filter, search })}
+        scroll={false}
+        className="inline-flex items-center gap-1 hover:text-neutral-700 dark:hover:text-neutral-200"
+      >
+        {label}
+        <span aria-hidden className={active ? "" : "opacity-0"}>
+          {dir === "asc" ? "↑" : "↓"}
+        </span>
+      </Link>
+    </th>
+  );
+}
+
 export default async function CollectionPage(props: PageProps<"/">) {
   // searchParams is a Promise in Next 16.
-  const { page, range, prices, sort, filter, q } = await props.searchParams;
+  const { page, range, prices, sort, dir, filter, q } = await props.searchParams;
   const priceSource: PriceVendor =
     typeof prices === "string" && (PRICE_VENDORS as readonly string[]).includes(prices)
       ? (prices as PriceVendor)
       : "tcgplayer";
   const activeSort = resolveSort(typeof sort === "string" ? sort : undefined);
+  const activeDir = resolveDir(typeof dir === "string" ? dir : undefined, activeSort);
   const activeFilter = resolveFilter(
     typeof filter === "string" ? filter : undefined,
   );
@@ -53,6 +105,7 @@ export default async function CollectionPage(props: PageProps<"/">) {
   } = listHoldings(db, {
     page: Number(page) || 1,
     sort: activeSort,
+    dir: activeDir,
     filter: activeFilter,
     search,
   });
@@ -69,7 +122,7 @@ export default async function CollectionPage(props: PageProps<"/">) {
       <header className="mb-8 flex flex-wrap items-baseline justify-between gap-4">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Collection</h1>
-          <p className="mt-1 text-sm text-neutral-500">
+          <p className="mt-1 text-sm text-neutral-600 dark:text-neutral-400">
             {totalCards.toLocaleString()} card
             {totalCards === 1 ? "" : "s"} across{" "}
             {holdingCount.toLocaleString()} holding
@@ -81,7 +134,7 @@ export default async function CollectionPage(props: PageProps<"/">) {
           {/* Quiet, because it is read once and then rarely. */}
           <Link
             href="/faq"
-            className="px-1 text-sm text-neutral-500 underline-offset-4 hover:underline"
+            className="px-1 text-sm text-neutral-600 dark:text-neutral-400 underline-offset-4 hover:underline"
           >
             How it works
           </Link>
@@ -102,12 +155,6 @@ export default async function CollectionPage(props: PageProps<"/">) {
             className="rounded-md border border-neutral-300 px-4 py-2 text-sm font-medium hover:bg-neutral-50 dark:border-neutral-700 dark:hover:bg-neutral-900"
           >
             Import CSV
-          </Link>
-          <Link
-            href="/search"
-            className="rounded-md bg-neutral-900 px-4 py-2 text-sm font-medium text-white hover:bg-neutral-700 dark:bg-neutral-100 dark:text-neutral-900 dark:hover:bg-neutral-300"
-          >
-            Add cards
           </Link>
         </div>
       </header>
@@ -147,7 +194,7 @@ export default async function CollectionPage(props: PageProps<"/">) {
 
       {rows.length === 0 ? (
         <div className="rounded-lg border border-dashed border-neutral-300 p-10 text-center dark:border-neutral-700">
-          <p className="text-sm text-neutral-500">
+          <p className="text-sm text-neutral-600 dark:text-neutral-400">
             Nothing here yet.{" "}
             <Link href="/search" className="underline underline-offset-4">
               Search for a card
@@ -163,14 +210,30 @@ export default async function CollectionPage(props: PageProps<"/">) {
         <div className="overflow-x-auto">
           <table className="w-full border-collapse text-sm">
             <thead>
-              <tr className="border-b border-neutral-200 text-left text-xs uppercase tracking-wide text-neutral-500 dark:border-neutral-800">
-                <th className="py-2 pr-3 font-medium">Card</th>
-                <th className="py-2 pr-3 font-medium">Finish</th>
-                <th className="py-2 pr-3 font-medium">Cond</th>
-                <th className="py-2 pr-3 text-right font-medium">Qty</th>
-                <th className="py-2 pr-3 text-right font-medium">Unit</th>
-                <th className="py-2 pr-3 text-right font-medium">Value</th>
-                <th className="py-2 pr-3 font-medium">Acquired</th>
+              <tr className="border-b border-neutral-200 text-left text-xs uppercase tracking-wide text-neutral-600 dark:text-neutral-400 dark:border-neutral-800">
+                {(
+                  [
+                    ["name", "Card", undefined],
+                    ["set", "Set", undefined],
+                    ["finish", "Finish", undefined],
+                    ["condition", "Cond", undefined],
+                    ["quantity", "Qty", "right"],
+                    ["unit", "Unit", "right"],
+                    ["value", "Value", "right"],
+                    ["acquired", "Acquired", undefined],
+                  ] as const
+                ).map(([column, label, align]) => (
+                  <SortHeader
+                    key={column}
+                    column={column}
+                    label={label}
+                    align={align}
+                    sort={activeSort}
+                    dir={activeDir}
+                    filter={activeFilter}
+                    search={search}
+                  />
+                ))}
                 <th className="py-2 font-medium" />
               </tr>
             </thead>
@@ -194,8 +257,13 @@ export default async function CollectionPage(props: PageProps<"/">) {
                           {row.name}
                         </Link>
                       </div>
-                      <div className="font-mono text-xs text-neutral-500">
-                        {printingCode(row.setCode, row.collectorNumber)}
+                    </td>
+                    <td className="py-2 pr-3">
+                      <div className="font-mono text-xs uppercase">
+                        {row.setCode}
+                      </div>
+                      <div className="font-mono text-xs text-neutral-600 dark:text-neutral-400">
+                        #{row.collectorNumber}
                       </div>
                     </td>
                     <td className="py-2 pr-3">{FINISH_LABEL[row.finish]}</td>
@@ -213,14 +281,14 @@ export default async function CollectionPage(props: PageProps<"/">) {
                           {formatUsd(row.unitPriceCents)}
                           {row.overridden ? (
                             <span
-                              className="ml-1 text-xs text-neutral-500"
+                              className="ml-1 text-xs text-neutral-600 dark:text-neutral-400"
                               title="Manual override"
                             >
                               (manual)
                             </span>
                           ) : stale && row.priceDate ? (
                             <span
-                              className="ml-1 text-xs text-neutral-500"
+                              className="ml-1 text-xs text-neutral-600 dark:text-neutral-400"
                               title={`Last priced ${row.priceDate}`}
                             >
                               ({daysAgo(row.priceDate)}d old)
@@ -234,7 +302,7 @@ export default async function CollectionPage(props: PageProps<"/">) {
                         ? "—"
                         : formatUsd(row.unitPriceCents * row.quantity)}
                     </td>
-                    <td className="py-2 pr-3 tabular-nums text-neutral-500">
+                    <td className="py-2 pr-3 tabular-nums text-neutral-600 dark:text-neutral-400">
                       {row.dateAdded}
                     </td>
                     <td className="py-2 text-right">
@@ -271,7 +339,7 @@ export default async function CollectionPage(props: PageProps<"/">) {
             <span />
           )}
 
-          <span className="text-neutral-500">
+          <span className="text-neutral-600 dark:text-neutral-400">
             Page {current.toLocaleString()} of {pageCount.toLocaleString()}
           </span>
 

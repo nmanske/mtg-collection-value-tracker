@@ -1,5 +1,6 @@
 import type { Db } from "@/db/queries/printings";
-import { portfolioSeries } from "@/db/queries/valuation";
+import { cachedPortfolioSeries } from "@/db/queries/portfolio-cache";
+import { priceDates } from "@/db/queries/valuation";
 import {
   FINISH_CODES,
   PRICE_SOURCE_CODES,
@@ -204,8 +205,19 @@ const valueHistory: ExportSpec = {
   title: "Value history",
   description:
     "One row per date: the collection's value as held, the same cards valued across the whole window, and how many holdings each figure covers. This is the dashboard chart.",
-  rows: (db) =>
-    count(db, "select count(distinct date) c from price_snapshots"),
+  // NOT `count(distinct date) from price_snapshots`. That reads all 215
+  // million index entries to answer a number shown beside a download button —
+  // 10 seconds measured — and better-sqlite3 is synchronous, so it blocks every
+  // other request on the way past. Next prefetches links on hover, so pointing
+  // at "Export" from the dashboard froze the whole site.
+  rows: (db) => {
+    const cached = count(
+      db,
+      `select count(*) c from portfolio_daily
+        where price_source = ${VENDOR_CODES.tcgplayer} and basket = 0`,
+    );
+    return cached > 0 ? cached : priceDates(db).length;
+  },
   *stream(db) {
     yield UTF8_BOM +
       csvRow([
@@ -217,9 +229,12 @@ const valueHistory: ExportSpec = {
         "holdings_unpriced",
       ]);
 
-    const asHeld = portfolioSeries(db).points;
+    // Through the cache: computing both series here was two full scans of the
+    // price table, ~27s of blocked server for a download the cache answers
+    // instantly.
+    const asHeld = cachedPortfolioSeries(db).points;
     const basket = new Map(
-      portfolioSeries(db, { constantBasket: true }).points.map((point) => [
+      cachedPortfolioSeries(db, { constantBasket: true }).points.map((point) => [
         point.date,
         point.valueCents,
       ]),

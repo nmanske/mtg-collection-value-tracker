@@ -33,10 +33,10 @@ function Stat({
 }) {
   return (
     <div>
-      <dt className="text-xs text-neutral-500">{label}</dt>
+      <dt className="text-xs text-neutral-600 dark:text-neutral-400">{label}</dt>
       <dd className="mt-0.5 text-2xl font-semibold tabular-nums">{value}</dd>
       {detail ? (
-        <div className="mt-0.5 text-xs text-neutral-500">{detail}</div>
+        <div className="mt-0.5 text-xs text-neutral-600 dark:text-neutral-400">{detail}</div>
       ) : null}
     </div>
   );
@@ -62,7 +62,7 @@ function Panel({
         <h2 className="inline">{title}</h2>
         {tip}
       </div>
-      {note ? <p className="mt-1 text-xs text-neutral-500">{note}</p> : null}
+      {note ? <p className="mt-1 text-xs text-neutral-600 dark:text-neutral-400">{note}</p> : null}
       <div className="mt-4">{children}</div>
     </section>
   );
@@ -86,16 +86,16 @@ function CardLine({
         >
           {card.name}
         </Link>{" "}
-        <span className="font-mono text-xs text-neutral-500">
+        <span className="font-mono text-xs text-neutral-600 dark:text-neutral-400">
           {printingCode(card.setCode, card.collectorNumber)}
         </span>
         {card.finish !== "nonfoil" ? (
-          <span className="ml-1 text-xs text-neutral-500">
+          <span className="ml-1 text-xs text-neutral-600 dark:text-neutral-400">
             {FINISH_LABEL[card.finish as Finish]}
           </span>
         ) : null}
         {sub ? (
-          <span className="block text-xs text-neutral-500">{sub}</span>
+          <span className="block text-xs text-neutral-600 dark:text-neutral-400">{sub}</span>
         ) : null}
       </span>
       <span className="shrink-0 tabular-nums">{right}</span>
@@ -105,7 +105,7 @@ function CardLine({
 
 function MoverList({ movers, tone }: { movers: Mover[]; tone: "up" | "down" }) {
   if (movers.length === 0) {
-    return <p className="text-sm text-neutral-500">Nothing to report yet.</p>;
+    return <p className="text-sm text-neutral-600 dark:text-neutral-400">Nothing to report yet.</p>;
   }
   const color =
     tone === "up"
@@ -151,14 +151,14 @@ function SpreadList({ spreads }: { spreads: Spread[] }) {
 /** A signed percentage, coloured by direction. */
 function Pct({ ratio }: { ratio: number | null }) {
   if (ratio === null) {
-    return <span className="text-neutral-500">n/a</span>;
+    return <span className="text-neutral-600 dark:text-neutral-400">n/a</span>;
   }
   const color =
     ratio > 0
       ? "text-emerald-700 dark:text-emerald-400"
       : ratio < 0
         ? "text-red-700 dark:text-red-400"
-        : "text-neutral-500";
+        : "text-neutral-600 dark:text-neutral-400";
   return (
     <span className={`font-medium tabular-nums ${color}`}>
       {ratio > 0 ? "+" : ""}
@@ -176,11 +176,11 @@ function YearRow({ year, widest }: { year: PeriodChange; widest: number }) {
         <span className="tabular-nums">
           {year.label}
           {year.partial ? (
-            <span className="ml-1.5 text-xs text-neutral-500">so far</span>
+            <span className="ml-1.5 text-xs text-neutral-600 dark:text-neutral-400">so far</span>
           ) : null}
         </span>
         <span className="shrink-0 tabular-nums">
-          <span className="mr-3 text-xs text-neutral-500">
+          <span className="mr-3 text-xs text-neutral-600 dark:text-neutral-400">
             {formatUsd(year.fromCents)} → {formatUsd(year.toCents)}
           </span>
           <Pct ratio={year.changeRatio} />
@@ -253,13 +253,13 @@ export default async function StatsPage() {
         <div className="flex items-center gap-4">
           <Link
             href="/faq"
-            className="text-sm text-neutral-500 underline-offset-4 hover:underline"
+            className="text-sm text-neutral-600 dark:text-neutral-400 underline-offset-4 hover:underline"
           >
             How it works
           </Link>
           <Link
             href="/"
-            className="text-sm text-neutral-500 underline-offset-4 hover:underline"
+            className="text-sm text-neutral-600 dark:text-neutral-400 underline-offset-4 hover:underline"
           >
             Back to collection
           </Link>
@@ -366,7 +366,7 @@ export default async function StatsPage() {
                 ) : null}
               </dl>
             ) : (
-              <p className="text-sm text-neutral-500">
+              <p className="text-sm text-neutral-600 dark:text-neutral-400">
                 The collection has never fallen from a high.
               </p>
             )}
@@ -415,7 +415,7 @@ export default async function StatsPage() {
                 {stats.holdingsForHalfValue.toLocaleString()}
               </strong>{" "}
               holdings carry half the value — {" "}
-              <span className="text-neutral-500">
+              <span className="text-neutral-600 dark:text-neutral-400">
                 {(
                   (stats.holdingsForHalfValue / stats.totalHoldings) *
                   100
@@ -441,7 +441,7 @@ export default async function StatsPage() {
               of everything.
             </li>
             {stats.cheapest ? (
-              <li className="text-neutral-500">
+              <li className="text-neutral-600 dark:text-neutral-400">
                 Cheapest card:{" "}
                 <Link
                   href={cardHref(stats.cheapest)}
@@ -496,7 +496,7 @@ export default async function StatsPage() {
           note="Change × quantity, not percentage."
         >
           {stats.biggestGains.length === 0 ? (
-            <p className="text-sm text-neutral-500">Nothing up yet.</p>
+            <p className="text-sm text-neutral-600 dark:text-neutral-400">Nothing up yet.</p>
           ) : (
             <ul className="flex flex-col divide-y divide-neutral-100 dark:divide-neutral-900">
               {stats.biggestGains.map((mover) => (
@@ -517,7 +517,7 @@ export default async function StatsPage() {
 
         <Panel title="Cost you the most" note="The same, downward.">
           {stats.biggestLosses.length === 0 ? (
-            <p className="text-sm text-neutral-500">Nothing down yet.</p>
+            <p className="text-sm text-neutral-600 dark:text-neutral-400">Nothing down yet.</p>
           ) : (
             <ul className="flex flex-col divide-y divide-neutral-100 dark:divide-neutral-900">
               {stats.biggestLosses.map((mover) => (
@@ -546,7 +546,7 @@ export default async function StatsPage() {
                 <div className="flex items-baseline justify-between gap-3">
                   <span className="min-w-0 truncate">
                     {set.setName}{" "}
-                    <span className="font-mono text-xs text-neutral-500">
+                    <span className="font-mono text-xs text-neutral-600 dark:text-neutral-400">
                       {set.setCode.toUpperCase()}
                     </span>
                   </span>
@@ -564,7 +564,7 @@ export default async function StatsPage() {
                     }}
                   />
                 </div>
-                <div className="mt-0.5 text-xs text-neutral-500">
+                <div className="mt-0.5 text-xs text-neutral-600 dark:text-neutral-400">
                   {set.holdings.toLocaleString()} holdings
                 </div>
               </li>
@@ -630,7 +630,7 @@ export default async function StatsPage() {
           <ul className="flex flex-col gap-1">
             {stats.acquisitions.map((month) => (
               <li key={month.month} className="flex items-center gap-3 text-xs">
-                <span className="w-16 shrink-0 tabular-nums text-neutral-500">
+                <span className="w-16 shrink-0 tabular-nums text-neutral-600 dark:text-neutral-400">
                   {month.month}
                 </span>
                 <span className="h-1.5 min-w-0 flex-1 overflow-hidden rounded-full bg-neutral-100 dark:bg-neutral-800">
@@ -641,7 +641,7 @@ export default async function StatsPage() {
                     }}
                   />
                 </span>
-                <span className="w-12 shrink-0 text-right tabular-nums text-neutral-500">
+                <span className="w-12 shrink-0 text-right tabular-nums text-neutral-600 dark:text-neutral-400">
                   {month.holdings.toLocaleString()}
                 </span>
               </li>
@@ -659,7 +659,7 @@ export default async function StatsPage() {
                 <span>{FINISH_LABEL[row.finish as Finish]}</span>
                 <span className="shrink-0 tabular-nums">
                   {formatUsd(row.valueCents)}{" "}
-                  <span className="text-xs text-neutral-500">
+                  <span className="text-xs text-neutral-600 dark:text-neutral-400">
                     · {row.holdings.toLocaleString()} holdings
                   </span>
                 </span>
@@ -669,7 +669,7 @@ export default async function StatsPage() {
         </Panel>
       </div>
 
-      <p className="mt-8 text-xs text-neutral-500">
+      <p className="mt-8 text-xs text-neutral-600 dark:text-neutral-400">
         Movement is measured from the first day each card was tracked, which is
         not the same date for every card — a set released last month has a
         shorter history than the rest, and its first price is a preorder price.

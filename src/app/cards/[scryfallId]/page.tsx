@@ -74,7 +74,7 @@ export default async function CardPage(props: PageProps<"/cards/[scryfallId]">) 
 
   return (
     <main className="page-shell py-10">
-      <nav className="mb-6 text-sm text-neutral-500">
+      <nav className="mb-6 text-sm text-neutral-600 dark:text-neutral-400">
         <Link href="/" className="underline-offset-4 hover:underline">
           Collection
         </Link>
@@ -87,10 +87,10 @@ export default async function CardPage(props: PageProps<"/cards/[scryfallId]">) 
       <header className="mb-6 flex flex-col gap-5 sm:flex-row">
         {printing.imageUri ? (
           <CardImage
-            src={printing.imageUri}
+            src={printing.imageUriLarge ?? printing.imageUri}
             largeSrc={printing.imageUriLarge}
             alt={printing.name}
-            className="h-56 w-40 self-start"
+            className="h-[29rem] w-80 self-start"
           />
         ) : null}
 
@@ -98,7 +98,7 @@ export default async function CardPage(props: PageProps<"/cards/[scryfallId]">) 
           <h1 className="text-2xl font-semibold tracking-tight">
             {printing.name}
           </h1>
-          <p className="mt-1 text-sm text-neutral-500">
+          <p className="mt-1 text-sm text-neutral-600 dark:text-neutral-400">
             {printing.setName} ·{" "}
             <span className="font-mono text-xs">
               {printingCode(printing.setCode, printing.collectorNumber)}
@@ -128,7 +128,7 @@ export default async function CardPage(props: PageProps<"/cards/[scryfallId]">) 
               })}
             </div>
           ) : (
-            <p className="mt-4 text-sm text-neutral-500">
+            <p className="mt-4 text-sm text-neutral-600 dark:text-neutral-400">
               {FINISH_LABEL[finish]} only
             </p>
           )}
@@ -146,7 +146,7 @@ export default async function CardPage(props: PageProps<"/cards/[scryfallId]">) 
                 : ""}
             </p>
           ) : (
-            <p className="mt-4 text-sm text-neutral-500">
+            <p className="mt-4 text-sm text-neutral-600 dark:text-neutral-400">
               Not in your collection.
             </p>
           )}
@@ -156,7 +156,7 @@ export default async function CardPage(props: PageProps<"/cards/[scryfallId]">) 
       <section className="mb-8 rounded-lg border border-neutral-200 p-5 dark:border-neutral-800">
         <div className="mb-5 flex flex-wrap items-end justify-between gap-4">
           <div>
-            <h2 className="text-xs text-neutral-500">
+            <h2 className="text-xs text-neutral-600 dark:text-neutral-400">
               {FINISH_LABEL[finish]} price
               {stats.currentDate ? ` · ${stats.currentDate}` : ""}
             </h2>
@@ -169,13 +169,13 @@ export default async function CardPage(props: PageProps<"/cards/[scryfallId]">) 
 
           <dl className="flex flex-wrap gap-x-8 gap-y-3 text-sm">
             <div>
-              <dt className="text-xs text-neutral-500">
+              <dt className="text-xs text-neutral-600 dark:text-neutral-400">
                 {range.window === null ? "All time" : range.description}
               </dt>
               <dd
                 className={`font-medium tabular-nums ${
                   stats.changeCents == null || stats.changeCents === 0
-                    ? "text-neutral-500"
+                    ? "text-neutral-600 dark:text-neutral-400"
                     : stats.changeCents > 0
                       ? "text-emerald-700 dark:text-emerald-400"
                       : "text-red-700 dark:text-red-400"
@@ -195,7 +195,7 @@ export default async function CardPage(props: PageProps<"/cards/[scryfallId]">) 
               </dd>
             </div>
             <div>
-              <dt className="text-xs text-neutral-500">Low</dt>
+              <dt className="text-xs text-neutral-600 dark:text-neutral-400">Low</dt>
               <dd className="font-medium tabular-nums">
                 {stats.lowCents == null ? "—" : formatUsd(stats.lowCents)}
                 {stats.lowDate ? (
@@ -206,7 +206,7 @@ export default async function CardPage(props: PageProps<"/cards/[scryfallId]">) 
               </dd>
             </div>
             <div>
-              <dt className="text-xs text-neutral-500">High</dt>
+              <dt className="text-xs text-neutral-600 dark:text-neutral-400">High</dt>
               <dd className="font-medium tabular-nums">
                 {stats.highCents == null ? "—" : formatUsd(stats.highCents)}
                 {stats.highDate ? (
@@ -233,19 +233,29 @@ export default async function CardPage(props: PageProps<"/cards/[scryfallId]">) 
         <CardPriceChart points={visible} />
 
         {points.length > 0 ? (
-          <p className="mt-3 text-xs text-neutral-500">
-            {range.window === null
-              ? `History begins ${points[0].date}, the earliest price data for this printing.`
-              : `Showing ${visible.length} day${visible.length === 1 ? "" : "s"} to ${last}; ${spanDays} days are available in total.`}
+          <p className="mt-3 flex flex-wrap items-center gap-x-3 text-xs text-neutral-600 dark:text-neutral-400">
+            <span>
+              {range.window === null
+                ? `History begins ${points[0].date}, the earliest price data for this printing.`
+                : `Showing ${visible.length} day${visible.length === 1 ? "" : "s"} to ${last}; ${spanDays} days are available in total.`}
+            </span>
+            {/* The whole history, not the visible range: a range is a way of
+                reading the chart, not a claim about what exists. */}
+            <a
+              href={`/api/export/card/${printing.scryfallId}?finish=${finish}`}
+              className="underline underline-offset-4 hover:text-neutral-800 dark:hover:text-neutral-200"
+            >
+              Download CSV
+            </a>
           </p>
         ) : null}
       </section>
 
       <section className="mb-8 rounded-lg border border-neutral-200 p-5 dark:border-neutral-800">
-        <h2 className="text-xs text-neutral-500">
+        <h2 className="text-xs text-neutral-600 dark:text-neutral-400">
           Vendors · {FINISH_LABEL[finish].toLowerCase()}
         </h2>
-        <p className="mt-1 mb-4 text-sm text-neutral-500">
+        <p className="mt-1 mb-4 text-sm text-neutral-600 dark:text-neutral-400">
           What each shop asks, and what it would pay.
         </p>
         <VendorQuotes quotes={quotes} />
@@ -269,11 +279,11 @@ export default async function CardPage(props: PageProps<"/cards/[scryfallId]">) 
                   >
                     <span className="min-w-0 truncate">
                       {other.setName}{" "}
-                      <span className="font-mono text-xs text-neutral-500">
+                      <span className="font-mono text-xs text-neutral-600 dark:text-neutral-400">
                         {printingCode(other.setCode, other.collectorNumber)}
                       </span>
                     </span>
-                    <span className="shrink-0 tabular-nums text-neutral-500">
+                    <span className="shrink-0 tabular-nums text-neutral-600 dark:text-neutral-400">
                       {price ? formatUsd(price.priceCents) : "no price"}
                     </span>
                   </Link>

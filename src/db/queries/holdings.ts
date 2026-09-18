@@ -1,11 +1,13 @@
-import { and, asc, desc, eq, sql } from "drizzle-orm";
+import { and, asc, eq, sql, type SQL } from "drizzle-orm";
 
 import { FINISH_CODES } from "@/db/codec";
 import type { Db } from "@/db/queries/printings";
 import {
   DEFAULT_FILTER,
   DEFAULT_SORT,
+  defaultDir,
   type FilterId,
+  type SortDir,
   type SortId,
 } from "@/lib/collection-view";
 import {
@@ -121,6 +123,7 @@ export function collectionTotals(db: Db): CollectionTotals {
 export interface ListOptions {
   page?: number;
   sort?: SortId;
+  dir?: SortDir;
   filter?: FilterId;
   /** Case-insensitive substring of the card or set name. */
   search?: string;
@@ -132,6 +135,7 @@ export function listHoldings(
 ): CollectionPage {
   const totals = collectionTotals(db);
   const sort = options.sort ?? DEFAULT_SORT;
+  const dir = options.dir ?? defaultDir(sort);
   const filter = options.filter ?? DEFAULT_FILTER;
   const search = options.search?.trim() ?? "";
 
@@ -160,14 +164,12 @@ export function listHoldings(
   const unitPrice = sql`coalesce(${holdings.priceOverrideCents}, ${latestPrice})`;
   const conditions = [];
 
-  if (filter === "foil") {
-    conditions.push(
-      sql`${holdings.finish} in (${FINISH_CODES.foil}, ${FINISH_CODES.etched})`,
-    );
-  } else if (filter === "unpriced") {
-    conditions.push(sql`${unitPrice} is null`);
-  } else if (filter === "inferred") {
-    conditions.push(eq(holdings.dateAddedApprox, true));
+  if (filter === "nonfoil") {
+    conditions.push(sql`${holdings.finish} = ${FINISH_CODES.nonfoil}`);
+  } else if (filter === "foil") {
+    conditions.push(sql`${holdings.finish} = ${FINISH_CODES.foil}`);
+  } else if (filter === "etched") {
+    conditions.push(sql`${holdings.finish} = ${FINISH_CODES.etched}`);
   }
 
   if (search) {
@@ -214,32 +216,38 @@ export function listHoldings(
   // Every ordering ends with a unique-enough tiebreak. Without one, SQLite is
   // free to return equal rows in any order, and a holding could appear on two
   // pages or on none as the reader pages through.
-  const ordering = {
+  // Direction comes from the column header the reader clicked. Nulls are
+  // pinned last in both directions for the money columns: an unpriced holding
+  // leading a "most valuable" list is noise, and leading a "least valuable"
+  // one is a different kind of wrong.
+  const order = (expr: SQL) =>
+    dir === "asc" ? sql`${expr} asc` : sql`${expr} desc`;
+  const pricedFirst = sql`case when ${unitPrice} is null then 1 else 0 end`;
+
+  const primary: Record<SortId, SQL[]> = {
     // Line value, not unit price: two copies of a $50 card outrank one $80
-    // card in what the collection is actually worth. Nulls last, so unpriced
-    // holdings do not lead a list sorted by value.
-    value: [
-      sql`case when ${unitPrice} is null then 1 else 0 end`,
-      sql`${unitPrice} * ${holdings.quantity} desc`,
-      asc(printings.name),
-      asc(holdings.id),
-    ],
-    name: [asc(printings.name), asc(printings.setCode), asc(holdings.id)],
-    acquired: [
-      desc(holdings.dateAdded),
-      asc(printings.name),
-      asc(holdings.id),
-    ],
-    quantity: [desc(holdings.quantity), asc(printings.name), asc(holdings.id)],
+    // card in what the collection is actually worth.
+    value: [pricedFirst, order(sql`${unitPrice} * ${holdings.quantity}`)],
+    unit: [pricedFirst, order(sql`${unitPrice}`)],
+    name: [order(sql`${printings.name}`)],
+    acquired: [order(sql`${holdings.dateAdded}`)],
+    quantity: [order(sql`${holdings.quantity}`)],
     set: [
-      asc(printings.setCode),
-      // Collector numbers are text and sort "10" before "9"; padding compares
+      order(sql`${printings.setCode}`),
+      // Collector numbers are text and sort "10" before "9"; casting compares
       // them as the numbers they are wherever they are numeric.
-      sql`cast(${printings.collectorNumber} as integer)`,
-      asc(printings.collectorNumber),
-      asc(holdings.id),
+      order(sql`cast(${printings.collectorNumber} as integer)`),
+      order(sql`${printings.collectorNumber}`),
     ],
-  }[sort];
+    finish: [order(sql`${holdings.finish}`)],
+    condition: [order(sql`${holdings.condition}`)],
+  };
+
+  const ordering = [
+    ...primary[sort],
+    asc(printings.name),
+    asc(holdings.id),
+  ];
 
   const rows = db
     .select({

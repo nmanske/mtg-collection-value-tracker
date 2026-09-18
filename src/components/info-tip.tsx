@@ -30,7 +30,7 @@ export function InfoTip({
       <summary
         aria-label={label}
         title={label}
-        className="ml-1 inline-flex h-4 w-4 cursor-pointer list-none items-center justify-center rounded-full border border-neutral-400 text-[10px] font-medium leading-none text-neutral-500 transition-colors marker:hidden hover:border-neutral-600 hover:text-neutral-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 dark:border-neutral-600 dark:text-neutral-400 dark:hover:border-neutral-400 dark:hover:text-neutral-200"
+        className="ml-1 inline-flex h-4 w-4 cursor-pointer list-none items-center justify-center rounded-full border border-neutral-400 text-[10px] font-medium leading-none text-neutral-600 dark:text-neutral-400 transition-colors marker:hidden hover:border-neutral-600 hover:text-neutral-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 dark:border-neutral-600 dark:text-neutral-400 dark:hover:border-neutral-400 dark:hover:text-neutral-200"
       >
         {/* The marker is removed two ways: Chrome and Firefox honour
             list-style, Safari only honours the pseudo-element. */}

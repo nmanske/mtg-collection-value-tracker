@@ -29,13 +29,13 @@ export default async function ExportPage() {
         <h1 className="text-2xl font-semibold tracking-tight">Export</h1>
         <Link
           href="/"
-          className="text-sm text-neutral-500 underline-offset-4 hover:underline"
+          className="text-sm text-neutral-600 dark:text-neutral-400 underline-offset-4 hover:underline"
         >
           Back to collection
         </Link>
       </header>
 
-      <p className="mb-8 text-sm text-neutral-500">
+      <p className="mb-8 text-sm text-neutral-600 dark:text-neutral-400">
         CSV, spreadsheet-ready.
       </p>
 
@@ -54,10 +54,10 @@ export default async function ExportPage() {
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div className="min-w-0 flex-1">
                   <h2 className="font-medium">{spec.title}</h2>
-                  <p className="mt-1 text-sm text-neutral-500">
+                  <p className="mt-1 text-sm text-neutral-600 dark:text-neutral-400">
                     {spec.description}
                   </p>
-                  <p className="mt-2 text-xs tabular-nums text-neutral-500">
+                  <p className="mt-2 text-xs tabular-nums text-neutral-600 dark:text-neutral-400">
                     {rows.toLocaleString()} row{rows === 1 ? "" : "s"} ·
                     approximately {formatBytes(bytes)}
                     {large ? (
@@ -83,7 +83,7 @@ export default async function ExportPage() {
         })}
       </ul>
 
-      <div className="mt-8 text-xs text-neutral-500">
+      <div className="mt-8 text-xs text-neutral-600 dark:text-neutral-400">
         Prices in dollars; Cardmarket columns are euros and nothing converts
         between them.
         <InfoTip label="Why there is no full price history export">
