@@ -10,9 +10,15 @@ import { holdingsForPrinting } from "@/db/queries/holdings";
 import {
   getPrintingByScryfallId,
   otherPrintings,
+  type PricePoint,
   priceHistory,
   priceStats,
 } from "@/db/queries/printings";
+import {
+  PRICE_VENDOR_LABEL,
+  PRICE_VENDORS,
+  type PriceVendor,
+} from "@/db/queries/valuation";
 import { vendorQuotes, vendorSeries } from "@/db/queries/vendors";
 import { FINISHES, type Finish } from "@/db/schema";
 import { FINISH_LABEL, formatUsd, printingCode } from "@/lib/format";
@@ -48,10 +54,33 @@ export default async function CardPage(props: PageProps<"/cards/[scryfallId]">) 
       ? (requested as Finish)
       : (printing.finishes[0] ?? "nonfoil");
 
-  const points = priceHistory(db, printing.id, finish);
-  // Card Kingdom is the only vendor here publishing a buy price, so this is
-  // the whole "what would a shop pay for it" story rather than one of several.
-  const buylist = vendorSeries(db, printing.id, finish, "cardkingdom", "buylist");
+  // Same control, same labels and same default as the collection chart, so
+  // switching vendor means the same thing wherever you do it.
+  const requestedVendor =
+    typeof search.prices === "string" ? search.prices : undefined;
+  const priceSource: PriceVendor =
+    requestedVendor && (PRICE_VENDORS as readonly string[]).includes(requestedVendor)
+      ? (requestedVendor as PriceVendor)
+      : "tcgplayer";
+
+  // TCGplayer retail comes from `price_snapshots`, which carries the source and
+  // the estimated flag the chart draws differently. Card Kingdom's lives in
+  // `vendor_prices`, which has neither, so those are filled in: every row there
+  // is a recorded MTGJSON price, never an interpolation.
+  const points: PricePoint[] =
+    priceSource === "tcgplayer"
+      ? priceHistory(db, printing.id, finish)
+      : vendorSeries(db, printing.id, finish, priceSource, "retail").map(
+          (point) => ({ ...point, source: "mtgjson" as const, estimated: false }),
+        );
+
+  // Card Kingdom is the only vendor kept here that publishes a buy price, so
+  // the second line exists on their view and nowhere else — exactly as on the
+  // collection chart.
+  const buylist =
+    priceSource === "cardkingdom"
+      ? vendorSeries(db, printing.id, finish, "cardkingdom", "buylist")
+      : [];
 
   // The range governs every figure in the price panel, not just the chart: a
   // "high" that ignored the selected window would contradict the line drawn
@@ -119,7 +148,9 @@ export default async function CardPage(props: PageProps<"/cards/[scryfallId]">) 
                 return (
                   <Link
                     key={option}
-                    href={`/cards/${printing.scryfallId}?finish=${option}`}
+                    href={`/cards/${printing.scryfallId}?finish=${option}${
+                      priceSource === "tcgplayer" ? "" : `&prices=${priceSource}`
+                    }`}
                     aria-current={active ? "page" : undefined}
                     className={`rounded-md border px-3 py-1 text-sm transition-colors ${
                       active
@@ -224,13 +255,41 @@ export default async function CardPage(props: PageProps<"/cards/[scryfallId]">) 
           </dl>
         </div>
 
-        <div className="mb-3 flex justify-end">
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+          {/* Same control, markup and labels as the collection chart. Beside
+              the range because it changes the same thing the range does: what
+              the chart is showing, not what the card is. */}
+          <nav aria-label="Price source" className="flex flex-wrap gap-1">
+            {PRICE_VENDORS.map((vendor) => {
+              const current = vendor === priceSource;
+              return (
+                <Link
+                  key={vendor}
+                  href={`/cards/${printing.scryfallId}?finish=${finish}&prices=${vendor}${
+                    requestedRange ? `&range=${requestedRange}` : ""
+                  }`}
+                  scroll={false}
+                  aria-current={current ? "true" : undefined}
+                  className={`rounded-md border px-2.5 py-1 text-xs transition-colors ${
+                    current
+                      ? "border-neutral-900 bg-neutral-900 text-white dark:border-neutral-100 dark:bg-neutral-100 dark:text-neutral-900"
+                      : "border-neutral-300 hover:bg-neutral-50 dark:border-neutral-700 dark:hover:bg-neutral-900"
+                  }`}
+                >
+                  {PRICE_VENDOR_LABEL[vendor]}
+                </Link>
+              );
+            })}
+          </nav>
+
           <RangePicker
             active={range.id}
             spanDays={spanDays}
             lastDate={last}
             hrefFor={(id) =>
-              `/cards/${printing.scryfallId}?finish=${finish}&range=${id}`
+              `/cards/${printing.scryfallId}?finish=${finish}&range=${id}${
+                priceSource === "tcgplayer" ? "" : `&prices=${priceSource}`
+              }`
             }
           />
         </div>

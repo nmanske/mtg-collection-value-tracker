@@ -139,6 +139,13 @@ if (cardId) {
     path: `/cards/${cardId}?finish=nonfoil&range=1y`,
     expect: ["recharts"],
   });
+  // The vendor toggle. Card Kingdom's view carries the buylist line, which
+  // TCGplayer has no data for, so this also proves the series actually swapped
+  // rather than the button merely rendering.
+  await check({
+    path: `/cards/${cardId}?prices=cardkingdom`,
+    expect: ["Price source", "Card Kingdom buylist"],
+  });
 } else {
   console.log("  skip /cards/... — no card found to link to");
 }
