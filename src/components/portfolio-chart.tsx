@@ -190,7 +190,7 @@ function PortfolioChartBody({
   );
 
   return (
-    <figure className="viz-root m-0">
+    <figure className="viz-root money-axis m-0">
       {hasBuylist || showAcquisitions ? (
         <figcaption className="mb-3 flex flex-wrap items-center gap-x-5 gap-y-1 text-xs">
           <span className="flex items-center gap-1.5">

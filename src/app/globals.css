@@ -166,6 +166,23 @@ summary::-webkit-details-marker {
 }
 
 /*
+ * The value axis, on the collection chart only.
+ *
+ * The line's shape is the point and stays sharp; its scale is what gives the
+ * total away, so only the tick labels are hidden. Scoped by `.money-axis` so a
+ * single card's price axis — which is not hidden anywhere else — keeps its
+ * numbers.
+ *
+ * This reaches for a Recharts class because the labels are SVG `<text>` the
+ * chart renders itself. If a Recharts upgrade renames it the axis stops being
+ * hidden, which is a visible failure rather than a silent one.
+ */
+.hide-money .money-axis .recharts-yAxis text {
+  filter: blur(5px);
+  user-select: none;
+}
+
+/*
  * The toggle's own label, driven by the same class rather than React state —
  * so it is correct on the very first paint and cannot disagree with the page.
  */
