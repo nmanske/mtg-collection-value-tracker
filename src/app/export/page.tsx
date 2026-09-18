@@ -1,6 +1,5 @@
 import Link from "next/link";
 
-import { InfoTip } from "@/components/info-tip";
 
 import { db } from "@/db";
 import { EXPORTS, EXPORT_ORDER, exportSizes } from "@/export/datasets";
@@ -34,10 +33,6 @@ export default async function ExportPage() {
           Back to collection
         </Link>
       </header>
-
-      <p className="mb-8 text-sm text-neutral-600 dark:text-neutral-400">
-        CSV, spreadsheet-ready.
-      </p>
 
       <ul className="flex flex-col gap-4">
         {EXPORT_ORDER.map((id) => {
@@ -82,19 +77,6 @@ export default async function ExportPage() {
           );
         })}
       </ul>
-
-      <div className="mt-8 text-xs text-neutral-600 dark:text-neutral-400">
-        Prices in dollars; Cardmarket columns are euros and nothing converts
-        between them.
-        <InfoTip label="Why there is no full price history export">
-          One row per card per day would be a repackaged copy of the
-          providers&rsquo; data, which their terms forbid. To keep the history,
-          copy <code className="font-mono">data/mtg.db</code>.{" "}
-          <Link href="/faq#exports" className="underline underline-offset-2">
-            More
-          </Link>
-        </InfoTip>
-      </div>
 
     </main>
   );

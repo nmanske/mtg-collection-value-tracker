@@ -73,11 +73,19 @@ export function niceScale(
  *
  * The axis deliberately does not start at zero: a zero baseline flattens a
  * real move into a straight line. The axis labels state the range instead.
+ *
+ * It does not go *below* zero either. Padding under a series that starts near
+ * nothing — a collection on the day the first card was bought — used to round
+ * down to a negative tick, so the chart opened with a band of empty space
+ * under an axis labelled -$5,000. Money has a floor and the axis should say so.
  */
 export function paddedScale(values: number[], targetTicks = 5) {
   const low = Math.min(...values);
   const high = Math.max(...values);
   // A flat series still needs a visible band around it.
   const pad = Math.max((high - low) * 0.15, Math.max(high * 0.02, 1));
-  return niceScale(low - pad, high + pad, targetTicks);
+  // Clamped only when the data itself is non-negative, so a series that really
+  // does go negative is still drawn honestly.
+  const paddedLow = low >= 0 ? Math.max(low - pad, 0) : low - pad;
+  return niceScale(paddedLow, high + pad, targetTicks);
 }

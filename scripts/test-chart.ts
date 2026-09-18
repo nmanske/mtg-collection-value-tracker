@@ -104,4 +104,17 @@ for (const high of [50, 199, 1_000, 9_999, 100_000, 2_450_000]) {
   assertWellFormed(paddedScale([Math.floor(high * 0.9), high]), `sweep ${high}`);
 }
 
+// A series starting near nothing must not pad below zero. The collection is
+// worth $0 the day before the first card arrives, and padding under that used
+// to produce a -$5,000 tick and a band of dead space.
+const fromZero = paddedScale([0, 1_572_000]);
+assert.equal(fromZero.domain[0], 0, "money has a floor");
+assert.ok(fromZero.ticks.every((t) => t >= 0), "no negative ticks");
+
+// Small values near zero, same rule.
+assert.equal(paddedScale([77_200, 1_572_000]).domain[0], 0);
+
+// A series that genuinely goes negative is still drawn honestly.
+assert.ok(paddedScale([-500, 500]).domain[0] < 0);
+
 console.log("Chart axis tests passed.");

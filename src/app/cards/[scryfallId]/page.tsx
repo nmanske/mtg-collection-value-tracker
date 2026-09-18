@@ -233,20 +233,10 @@ export default async function CardPage(props: PageProps<"/cards/[scryfallId]">) 
         <CardPriceChart points={visible} />
 
         {points.length > 0 ? (
-          <p className="mt-3 flex flex-wrap items-center gap-x-3 text-xs text-neutral-600 dark:text-neutral-400">
-            <span>
-              {range.window === null
-                ? `History begins ${points[0].date}, the earliest price data for this printing.`
-                : `Showing ${visible.length} day${visible.length === 1 ? "" : "s"} to ${last}; ${spanDays} days are available in total.`}
-            </span>
-            {/* The whole history, not the visible range: a range is a way of
-                reading the chart, not a claim about what exists. */}
-            <a
-              href={`/api/export/card/${printing.scryfallId}?finish=${finish}`}
-              className="underline underline-offset-4 hover:text-neutral-800 dark:hover:text-neutral-200"
-            >
-              Download CSV
-            </a>
+          <p className="mt-3 text-xs text-neutral-600 dark:text-neutral-400">
+            {range.window === null
+              ? `History begins ${points[0].date}, the earliest price data for this printing.`
+              : `Showing ${visible.length} day${visible.length === 1 ? "" : "s"} to ${last}; ${spanDays} days are available in total.`}
           </p>
         ) : null}
       </section>
