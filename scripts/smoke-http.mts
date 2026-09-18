@@ -52,6 +52,10 @@ const checks: Check[] = [
   // the page actually renders.
   { path: "/stats", expect: ["Most valuable", "Biggest"] },
   { path: "/search?q=sliver", expect: ["printing"] },
+  // Word order and a typo both have to reach the same card, and the results
+  // must link to card pages rather than offer to add anything.
+  { path: "/search?q=bolt+lightning", expect: ["Lightning Bolt", "/cards/"] },
+  { path: "/search?q=lightnig+bolt", expect: ["Lightning Bolt"] },
   { path: "/export", expect: ["Collection", "Value history"] },
   { path: "/import", expect: ["Moxfield"] },
   { path: "/faq", expect: ["How it works", "best year"] },

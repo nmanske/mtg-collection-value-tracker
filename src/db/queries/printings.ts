@@ -1,7 +1,8 @@
-import { and, asc, eq, inArray, like, sql } from "drizzle-orm";
+import { and, asc, eq, inArray, sql } from "drizzle-orm";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 
 import { type Finish, priceSnapshots, printings } from "@/db/schema";
+import { closestNames, tokenise } from "@/lib/fuzzy";
 
 /**
  * Queries take their database explicitly rather than reaching for the shared
@@ -37,6 +38,14 @@ export interface PrintingSearchResult {
 }
 
 export const SEARCH_LIMIT = 60;
+
+/**
+ * Distinct names the typo fallback may offer.
+ *
+ * Deliberately small. A misspelling has one or two plausible intents; twenty
+ * guesses is not a more helpful answer than five, it is a longer one.
+ */
+const FUZZY_NAME_LIMIT = 8;
 
 /**
  * Latest price per (printing, finish) for the given printings.
@@ -139,24 +148,75 @@ export function searchPrintings(
     // Fall through to a name search when that is not a real printing.
   }
 
-  const rows = db
-    .select(PRINTING_COLUMNS)
-    .from(printings)
-    .where(like(printings.name, `%${trimmed}%`))
-    .orderBy(
-      // Exact matches first, then names that start with the query, so
-      // "Sol Ring" outranks "Sol Ring of Fate" for the query "Sol Ring".
-      sql`case
-            when lower(${printings.name}) = lower(${trimmed}) then 0
-            when lower(${printings.name}) like lower(${trimmed + "%"}) then 1
-            else 2
-          end`,
-      asc(printings.name),
-      asc(printings.setCode),
-      asc(printings.collectorNumber),
-    )
-    .limit(SEARCH_LIMIT)
-    .all();
+  // Every word has to appear, in any order, in the name or the set. Matching
+  // the phrase as one substring meant "bolt lightning" found nothing, and a
+  // set name is how people look for a printing they cannot name exactly.
+  const tokens = tokenise(trimmed);
+  // A card called "Fire // Ice" or a set with an underscore would otherwise
+  // have its wildcards read as wildcards.
+  const escapeLike = (value: string) =>
+    value
+      .replaceAll("\\", "\\\\")
+      .replaceAll("%", "\\%")
+      .replaceAll("_", "\\_");
+
+  const wordMatches = tokens.map((token) => {
+    const pattern = `%${escapeLike(token)}%`;
+    return sql`(lower(${printings.name}) like ${pattern} escape '\\'
+             or lower(${printings.setName}) like ${pattern} escape '\\'
+             or lower(${printings.setCode}) like ${pattern} escape '\\')`;
+  });
+
+  const ranked = sql`case
+        when lower(${printings.name}) = lower(${trimmed}) then 0
+        when lower(${printings.name}) like lower(${trimmed + "%"}) then 1
+        when lower(${printings.name}) like lower(${"%" + trimmed + "%"}) then 2
+        else 3
+      end`;
+
+  let rows =
+    wordMatches.length === 0
+      ? []
+      : db
+          .select(PRINTING_COLUMNS)
+          .from(printings)
+          .where(and(...wordMatches))
+          .orderBy(
+            // Exact matches first, then names that start with the query, so
+            // "Sol Ring" outranks "Sol Ring of Fate" for the query "Sol Ring".
+            ranked,
+            asc(printings.name),
+            asc(printings.setCode),
+            asc(printings.collectorNumber),
+          )
+          .limit(SEARCH_LIMIT)
+          .all();
+
+  // Only when nothing matched at all. Reading 37,000 names and measuring edit
+  // distance against each is cheap (~20ms) but pointless when the ordinary
+  // search already answered, which it does almost every time.
+  if (rows.length === 0 && trimmed.length >= 3) {
+    const names = db
+      .selectDistinct({ name: printings.name })
+      .from(printings)
+      .all()
+      .map((row) => row.name);
+
+    const close = closestNames(names, trimmed, FUZZY_NAME_LIMIT);
+    if (close.length > 0) {
+      rows = db
+        .select(PRINTING_COLUMNS)
+        .from(printings)
+        .where(inArray(printings.name, close.map((match) => match.name)))
+        .orderBy(
+          asc(printings.name),
+          asc(printings.setCode),
+          asc(printings.collectorNumber),
+        )
+        .limit(SEARCH_LIMIT)
+        .all();
+    }
+  }
 
   return withPrices(db, rows);
 }

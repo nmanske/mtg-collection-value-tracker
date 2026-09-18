@@ -146,6 +146,12 @@ export default async function CollectionPage(props: PageProps<"/">) {
           </Link>
           <PrivacyToggle />
           <Link
+            href="/search"
+            className="rounded-md border border-neutral-300 px-4 py-2 text-sm font-medium hover:bg-neutral-50 dark:border-neutral-700 dark:hover:bg-neutral-900"
+          >
+            Search cards
+          </Link>
+          <Link
             href="/stats"
             className="rounded-md border border-neutral-300 px-4 py-2 text-sm font-medium hover:bg-neutral-50 dark:border-neutral-700 dark:hover:bg-neutral-900"
           >

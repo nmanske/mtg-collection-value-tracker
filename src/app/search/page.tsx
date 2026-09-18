@@ -1,6 +1,5 @@
 import Link from "next/link";
 
-import { AddHoldingForm } from "@/components/add-holding-form";
 import { CardImage } from "@/components/card-image";
 import { db } from "@/db";
 import {
@@ -11,11 +10,11 @@ import {
 import { FINISH_LABEL, formatUsd, printingCode } from "@/lib/format";
 
 export const metadata = {
-  title: "Add cards",
+  title: "Search cards",
 };
 
-// Holdings change on every add, and the price table is refreshed by a nightly
-// job, so there is nothing worth caching between requests here.
+// The price table is refreshed by a nightly job, so there is nothing worth
+// caching between requests here.
 export const dynamic = "force-dynamic";
 
 export default async function SearchPage(props: PageProps<"/search">) {
@@ -23,13 +22,12 @@ export default async function SearchPage(props: PageProps<"/search">) {
   const { q } = await props.searchParams;
   const query = typeof q === "string" ? q : "";
   const results = searchPrintings(db, query);
-  const today = new Date().toISOString().slice(0, 10);
   const totalPrintings = countPrintings(db);
 
   return (
     <main className="page-shell py-10">
       <header className="mb-8 flex items-baseline justify-between gap-4">
-        <h1 className="text-2xl font-semibold tracking-tight">Add cards</h1>
+        <h1 className="text-2xl font-semibold tracking-tight">Search cards</h1>
         <Link
           href="/"
           className="text-sm text-neutral-600 dark:text-neutral-400 underline-offset-4 hover:underline"
@@ -46,7 +44,7 @@ export default async function SearchPage(props: PageProps<"/search">) {
           name="q"
           defaultValue={query}
           autoFocus
-          placeholder="Card name, or set and number like blb 280"
+          placeholder="Card name, set, or a printing like blb 280"
           aria-label="Search cards"
           className="flex-1 rounded-md border border-neutral-300 bg-white px-3 py-2 text-sm dark:border-neutral-700 dark:bg-neutral-900"
         />
@@ -150,7 +148,6 @@ export default async function SearchPage(props: PageProps<"/search">) {
                   </p>
 
                   <div className="mt-3">
-                    <AddHoldingForm printing={printing} today={today} />
                   </div>
                 </div>
               </li>
