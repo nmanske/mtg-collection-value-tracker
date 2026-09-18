@@ -12,6 +12,63 @@ gigabit, and a first build of a minute or two.
 
 ---
 
+## Quick path
+
+The whole deployment. Everything below this section is detail for when a step
+misbehaves — skip it until then.
+
+```bash
+# --- on the Beelink -------------------------------------------------------
+docker compose version                      # must be v2
+df -h /                                     # need ~30 GB
+
+# deploy key (read-only) -> GitHub: repo > Settings > Deploy keys
+ssh-keygen -t ed25519 -C "kettlecorn deploy" -f ~/.ssh/mtg_deploy -N ""
+chmod 600 ~/.ssh/mtg_deploy
+cat ~/.ssh/mtg_deploy.pub
+
+cat >> ~/.ssh/config <<'CFG'
+Host github-mtg
+  HostName github.com
+  User git
+  IdentityFile ~/.ssh/mtg_deploy
+  IdentitiesOnly yes
+CFG
+chmod 600 ~/.ssh/config
+ssh -T git@github-mtg                       # expect: Hi nmanske/mtg-...!
+
+sudo mkdir -p /srv/mtg && sudo chown "$USER" /srv/mtg
+cd /srv/mtg
+git clone git@github-mtg:nmanske/mtg-collection-value-tracker.git
+sudo mkdir -p /srv/mtg/data && sudo chown -R 1001:1001 /srv/mtg/data
+
+# --- from WSL on the Windows machine, with nothing running there ----------
+rsync -avP /mnt/c/_PERSONAL/mtg-collection-value-tracker/data/mtg.db   nathan@kettlecorn:/srv/mtg/data/mtg.db
+
+# --- back on the Beelink --------------------------------------------------
+sudo chown 1001:1001 /srv/mtg/data/mtg.db
+cd /srv/mtg/mtg-collection-value-tracker
+cp .env.example .env
+sed -i 's|^PORT=.*|PORT=3010|' .env
+echo 'DATA_DIR=/srv/mtg/data' >> .env
+
+docker compose up -d --build
+docker compose logs -f                      # wait for "scheduled daily ingest"
+
+# --- verify ---------------------------------------------------------------
+docker compose exec app node_modules/.bin/tsx scripts/ingest-today.mts --dry-run
+docker compose exec app node -e   "const d=require('better-sqlite3')('/app/data/mtg.db',{readonly:true});   console.log(d.prepare('select count(*) n from holdings').get())"
+```
+
+Then open <http://kettlecorn:3010>. Expect 3,868 holdings from that last check
+— if it says 0, the database did not land where `DATA_DIR` points.
+
+Two things worth doing before you walk away: set `CRON_SCHEDULE="* * * * *"`,
+restart, watch one run reach `prices: done`, then put it back to `15 10 * * *`.
+And set up the backup cron in section 8.
+
+---
+
 ## 1. Check the host
 
 ```bash
