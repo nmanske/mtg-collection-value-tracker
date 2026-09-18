@@ -162,6 +162,21 @@ export async function startScheduler(): Promise<void> {
   if (globalForCron.mtgCronStarted) return;
   globalForCron.mtgCronStarted = true;
 
+  // `next build` runs the instrumentation hook too, while it imports every
+  // route to collect page data. Left alone that is not a no-op: NODE_ENV is
+  // "production" during a build and CRON_ENABLED is unset in the builder stage,
+  // so the scheduler starts, migrates a database into the build layer, finds it
+  // empty, and kicks off a first-run ingest — 108,000 printings downloaded from
+  // Scryfall inside `docker build`.
+  //
+  // Measured: that turned a 30 second build into 1,007 seconds of almost no CPU
+  // and a lot of network. It only became reachable once `openDatabase` learned
+  // to create its parent directory; before that the build crashed here instead.
+  if (process.env.NEXT_PHASE === "phase-production-build") {
+    log("build phase; not migrating or scheduling");
+    return;
+  }
+
   migrateOnStart();
 
   const enabled =
