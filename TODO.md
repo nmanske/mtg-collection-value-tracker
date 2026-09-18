@@ -76,7 +76,7 @@ excluded, alongside the fingerprint key, on the principle that both record what
 the app did rather than what the data is. Measured before and after on the real
 database: 22.4s and 1.4s. `test:cache` asserts it.
 
-**Docker: reviewed, still never built.** See item 7.
+**Docker: deployed 2026-09-18.** See item 7.
 
 ### 3. Click a card to zoom — done, pending a re-ingest
 
@@ -163,68 +163,55 @@ Still cross-sectional-only, and worth doing next: **most volatile holding**
 needs a per-card version of the same chain, which the current pass does not
 keep. And **value if buying had stopped in 2023** is close to free now.
 
-### 7. Docker — reviewed and documented, never built
+### 7. Docker — deployed
 
-The build OOM that blocked this is fixed (webpack), so the image *can* now be
-built. It has not been: there is no container runtime on the dev machine, and
-the target is a Linux server rather than this desktop, so a Windows dry run
-would prove little. Decided 2026-09-16 not to install one here.
+Running on a Beelink since 2026-09-18: image built, database copied across,
+service serving, daily schedule registered. `DEPLOYMENT.md` is the guide and now
+reflects a deployment that happened rather than one reasoned about.
 
-What was verified, by inspecting the real `next build --webpack` output rather
-than by running anything:
+The static review beforehand was worth it — `stream-json` and `tsx` are not
+traced into `.next/standalone`, which is why the `prod-deps` stage exists, and
+that held up in practice.
 
-- `better-sqlite3` **is** traced into `.next/standalone`.
-- `stream-json` and `tsx` are **not**. The daily ingest therefore cannot run
-  from the standalone bundle alone, which is exactly what the `prod-deps` stage
-  exists to supply. This was the main open question and it is settled.
-- The scheduler and `node-cron` **are** in the bundle, so the cron does get
-  registered in the container.
-- Every bare import under `src/` and the ingest CLI resolves to a production
-  dependency, so nothing in the runtime path vanishes when dev dependencies are
-  pruned.
+The first build surfaced one bug the review missed: `next build` collects page
+data by importing every route, `@/db` opens SQLite at module scope, and the
+Dockerfile removes `data/` beforehand. better-sqlite3 creates a missing file but
+not a missing directory, so the build could not complete. `openDatabase` now
+creates the parent directory. Invisible locally, where `data/` always exists.
 
-Also hardened: `ca-certificates` in the runner (both upstreams are HTTPS, and a
-missing trust store is a silent daily failure), and the bind mount is documented
-as Linux-only — SQLite wants POSIX advisory locking, which a Windows or macOS
-bind mount emulates.
+Decisions made during the deployment, recorded so they are not re-litigated:
 
-**Remaining, and only doable on the host:** build the image, start it, and run
-the four checks under "Verifying a deployment" in the README, then prove the
-schedule fires by temporarily setting `CRON_SCHEDULE="* * * * *"`. Unknowns that
-only a real run can settle: whether the pruned `node_modules` and the standalone
-bundle actually merge as intended in the runner stage, whether `node_modules/.bin/tsx`
-survives the copy with its symlink intact, and whether the host's `./data`
-ownership lets uid 1001 write.
+- **Database on local disk, not the NAS.** SQLite wants POSIX advisory locking
+  and WAL needs a shared-memory file; neither works over NFS or SMB. The Beelink
+  had 335 GB free, which made the iSCSI plan unnecessary.
+- **Its own compose project**, not merged into the Plex stack. `docker compose
+  down` on one cannot take the other with it.
+- **No scheduled backup.** Prices are rebuildable from the archive; `holdings`
+  is not. Judged an acceptable trade for a single user — see DEPLOYMENT.md
+  section 8.
 
-### 8. The valuation query scans the whole price table
+### 9. Serve a stale value history rather than recomputing — done
 
-The single most valuable optimisation available, and the answer to "does this
-scale". Measured 2026-09-18 on the real database:
+Anything that changes holdings or prices invalidates the portfolio cache, and
+until 2026-09-18 the next reader recomputed it inside their request: 20-35s,
+with every concurrent request starting its own. Adding a single card did this.
 
-```
-plan today       SCAN price_snapshots            13,470 ms
-plan per-series  SEARCH ... USING PRIMARY KEY     2,160 ms
-                 identical 6,539,232 rows            6.2x
-```
+Reads now serve what is cached, mark it `stale`, and ask for a rebuild in the
+background. The dashboard shows "updating..." with a tip. A cold cache still
+computes in-request, since there is nothing stale to serve and it happens once.
 
-`portfolioSeries` loads every held printing's history with one joined statement.
-SQLite materialises the holdings subquery and then **scans all 215 million rows**
-of `price_snapshots` with a bloom filter, rather than seeking to the 6.5 million
-it needs. So the cost is proportional to the size of the price table, not to the
-size of the collection — which is why it takes the same 13s whether you hold
-3,868 cards or 40.
+The rebuild is a child process (`REBUILD_COMMAND`), for the same reason the
+ingest is: synchronous CPU-bound work in-process blocks the event loop and
+starves every other request, node-cron included. Guarded by a module-level flag,
+a 60s cooldown so a rebuild that fails to clear staleness cannot loop, and a
+10 minute timeout.
 
-Replacing it with one primary-key range scan per held series
-(`where printing_key = ? and finish = ?`, 3,868 statements) returns exactly the
-same rows 6.2x faster, and makes the cost proportional to what is actually held.
+Both importers and the add/remove holding actions now request a rebuild
+directly rather than leaving it to whoever loads a page next. The daily ingest
+already did, via `--rebuild-cache`.
 
-Worth doing because it is the hot path behind every cache rebuild, every import,
-and the first page load after an ingest. It would take the rebuild from ~30s to
-roughly 15s, and it is the change that would make a second user's data cost a
-second user's worth of work rather than another full table scan.
-
-Not done yet: it is the most important query in the app and the deployment was
-in progress. The row counts match exactly, so the risk is low.
+Worth knowing: the spawned child inherits `DATABASE_PATH`, so the cache tests
+set `REBUILD_COMMAND` empty — one of them was rebuilding the real database.
 
 ## Known issues
 
@@ -280,7 +267,11 @@ in progress. The row counts match exactly, so the risk is low.
   (13% smaller).
 - **Replace `data/mtg.db` with `data/mtg-compact.db`** once you have verified
   it — that file is also the one to copy to a server.
-- **A slow request can starve the in-process scheduler.** Observed on
+- ~~**A slow request can starve the in-process scheduler.**~~ Largely fixed by
+  item 9: the rebuild that caused it now runs as a child process, so it no
+  longer blocks the event loop. The residual risk is any *other* synchronous
+  work in a request, and a cold cache is still computed in-request. Original
+  observation, kept for the measurement: on
   2026-09-16: a metadata ingest invalidated the portfolio cache, the next page
   load spent 20.2s recomputing it synchronously, and node-cron logged
   `missed execution ... Possible blocking IO or high CPU`. The scheduled price
@@ -290,7 +281,9 @@ in progress. The row counts match exactly, so the risk is low.
   path can still block the timer. A daily schedule makes a collision unlikely,
   not impossible. The real fixes are to serve a stale-but-labelled cache while a
   rebuild is pending, or to move the schedule out of the web process entirely.
-- **The dashboard is slow while a bulk load runs** — 88s to no-response-in-120s
+- ~~**The dashboard is slow while a bulk load runs**~~ Fixed by item 9 — a stale
+  cache is now served and labelled rather than recomputed per request. Original
+  note:  — 88s to no-response-in-120s
   during the backfill, against 0.9s with a warm cache. The backfill advances a
   watermark after every build, which correctly invalidates the cache, so every
   page load recomputes 3,706 holdings across 1,700 dates against a table being

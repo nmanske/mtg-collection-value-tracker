@@ -4,8 +4,10 @@ Written for a Beelink (`kettlecorn`) running Ubuntu with Docker already
 installed, a Synology NAS mounted for backups, and the database on local disk.
 Adjust hostnames and paths to taste.
 
-> **This has never been run end to end.** The image has been reviewed but not
-> built. Treat the first deployment as the test, and do not skip step 6.
+> **Run end to end on 2026-09-18.** The first build surfaced exactly one bug —
+> `next build` imports every route to collect page data, which opened SQLite
+> before the `data` directory existed — fixed since. Everything below has been
+> executed on a real host rather than reasoned about.
 
 Rough timings: a few minutes of setup, a ~4 minute database transfer over
 gigabit, and a first build of a minute or two.

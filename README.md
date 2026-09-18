@@ -5,7 +5,9 @@ collection over time, plus per-card price history.
 
 ## Status
 
-Pre-alpha. Phase 0 (project scaffolding) only.
+Running. Deployed to a home server in Docker, with ~5.7 years of price history
+(564 million rows) and a daily ingest that keeps itself current. Planned work
+and known issues are in [TODO.md](TODO.md).
 
 ## Features (v1 scope)
 
@@ -15,18 +17,15 @@ Pre-alpha. Phase 0 (project scaffolding) only.
 - **Chart ranges** — 1M / 3M / 6M / 1Y / All above the value chart. A range is
   disabled until the price history actually spans it, so a short series is
   never stretched across a wide axis.
-- **Statistics** — `/stats`: most valuable cards, biggest risers and fallers,
-  what actually moved the collection's value, buylist spreads, where the value
-  sits by set, and the long tail. Plus the long view: year by year, the deepest
-  fall from a high and whether it recovered, and the best and worst year and
-  month. Those are computed **like-for-like** — each month-to-month step
-  compares only the cards priced at both of its ends, then the steps are
-  chained — because a card cannot be priced before it was printed, and reading
-  the raw chart instead reports five years of new printings as growth. On a
-  real collection that is the difference between +58% and -13%.
+- **Statistics** — `/stats`: most valuable cards, biggest movers, buylist
+  spreads, where the value sits by set, and the long tail. Plus the long view —
+  year by year, the deepest fall from a high, best and worst year and month —
+  computed **like-for-like**, because a card cannot be priced before it was
+  printed and reading the raw chart reports five years of new printings as
+  growth. On a real collection that is +58% against -13%.
 - **Export** — two CSVs at `/export`: your collection with every vendor's
   current price beside it, and the dashboard's value history. Both are bounded
-  by the size of your collection rather than the price tables, which hold 15.7
+  by the size of your collection rather than the price tables, which hold 564
   million rows. There is deliberately no per-card daily price export; see
   below.
 - **Vendor comparison** — what TCGplayer and Card Kingdom ask for your cards,
@@ -34,8 +33,6 @@ Pre-alpha. Phase 0 (project scaffolding) only.
   each figure stated rather than implied.
 
 Single-user, USD-only, no account system.
-
-Planned work and known issues are in [TODO.md](TODO.md).
 
 The layout widens in steps to 1,760px on large displays. Tables and charts get
 better with width — a wider plot resolves more of a multi-year series — while
@@ -109,208 +106,88 @@ USD listing at all.
 
 ## Self-hosting with Docker
 
-> **Not yet run end to end.** The image has never been built or started. What
-> follows was verified by inspecting the build output rather than by running a
-> container, so treat the first deployment as a test and check the boxes under
-> "Verifying a deployment" as you go.
-
-For a step-by-step deployment to a real host — deploy keys, moving the database
-across, backups to a NAS, and a troubleshooting table — see
-**[DEPLOYMENT.md](DEPLOYMENT.md)**. The section below is the summary.
-
-Intended for a **Linux host**. SQLite relies on POSIX advisory locking, and a
-bind mount from a Windows or macOS desktop crosses a filesystem translation
-layer that emulates it — slow against a 25 GB database and not something to
-trust a write-ahead log to. Develop on the desktop with `npm run dev`; run the
-container where the data lives.
-
-### First deployment
-
 ```bash
-git clone git@github.com:nmanske/mtg-collection-value-tracker.git
-cd mtg-collection-value-tracker
-cp .env.example .env          # optional; the defaults work
-
-mkdir -p data
-sudo chown -R 1001:1001 data  # the container runs as uid 1001
-
+cp .env.example .env
 docker compose up -d --build
-docker compose logs -f
 ```
 
 Then open <http://localhost:3000>.
 
-`chown` is not optional. A bind-mounted directory keeps the host's ownership,
-and the container's unprivileged `nextjs` user must be able to write it, or the
-migration at startup fails with `SQLITE_CANTOPEN`.
+**[DEPLOYMENT.md](DEPLOYMENT.md)** is the real guide: deploy keys, moving an
+existing database across, verification and a troubleshooting table. It opens
+with the whole deployment as a single block of commands.
 
-If the host is a different architecture from the machine you build on — many
-NAS boxes are arm64 — build on the host itself, or use
-`docker buildx build --platform linux/arm64`. `better-sqlite3` is a native
-module; the build stage carries `python3`, `make` and `g++` so it compiles from
-source when no prebuild matches, which is slow but works.
-
-### Bringing an existing collection
-
-A fresh container starts empty and will spend its first hours rebuilding what
-you already have. Copy the database instead:
-
-```bash
-# On the machine that has it. Never `cp` a live SQLite file — `VACUUM INTO`
-# produces a consistent copy even while the app is reading, and a smaller one.
-node -e "require('better-sqlite3')('data/mtg.db').exec(\"vacuum into 'mtg-compact.db'\")"
-rsync -avP mtg-compact.db user@server:/srv/mtg/data/mtg.db
-sudo chown 1001:1001 /srv/mtg/data/mtg.db
-```
-
-Migrations run on every start, so a database from an older schema upgrades
-itself rather than failing.
+The database is one SQLite file, bind-mounted from `DATA_DIR` (default
+`./data`). Migrations run on every start, so pulling a newer image upgrades the
+schema rather than failing.
 
 ### What runs on its own
 
-- **Metadata and prices, daily at 10:00 UTC** (`CRON_SCHEDULE`,
-  `CRON_TIMEZONE`). Overnight across the Americas, so the ingest has the write
-  lock to itself, and just under an hour after Scryfall's ~09:05 UTC build.
-  MTGJSON's build hour varies, and a run that arrives early finds the same
-  version and skips.
-- **The price half runs as a child process**, not inside the web server. It
-  parses a 50 MB document and writes a few hundred thousand rows, which has no
-  business competing with request handling for memory or for the write lock. As
-  a child, the worst case is a non-zero exit code and yesterday's prices still
-  on screen. `INGEST_COMMAND` changes how it is launched; empty disables it, for
-  driving `ingest:today` from outside the container.
-- **Every run is recorded** in `sync_meta`, and the dashboard banners when
-  prices fall more than two days behind or the last run failed. Not decoration:
-  a chart missing its newest point looks exactly like a chart, which is how a
-  missed day went unnoticed for five days, and MTGJSON serves only ~90 days
-  before a missed day is unrecoverable.
-- **The first start is slow on purpose.** With no card data the container
-  ingests ~108,000 printings before the app is useful.
+- **Metadata and prices, daily at 10:00 UTC** (`CRON_SCHEDULE`). Overnight
+  across the Americas, and just under an hour after Scryfall's ~09:05 UTC build.
+- **Prices run as a child process.** A 50 MB parse and a few hundred thousand
+  rows have no business competing with request handling for memory or the write
+  lock. The worst case is a non-zero exit code and yesterday's prices still on
+  screen.
+- **Every run is recorded**, and the dashboard says so when prices fall more
+  than two days behind or the last run failed. A chart missing its newest point
+  looks exactly like a chart, which is how a missed day went unnoticed for five
+  days — and MTGJSON serves only ~90 days before a gap is permanent.
+- **A stale value history is served, not recomputed.** Anything that changes
+  holdings or prices leaves the cached series behind. Recomputing it inside the
+  request that noticed costs 20-35s and every concurrent request starts its own,
+  so the page instead serves what it has, marks it `updating`, and rebuilds in
+  the background.
 
-### Verifying a deployment
+### Filling in history
 
-The image carries more than the standalone bundle, because the ingest needs it.
-`better-sqlite3` is traced into the bundle but `stream-json` and `tsx` are not,
-so a pruned production `node_modules` is layered underneath. These four checks
-confirm that actually survived into the image:
+A new install has one day of prices. `backfill:mtgjson` fills the ~90 days the
+live API serves; going back years needs a local archive of past MTGJSON builds,
+which `backfill:archive` walks oldest-first.
 
 ```bash
-# 1. The ingest runtime and its ESM-only parser are present.
-docker compose exec app ls node_modules/.bin/tsx node_modules/stream-json
-
-# 2. The ingest runs. --dry-run writes nothing. On a container that has never
-#    been backfilled this fails with "No MTGJSON uuid map yet" — which still
-#    proves the runtime and every import resolved, which is the point.
-docker compose exec app node_modules/.bin/tsx scripts/ingest-today.mts --dry-run
-
-# 3. The schedule was registered at boot.
-docker compose logs app | grep "scheduled daily ingest"
-
-# 4. HTTPS works from inside the container — a missing trust store would fail
-#    every ingest, quietly, once a day.
-docker compose exec app node -e "fetch('https://mtgjson.com/api/v5/Meta.json').then(r=>console.log(r.status))"
+npm run backfill:mtgjson -- --all
+npm run backfill:archive -- --snapshots all --vendors all
+npm run import:moxfield -- collection.csv --dry-run
 ```
 
-Then watch the schedule fire once for real, rather than waiting a day to find
-out it does not. Set `CRON_SCHEDULE="* * * * *"` in `.env`, restart, wait for
-one complete run, then put the schedule back:
-
-```bash
-docker compose up -d
-docker compose logs -f app | grep --line-buffered "\[cron\]"
-# expect: starting ingest -> metadata -> prices: running ... -> prices: done
-```
-
-A healthy run takes a couple of minutes: ~150,000 snapshots and ~230,000 vendor
-rows, plus a portfolio cache rebuild. `prices: FAILED` prints the tail of the
-child's output and is also written to `sync_meta` for the dashboard banner.
-
-The database is a single SQLite file at `./data/mtg.db`. Backing up the
-collection is copying that file — see "Backing up" for doing it safely while the
-container is running.
-
-### Backfilling history and importing a collection
-
-The daily job only records prices from the day it first runs, so a new install
-has one day of history. `backfill:mtgjson` fills in the ~90 days MTGJSON's live
-API serves. Going back further needs an archive of past MTGJSON builds on disk,
-which `backfill:archive` walks oldest-first — see "Backfilling from an archive".
-
-Both the backfill and the Moxfield import are CLIs run under `tsx`. The
-production image carries `tsx` and the source, because the daily price ingest
-runs the same way, so these can be run inside the container too — but running
-them from a checkout against the same file is usually easier:
-
-```bash
-DATABASE_PATH=./data/mtg.db npm run backfill:mtgjson -- --all
-DATABASE_PATH=./data/mtg.db npm run import:moxfield -- collection.csv --dry-run
-```
-
-### Backfilling from an archive
-
-MTGJSON's live `AllPrices` is a rolling ~90-day window, so the public API can
-never reach further back than three months. An archive of past builds can: each
-one carries its own window, and consecutive builds overlap enough to stitch into
-a continuous series.
-
-Point `backfill:archive` at a directory of build folders, each holding that
-build's `AllPrices.json` (a nested `AllPrices.json/AllPrices.json` is accepted,
-as is `.gz`):
-
-```bash
-DATABASE_PATH=./data/mtg.db npm run backfill:archive -- --snapshots all --vendors all
-```
-
-Two things make a long run practical. Builds whose dates the watermark already
-covers are skipped on a 4 KB header read rather than a full parse, so restarting
-costs seconds instead of re-reading everything. And progress is recorded after
-each build, so an interrupted run resumes where it stopped — the same command
-continues it.
+Two things make a long archive run practical: builds the watermark already
+covers are skipped on a 4 KB header read rather than a full parse, and progress
+is recorded after each build, so an interrupted run resumes where it stopped.
 
 Run `--ids-only` first if the archive spans years. MTGJSON retires `uuid`s over
-time, and a uuid the map cannot resolve is skipped silently, taking that card's
-history with it. Merging every build's `AllIdentifiers.json` first recovered
-30,691 mappings against a map built from the current build alone.
+time and an unresolvable one is skipped silently, taking that card's history
+with it — merging every build's `AllIdentifiers.json` first recovered 30,691
+mappings against a map built from the current build alone.
 
-### After a backfill
+`npm run finalize` then runs what a long backfill leaves outstanding, in
+dependency order: import, cache rebuild, smoke test, `VACUUM`. The order is the
+point — an import can change which holdings carry an inferred date, which moves
+every point in the series, and a smoke test against a cold cache measures the
+cache rather than the app.
 
-`npm run finalize` runs everything a long backfill leaves outstanding, in the
-order the steps actually depend on each other:
-
-```bash
-npm run finalize -- collection.csv   # or --skip-import
-npm run finalize -- --dry-run        # say what would run, change nothing
-```
-
-The ordering is the point. The collection import has to precede the cache
-rebuild, because it can change which holdings carry an inferred acquisition
-date and that moves every point in the series. The cache rebuild has to precede
-the smoke test, or the test measures a cold cache recomputing and reports the
-app as slow. `VACUUM` comes last because everything above it writes.
-
-Steps needing a file or a decision are skipped with an explanation rather than
-guessed at — importing the wrong CSV would reconcile the collection against it
-and remove holdings it does not mention.
+These are `tsx` CLIs. The production image carries `tsx` and the source, so they
+run inside the container too; `docker compose exec app node_modules/.bin/tsx
+scripts/<name>.ts`.
 
 ### Backing up
 
-The database is the backup. Copy `data/mtg.db` — it holds the collection and
-every price ever recorded, including days that can no longer be re-fetched once
-MTGJSON's rolling 90-day window moves past them. That window is the reason the
-database matters more than it looks: once a day falls out of it, the only
-sources are this file or an archived build.
+The database is the backup — copy `data/mtg.db`. It holds every price ever
+recorded, including days that can no longer be re-fetched once MTGJSON's rolling
+window moves past them. SQLite is in WAL mode, so `VACUUM INTO` takes a
+consistent snapshot while the container keeps serving.
 
-There is no export of the per-card daily price series, and that is deliberate.
-Price providers' terms consistently forbid repackaging their data as a
-standalone feed or bulk dataset, and a CSV with one row per card per day is
-exactly that shape — a real risk if this is ever run commercially. The two
-exports that remain describe your own holdings and a derived daily total.
+Most of it is rebuildable from an archive; `holdings` is not, because
+acquisition dates come from Moxfield's `Last Modified`, which moves whenever a
+card is edited there. See DEPLOYMENT.md section 8 for whether that is worth
+backing up.
 
-SQLite is in WAL mode, so these are safe to run while the container is serving.
-CSV import is also available in the app itself at `/import`, which needs no
-checkout.
+There is deliberately no per-card daily price export. Price providers' terms
+forbid repackaging their data as a standalone feed, and a CSV with one row per
+card per day is exactly that shape. The two exports that remain describe your
+own holdings and a derived daily total.
 
-### Configuration
+## Configuration
 
 | Variable | Default | What it does |
 | --- | --- | --- |
@@ -320,6 +197,8 @@ checkout.
 | `CRON_TIMEZONE` | `UTC` | Timezone the schedule is read in; named zones work too |
 | `INGEST_COMMAND` | `npm run ingest:today -- --rebuild-cache` | How the price ingest is launched. Empty disables it |
 | `INGEST_TIMEOUT_MS` | `1800000` | Kills a wedged ingest rather than letting it hold the write lock |
+| `REBUILD_COMMAND` | `npm run cache:portfolio` | How a stale value history is rebuilt, in the background. Empty disables it |
+| `DATA_DIR` | `./data` | Host directory holding the database, bind-mounted into the container |
 | `PORT` | `3000` | Host port the container publishes |
 
 ## License
