@@ -196,6 +196,36 @@ bundle actually merge as intended in the runner stage, whether `node_modules/.bi
 survives the copy with its symlink intact, and whether the host's `./data`
 ownership lets uid 1001 write.
 
+### 8. The valuation query scans the whole price table
+
+The single most valuable optimisation available, and the answer to "does this
+scale". Measured 2026-09-18 on the real database:
+
+```
+plan today       SCAN price_snapshots            13,470 ms
+plan per-series  SEARCH ... USING PRIMARY KEY     2,160 ms
+                 identical 6,539,232 rows            6.2x
+```
+
+`portfolioSeries` loads every held printing's history with one joined statement.
+SQLite materialises the holdings subquery and then **scans all 215 million rows**
+of `price_snapshots` with a bloom filter, rather than seeking to the 6.5 million
+it needs. So the cost is proportional to the size of the price table, not to the
+size of the collection — which is why it takes the same 13s whether you hold
+3,868 cards or 40.
+
+Replacing it with one primary-key range scan per held series
+(`where printing_key = ? and finish = ?`, 3,868 statements) returns exactly the
+same rows 6.2x faster, and makes the cost proportional to what is actually held.
+
+Worth doing because it is the hot path behind every cache rebuild, every import,
+and the first page load after an ingest. It would take the rebuild from ~30s to
+roughly 15s, and it is the change that would make a second user's data cost a
+second user's worth of work rather than another full table scan.
+
+Not done yet: it is the most important query in the app and the deployment was
+in progress. The row counts match exactly, so the risk is low.
+
 ## Known issues
 
 - ~~**Stale vendor quotes.**~~ Done. A quote more than `STALE_AFTER_DAYS` (30)

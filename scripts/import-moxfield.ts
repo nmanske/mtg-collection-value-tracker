@@ -20,6 +20,8 @@
 import { readFileSync } from "node:fs";
 import { drizzle } from "drizzle-orm/better-sqlite3";
 
+import { rebuildPortfolioCache } from "@/db/queries/portfolio-cache";
+
 import { DB_PATH, openDatabase } from "@/db/client";
 import { importMoxfieldCsv, type ImportReport } from "@/import/moxfield";
 
@@ -183,8 +185,9 @@ function printReport(report: ImportReport) {
 const sqlite = openDatabase(DB_PATH);
 
 try {
+  const db = drizzle(sqlite);
   const text = readFileSync(file, "utf8");
-  const report = importMoxfieldCsv(drizzle(sqlite), text, {
+  const report = importMoxfieldCsv(db, text, {
     dryRun,
     dateAdded,
     dateSource,
@@ -195,6 +198,15 @@ try {
 
   if (report.dryRun) {
     console.log("Dry run — nothing was written. Re-run without --dry-run to import.");
+  } else {
+    // Changing the holdings invalidates the portfolio cache. Left alone, the
+    // next page load recomputes the whole series and the site reads as hung
+    // for half a minute. The web importer does the same thing.
+    console.log("\nRebuilding the portfolio cache...");
+    const cache = rebuildPortfolioCache(db, (message) => console.log(message));
+    console.log(
+      `${cache.views} views, ${cache.points.toLocaleString()} points, ${cache.seconds.toFixed(1)}s`,
+    );
   }
 } catch (error) {
   console.error(`Import failed: ${(error as Error).message}`);

@@ -16,7 +16,10 @@ function SubmitButton() {
       disabled={pending}
       className="rounded-md bg-neutral-900 px-4 py-2 text-sm font-medium text-white hover:bg-neutral-700 disabled:opacity-50 dark:bg-neutral-100 dark:text-neutral-900 dark:hover:bg-neutral-300"
     >
-      {pending ? "Reading file..." : "Import"}
+      {/* A real import rebuilds the value history before returning, which
+          takes half a minute on a large collection. "Reading file..." made
+          that look like a hang. */}
+      {pending ? "Importing, this takes a moment..." : "Import"}
     </button>
   );
 }

@@ -3,12 +3,15 @@
 import { revalidatePath } from "next/cache";
 
 import { db } from "@/db";
+import { rebuildPortfolioCache } from "@/db/queries/portfolio-cache";
 import { importMoxfieldCsv, type ImportReport } from "@/import/moxfield";
 
 export interface ImportActionResult {
   ok: boolean;
   message: string;
   report: ImportReport | null;
+  /** Seconds spent rebuilding the portfolio cache, when one was needed. */
+  cacheSeconds?: number;
 }
 
 /** Refuses anything implausibly large before reading it into memory as text. */
@@ -42,13 +45,36 @@ export async function importMoxfieldAction(
     return { ok: false, message: (error as Error).message, report: null };
   }
 
-  if (!dryRun) revalidatePath("/");
+  let cacheSeconds: number | undefined;
+
+  if (!dryRun) {
+    // Changing the holdings invalidates the portfolio cache, and without a
+    // rebuild the next visitor pays for it — every page load recomputes the
+    // whole series until one of them finishes, and concurrent loads each start
+    // their own. Measured at 20-35s on a real collection, which reads as the
+    // site having hung.
+    //
+    // Done here rather than left to the first request because this is the one
+    // moment we know it is needed. The daily ingest already does the same via
+    // `--rebuild-cache`; the importer was the gap.
+    //
+    // It holds this request open for the duration, which is the trade: one
+    // slow submit that reports what it did, against an unpredictably slow site
+    // afterwards.
+    const rebuilt = rebuildPortfolioCache(db);
+    cacheSeconds = rebuilt.seconds;
+    revalidatePath("/");
+  }
 
   return {
     ok: true,
     message: dryRun
       ? `Previewed ${report.dataRows.toLocaleString()} rows. Nothing was written.`
-      : `Imported ${report.importedCards.toLocaleString()} cards across ${report.importedRows.toLocaleString()} rows.`,
+      : `Imported ${report.importedCards.toLocaleString()} cards across ${report.importedRows.toLocaleString()} rows.` +
+        (cacheSeconds === undefined
+          ? ""
+          : ` Rebuilt the value history in ${cacheSeconds.toFixed(0)}s.`),
     report,
+    cacheSeconds,
   };
 }
