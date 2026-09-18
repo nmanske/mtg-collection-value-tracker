@@ -118,7 +118,7 @@ function MoverList({ movers, tone }: { movers: Mover[]; tone: "up" | "down" }) {
         <CardLine
           key={`${mover.scryfallId}-${mover.finish}`}
           card={mover}
-          sub={`${formatUsd(mover.fromCents)} on ${mover.fromDate} → ${formatUsd(mover.toCents)}`}
+          sub={`${formatUsd(mover.fromCents)} on ${mover.fromDate}${mover.fromDateApprox ? "*" : ""} → ${formatUsd(mover.toCents)}`}
           right={
             <span className={`font-medium ${color}`}>
               {mover.changeRatio > 0 ? "+" : ""}
@@ -290,15 +290,31 @@ export default async function StatsPage() {
         />
         {allTime ? (
           <Stat
-            label="Since tracking began"
+            label="Market, all history"
             value={`${allTime.ratio > 0 ? "+" : ""}${(allTime.ratio * 100).toFixed(1)}%`}
-            detail={`these cards, from ${allTime.from}`}
+            detail={`today's cards since ${allTime.from}, not yours`}
           />
         ) : null}
       </dl>
 
       {history ? (
-        <div className="mb-5 grid grid-cols-1 gap-5 lg:grid-cols-2 3xl:grid-cols-3">
+        <>
+          {/* Said once, above the three panels it applies to. These measure
+              what the market did to the cards you hold today, across the whole
+              price history — they deliberately ignore when you bought them, and
+              conflating that with your own returns is the easiest way to
+              misread this page. Everything below this block is measured from
+              your acquisition dates instead. */}
+          <p className="mb-3 max-w-prose text-sm text-neutral-600 dark:text-neutral-400">
+            <span className="font-medium text-neutral-800 dark:text-neutral-200">
+              The market, not your collection.
+            </span>{" "}
+            These three measure what today&rsquo;s cards did across the whole
+            price history, whether or not you owned them at the time. For what
+            your collection has actually done, the dashboard chart starts when
+            you bought your first card.
+          </p>
+          <div className="mb-5 grid grid-cols-1 gap-5 lg:grid-cols-2 3xl:grid-cols-3">
           <Panel
             title="Year by year"
             note={`Like-for-like, from ${history.points[0].date}.`}
@@ -401,8 +417,9 @@ export default async function StatsPage() {
                 />
               ))}
             </dl>
-          </Panel>
-        </div>
+            </Panel>
+          </div>
+        </>
       ) : null}
 
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-2 3xl:grid-cols-3">
@@ -473,7 +490,20 @@ export default async function StatsPage() {
 
         <Panel
           title="Biggest risers"
-          note="Since first tracked. Under $1 excluded."
+          note="Since you acquired each card. Under $1 excluded."
+          tip={
+            <InfoTip label="What these are measured from">
+              Each card is measured from its first price on or after the day you
+              acquired it, not from the start of the price history. A card
+              bought in 2023 measured from its 2020 price would rank by what the
+              market did before you owned it. Dates marked * come from
+              Moxfield&rsquo;s last-modified column and are a floor, so the
+              window is if anything too short.{" "}
+              <Link href="/faq#acquisition-dates" className="underline underline-offset-2">
+                More
+              </Link>
+            </InfoTip>
+          }
         >
           <MoverList movers={stats.gainers} tone="up" />
         </Panel>
@@ -493,7 +523,7 @@ export default async function StatsPage() {
 
         <Panel
           title="Made you the most"
-          note="Change × quantity, not percentage."
+          note="Change × quantity, since you acquired each card."
         >
           {stats.biggestGains.length === 0 ? (
             <p className="text-sm text-neutral-600 dark:text-neutral-400">Nothing up yet.</p>
@@ -503,7 +533,7 @@ export default async function StatsPage() {
                 <CardLine
                   key={`${mover.scryfallId}-${mover.finish}`}
                   card={mover}
-                  sub={`${mover.quantity}x · ${formatUsd(mover.fromCents)} → ${formatUsd(mover.toCents)}`}
+                  sub={`${mover.quantity}x · ${formatUsd(mover.fromCents)} on ${mover.fromDate}${mover.fromDateApprox ? "*" : ""} → ${formatUsd(mover.toCents)}`}
                   right={
                     <span className="font-medium text-emerald-700 dark:text-emerald-400">
                       +{formatUsd(mover.impactCents)}
@@ -524,7 +554,7 @@ export default async function StatsPage() {
                 <CardLine
                   key={`${mover.scryfallId}-${mover.finish}`}
                   card={mover}
-                  sub={`${mover.quantity}x · ${formatUsd(mover.fromCents)} → ${formatUsd(mover.toCents)}`}
+                  sub={`${mover.quantity}x · ${formatUsd(mover.fromCents)} on ${mover.fromDate}${mover.fromDateApprox ? "*" : ""} → ${formatUsd(mover.toCents)}`}
                   right={
                     <span className="font-medium text-red-700 dark:text-red-400">
                       {formatUsd(mover.impactCents)}

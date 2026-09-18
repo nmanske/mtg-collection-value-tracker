@@ -82,9 +82,19 @@ price(penny, "2026-01-05", 12);
 
 // A real riser, held in quantity so its collection impact is large.
 const riser = card("Riser", "bbb");
-hold(riser, 4, "2026-02-01");
+hold(riser, 4, "2026-01-01");
 price(riser, "2026-01-01", 500);
 price(riser, "2026-01-05", 900);
+
+// THE CASE THE ACQUISITION BOUND EXISTS FOR. This card tripled before it was
+// bought and barely moved after. Measured from the start of its history it is
+// the biggest riser on the page by a mile; measured from the day it was
+// acquired it is a rounding error, which is the truth about this collection.
+const latecomer = card("Latecomer", "ggg");
+hold(latecomer, 1, "2026-01-03");
+price(latecomer, "2026-01-01", 100);
+price(latecomer, "2026-01-03", 1_000);
+price(latecomer, "2026-01-05", 1_100);
 
 // A faller whose history starts late, as a newly released set's does.
 const faller = card("Faller", "ccc");
@@ -111,18 +121,22 @@ db.insert(vendorPrices)
 const solA = card("Sol Ring", "eee", "sol");
 const solB = card("Sol Ring", "fff", "sol");
 hold(solA, 3);
-hold(solB, 2);
+// A second acquisition month, so the by-month grouping has something to group.
+hold(solB, 2, "2026-02-01");
 price(solA, "2026-01-05", 200);
 price(solB, "2026-01-05", 150);
 
 const stats = collectionStats(db);
 
 // --- totals ---
-// 12 + 4x900 + 200 + 10000 + 3x200 + 2x150 = 14,712
-assert.equal(stats.totalValueCents, 12 + 3_600 + 200 + 10_000 + 600 + 300);
-assert.equal(stats.totalCards, 1 + 4 + 1 + 1 + 3 + 2);
-assert.equal(stats.totalHoldings, 6);
-assert.equal(stats.distinctSets, 6);
+// 12 + 4x900 + 200 + 10000 + 1100 + 3x200 + 2x150 = 15,812
+assert.equal(
+  stats.totalValueCents,
+  12 + 3_600 + 200 + 10_000 + 1_100 + 600 + 300,
+);
+assert.equal(stats.totalCards, 1 + 4 + 1 + 1 + 1 + 3 + 2);
+assert.equal(stats.totalHoldings, 7);
+assert.equal(stats.distinctSets, 7);
 
 // --- movers ---
 // The penny card doubled but is below the floor, so it is not a "riser".
@@ -135,8 +149,20 @@ assert.equal(stats.gainers[0].fromCents, 500);
 assert.equal(stats.gainers[0].toCents, 900);
 assert.equal(stats.gainers[0].changeRatio, 0.8);
 
+// Measured from acquisition, Latecomer is +10% and ranks below Riser's +80%.
+// From the start of its price history it would be +1,000% and lead the list.
+const late = stats.gainers.find((mover) => mover.name === "Latecomer");
+assert.ok(late, "a card held only for part of its history still counts");
+assert.equal(late.fromCents, 1_000, "measured from the acquisition date");
+assert.equal(late.fromDate, "2026-01-03");
+assert.equal(
+  stats.gainers.indexOf(late) > 0,
+  true,
+  "pre-ownership gains must not rank a card above one you actually held through",
+);
+
 assert.equal(stats.losers[0].name, "Faller");
-// Movement runs from the card's own first tracked day, not a global start.
+// Movement runs from the first priced day on or after acquisition.
 assert.equal(stats.losers[0].fromDate, "2026-01-03");
 assert.equal(stats.losers[0].changeRatio, -0.9);
 
@@ -179,7 +205,7 @@ assert.ok(
 // holdings, so the ratio compares like with like.
 assert.equal(stats.buylistTotalCents, 6_000 + 100 * 4);
 assert.equal(stats.buylistRetailCents, 12_000 + 900 * 4);
-assert.equal(stats.buylistCoverage, 2 / 6);
+assert.equal(stats.buylistCoverage, 2 / 7);
 
 // --- composition ---
 assert.equal(stats.topSets[0].setCode, "ddd");

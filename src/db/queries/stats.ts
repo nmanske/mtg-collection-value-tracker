@@ -17,8 +17,14 @@ import type { Db } from "./printings";
  * - Percentage movers need a price floor. A card going from $0.02 to $0.06 is
  *   +200% and means nothing; without a floor the movers list is entirely penny
  *   commons rounding around.
- * - Every mover shows both prices and the date it was first seen, so the
+ * - Every mover shows both prices and the date it is measured from, so the
  *   reader can judge the number rather than trust it.
+ * - Movement is measured from the day a holding was acquired, not from the
+ *   start of the price table. A card bought in October 2023 measured from its
+ *   December 2020 price is not a statistic about this collection, it is a
+ *   statistic about the card. Where the acquisition date is itself a floor —
+ *   see `holdings.date_added_approx` — the window is an underestimate rather
+ *   than a fabrication, which is the right direction to be wrong in.
  */
 
 /** Below this, a percentage move is noise rather than news. */
@@ -52,7 +58,10 @@ export interface ValuedCard extends CardRef {
 export interface Mover extends CardRef {
   fromCents: number;
   toCents: number;
+  /** First priced date on or after the acquisition date. */
   fromDate: string;
+  /** True when the acquisition date behind `fromDate` is a floor, not a fact. */
+  fromDateApprox: boolean;
   changeCents: number;
   changeRatio: number;
   /** Change times quantity: what it did to the collection, not to the card. */
@@ -131,6 +140,7 @@ interface Row extends Omit<CardRef, "finish"> {
   finish: number;
   oracleId: string;
   dateAdded: string;
+  dateAddedApprox: number;
   overrideCents: number | null;
   lastCents: number | null;
   firstCents: number | null;
@@ -156,15 +166,26 @@ export function collectionStats(db: Db): CollectionStats {
               p.collector_number as collectorNumber, p.scryfall_id as scryfallId,
               p.oracle_id as oracleId, p.image_uri as imageUri,
               h.finish, h.quantity, h.date_added as dateAdded,
+              h.date_added_approx as dateAddedApprox,
               h.price_override_cents as overrideCents,
               (select price_cents from price_snapshots s
                 where s.printing_key = h.printing_key and s.finish = h.finish
                 order by s.date desc limit 1) as lastCents,
+              -- Bounded by the acquisition date, not by the start of the
+              -- price table. Without the bound, a card bought in 2023 was
+              -- measured from its December 2020 price, so "biggest risers"
+              -- ranked cards by what the market did before you owned them.
+              --
+              -- Still a range scan on the primary key (printing_key, finish,
+              -- date): the bound moves where the scan starts, not what it
+              -- touches.
               (select price_cents from price_snapshots s
                 where s.printing_key = h.printing_key and s.finish = h.finish
+                  and s.date >= h.date_added
                 order by s.date asc limit 1) as firstCents,
               (select s.date from price_snapshots s
                 where s.printing_key = h.printing_key and s.finish = h.finish
+                  and s.date >= h.date_added
                 order by s.date asc limit 1) as firstDate,
               (select price_cents from vendor_prices v
                 where v.printing_key = h.printing_key and v.finish = h.finish
@@ -226,6 +247,7 @@ export function collectionStats(db: Db): CollectionStats {
         fromCents: from,
         toCents: to,
         fromDate: row.firstDate!,
+        fromDateApprox: row.dateAddedApprox === 1,
         changeCents: to - from,
         changeRatio: to / from - 1,
         impactCents: (to - from) * row.quantity,
