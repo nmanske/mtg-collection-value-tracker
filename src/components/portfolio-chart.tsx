@@ -264,7 +264,15 @@ function PortfolioChartBody({
               tickFormatter={axisMoney}
               tickLine={false}
               axisLine={false}
-              tick={{ fill: "var(--viz-muted)", fontSize: 11 }}
+              // `className` on the tick lands on the label element itself —
+              // Recharts merges it in CartesianAxis. Hooking the labels that
+              // way rather than selecting `.recharts-yAxis` means the rule does
+              // not depend on an internal class name staying put.
+              tick={{
+                fill: "var(--viz-muted)",
+                fontSize: 11,
+                className: "axis-money",
+              }}
               width={Y_AXIS_WIDTH}
             />
             {/* The acquisition scale: hidden, unlabelled, and never compared

@@ -177,7 +177,14 @@ summary::-webkit-details-marker {
  * chart renders itself. If a Recharts upgrade renames it the axis stops being
  * hidden, which is a visible failure rather than a silent one.
  */
+.hide-money .axis-money,
 .hide-money .money-axis .recharts-yAxis text {
+  /* `fill` as well as `filter`: a CSS property beats the `fill` attribute
+     Recharts sets inline, so the labels are hidden even where a filter on SVG
+     text is not honoured. Both selectors are kept deliberately — the first is
+     the supported hook, the second a fallback if a Recharts change stops the
+     className reaching the label. */
+  fill: transparent;
   filter: blur(5px);
   user-select: none;
 }
