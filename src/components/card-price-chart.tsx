@@ -37,6 +37,8 @@ import { axisMoney, paddedScale, shortDate } from "./chart-utils";
 interface Row {
   date: string;
   priceCents: number;
+  /** Card Kingdom's buy price on the same day, when they publish one. */
+  buylistCents: number | null;
   /** The same value, but only on estimated points, so it draws separately. */
   estimatedCents: number | null;
   source: string;
@@ -64,6 +66,18 @@ function PriceTooltip({ active, payload }: TooltipProps) {
           {formatUsd(row.priceCents)}
         </span>
       </div>
+      {row.buylistCents != null ? (
+        <div className="mt-1 flex items-center gap-1.5">
+          <span
+            aria-hidden
+            className="inline-block h-0.5 w-2 rounded-full bg-[var(--viz-series-2)]"
+          />
+          <span className="tabular-nums text-[var(--viz-text)]">
+            {formatUsd(row.buylistCents)}
+          </span>
+          <span className="text-[var(--viz-muted)]">buylist</span>
+        </div>
+      ) : null}
       <div className="mt-0.5 text-[var(--viz-muted)]">
         {row.estimated ? "estimated — not tracked data" : `via ${row.source}`}
       </div>
@@ -73,10 +87,12 @@ function PriceTooltip({ active, payload }: TooltipProps) {
 
 function CardPriceChartBody({
   points,
+  buylist,
   width,
   plotClass,
 }: {
   points: PricePoint[];
+  buylist?: { date: string; priceCents: number }[];
   width: number;
   /** Height classes for the plot element; see ChartFrame. */
   plotClass: string;
@@ -93,9 +109,17 @@ function CardPriceChartBody({
     );
   }
 
+  // Keyed by date rather than zipped: the two series are published on their
+  // own schedules and a buy price is missing on plenty of days.
+  const buylistByDate = new Map(
+    (buylist ?? []).map((point) => [point.date, point.priceCents]),
+  );
+  const hasBuylist = buylistByDate.size > 0;
+
   const full: Row[] = points.map((point) => ({
     date: point.date,
     priceCents: point.priceCents,
+    buylistCents: buylistByDate.get(point.date) ?? null,
     estimatedCents: point.estimated ? point.priceCents : null,
     source: point.source,
     estimated: point.estimated,
@@ -109,7 +133,15 @@ function CardPriceChartBody({
   });
 
   const last = data[data.length - 1];
-  const { domain, ticks } = paddedScale(data.map((row) => row.priceCents));
+  // Both series share the axis, so the scale has to cover the lower one too or
+  // the buylist line would be clipped off the bottom.
+  const { domain, ticks } = paddedScale(
+    data.flatMap((row) =>
+      row.buylistCents == null
+        ? [row.priceCents]
+        : [row.priceCents, row.buylistCents],
+    ),
+  );
   const hasEstimates = data.some((row) => row.estimated);
 
   return (
@@ -171,6 +203,32 @@ function CardPriceChartBody({
               isAnimationActive={false}
             />
 
+            {/* Card Kingdom's buy price. Dashed, thinner and unfilled: it is
+                context for the retail line, not a second headline, and the two
+                answer different questions — what a card costs against what one
+                shop will pay for it. `connectNulls` because a missing buy
+                price is a day they did not publish one, not a day it was
+                worth nothing. */}
+            {hasBuylist ? (
+              <Area
+                type="monotone"
+                dataKey="buylistCents"
+                stroke="var(--viz-series-2)"
+                strokeWidth={1.5}
+                strokeDasharray="4 3"
+                fill="none"
+                dot={false}
+                connectNulls
+                activeDot={{
+                  r: 3,
+                  fill: "var(--viz-series-2)",
+                  stroke: "var(--viz-surface)",
+                  strokeWidth: 2,
+                }}
+                isAnimationActive={false}
+              />
+            ) : null}
+
             {/* Estimated stretches, drawn dashed and unfilled over the real
                 line so a guess never looks like a measurement. */}
             <Area
@@ -197,6 +255,31 @@ function CardPriceChartBody({
           </AreaChart>
         </ResponsiveContainer>
       </div>
+
+      {hasBuylist ? (
+        <p className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-[var(--viz-muted)]">
+          <span className="flex items-center gap-1.5">
+            <span
+              aria-hidden
+              className="inline-block h-0.5 w-4 rounded-full bg-[var(--viz-series)]"
+            />
+            <span className="text-[var(--viz-text)]">Retail</span>
+          </span>
+          <span className="flex items-center gap-1.5">
+            <span
+              aria-hidden
+              className="inline-block h-0.5 w-4 bg-[var(--viz-series-2)]"
+              style={{
+                backgroundImage:
+                  "repeating-linear-gradient(90deg, currentColor 0 4px, transparent 4px 7px)",
+              }}
+            />
+            <span className="text-[var(--viz-text)]">
+              Card Kingdom buylist
+            </span>
+          </span>
+        </p>
+      ) : null}
 
       {hasEstimates ? (
         <p className="mt-2 text-xs text-[var(--viz-muted)]">
@@ -245,11 +328,22 @@ function CardPriceChartBody({
 }
 
 /** One printing's price history, expandable to full screen. */
-export function CardPriceChart({ points }: { points: PricePoint[] }) {
+export function CardPriceChart({
+  points,
+  buylist,
+}: {
+  points: PricePoint[];
+  buylist?: { date: string; priceCents: number }[];
+}) {
   return (
     <ChartFrame label="of this card's price history" height="h-56 sm:h-64">
       {({ width, plotClass }) => (
-        <CardPriceChartBody points={points} width={width} plotClass={plotClass} />
+        <CardPriceChartBody
+          points={points}
+          buylist={buylist}
+          width={width}
+          plotClass={plotClass}
+        />
       )}
     </ChartFrame>
   );

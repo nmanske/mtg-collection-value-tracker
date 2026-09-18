@@ -20,6 +20,7 @@ import {
   type PriceVendor,
 } from "@/db/queries/valuation";
 import { collectionByVendor } from "@/db/queries/vendors";
+import { cachedPortfolioSeries } from "@/db/queries/portfolio-cache";
 import { priceFreshness } from "@/db/queries/freshness";
 import { PriceFreshnessBanner } from "@/components/price-freshness-banner";
 import {
@@ -109,6 +110,12 @@ export default async function CollectionPage(props: PageProps<"/">) {
     search,
   });
   const summary = portfolioSummary(db, priceSource);
+  // Card Kingdom is the only vendor here that publishes a buy price, so the
+  // "if sold today" line exists on their view and nowhere else.
+  const buylistPoints =
+    priceSource === "cardkingdom"
+      ? cachedPortfolioSeries(db, { buylist: true }).points
+      : undefined;
   const vendorTotals = collectionByVendor(db);
   const freshness = priceFreshness(db);
 
@@ -161,6 +168,7 @@ export default async function CollectionPage(props: PageProps<"/">) {
 
       <PortfolioSummaryPanel
         summary={summary}
+        buylistPoints={buylistPoints}
         range={typeof range === "string" ? range : undefined}
         priceSource={priceSource}
         // The retail row for the selected vendor is what the chart is drawn

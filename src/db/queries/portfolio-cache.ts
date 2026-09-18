@@ -150,7 +150,22 @@ export function cacheIsFresh(db: Db): boolean {
   return stored !== null && stored === cacheFingerprint(db);
 }
 
-function rowsFor(db: Db, source: PriceVendor, basket: boolean): ValuePoint[] {
+/**
+ * The stored `price_source` for the buylist view.
+ *
+ * Deliberately outside the vendor codes rather than a new column. The cache is
+ * keyed by an integer, so a value no vendor uses gives the buylist its own
+ * slot without a migration, and `VENDOR_CODES` stays a description of vendors
+ * rather than of cache rows.
+ */
+export const BUYLIST_CACHE_SOURCE = 100;
+
+function rowsFor(
+  db: Db,
+  source: PriceVendor,
+  basket: boolean,
+  buylist = false,
+): ValuePoint[] {
   return db
     .select({
       date: portfolioDaily.date,
@@ -164,7 +179,9 @@ function rowsFor(db: Db, source: PriceVendor, basket: boolean): ValuePoint[] {
     })
     .from(portfolioDaily)
     .where(
-      sql`${portfolioDaily.priceSource} = ${VENDOR_CODES[source]}
+      sql`${portfolioDaily.priceSource} = ${
+        buylist ? BUYLIST_CACHE_SOURCE : VENDOR_CODES[source]
+      }
           and ${portfolioDaily.basket} = ${basket ? 1 : 0}`,
     )
     .orderBy(portfolioDaily.date)
@@ -196,6 +213,8 @@ export function rebuildPortfolioCache(
   const computed: {
     source: PriceVendor;
     basket: boolean;
+    /** Stored under BUYLIST_CACHE_SOURCE rather than the vendor's own code. */
+    buylist?: boolean;
     series: ValuationSeries;
   }[] = [];
 
@@ -217,6 +236,16 @@ export function rebuildPortfolioCache(
     }
   }
 
+  // As-held only. A constant-basket buylist would answer "what would today's
+  // cards have fetched in 2021", which is a question nobody has.
+  log("  computing cardkingdom (buylist)...");
+  computed.push({
+    source: "cardkingdom",
+    basket: false,
+    buylist: true,
+    series: portfolioSeries(db, { buylist: true }),
+  });
+
   // Fingerprinted *after* computing, so a change made while this ran leaves the
   // cache marked stale rather than silently blessed.
   const fingerprint = cacheFingerprint(db);
@@ -225,13 +254,13 @@ export function rebuildPortfolioCache(
   sqlite.transaction(() => {
     db.delete(portfolioDaily).run();
     db.delete(portfolioMonthly).run();
-    for (const { source, basket, series } of computed) {
+    for (const { source, basket, buylist, series } of computed) {
       for (let i = 0; i < series.points.length; i += 500) {
         const slice = series.points.slice(i, i + 500);
         db.insert(portfolioDaily)
           .values(
             slice.map((point) => ({
-              priceSource: VENDOR_CODES[source],
+              priceSource: buylist ? BUYLIST_CACHE_SOURCE : VENDOR_CODES[source],
               basket,
               ...point,
             })),
@@ -280,13 +309,18 @@ export function rebuildPortfolioCache(
  */
 export function cachedPortfolioSeries(
   db: Db,
-  options: { priceSource?: PriceVendor; constantBasket?: boolean } = {},
+  options: {
+    priceSource?: PriceVendor;
+    constantBasket?: boolean;
+    buylist?: boolean;
+  } = {},
 ): ValuationSeries {
   const source = options.priceSource ?? "tcgplayer";
   const basket = options.constantBasket ?? false;
+  const buylist = options.buylist ?? false;
 
   const fresh = cacheIsFresh(db);
-  const points = rowsFor(db, source, basket);
+  const points = rowsFor(db, source, basket, buylist);
 
   if (points.length > 0) {
     // Stale is served rather than recomputed. Recomputing here costs 20-35s
@@ -313,5 +347,6 @@ export function cachedPortfolioSeries(
   return portfolioSeries(db, {
     priceSource: source,
     constantBasket: basket,
+    buylist,
   });
 }

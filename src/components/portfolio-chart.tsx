@@ -36,6 +36,8 @@ import { axisMoney, paddedScale, shortDate } from "./chart-utils";
 export interface ChartPoint {
   date: string;
   valueCents: number;
+  /** What a shop would pay for the same holdings, when that is being shown. */
+  buylistCents: number | null;
   holdingsHeld: number;
   unpricedHoldings: number;
   /** Today's holdings valued on this date, ignoring acquisition dates. */
@@ -78,6 +80,18 @@ function ValueTooltip({ active, payload }: TooltipPayload) {
           {formatUsd(point.valueCents)}
         </span>
       </div>
+      {point.buylistCents != null ? (
+        <div className="mt-1 flex items-center gap-1.5">
+          <span
+            aria-hidden
+            className="inline-block h-0.5 w-2 bg-[var(--viz-series-2)]"
+          />
+          <span className="tabular-nums text-[var(--viz-text)]">
+            {formatUsd(point.buylistCents)}
+          </span>
+          <span className="text-[var(--viz-muted)]">if sold</span>
+        </div>
+      ) : null}
       <div className="mt-0.5 text-[var(--viz-muted)]">
         {point.holdingsHeld.toLocaleString()} holdings
         {point.unpricedHoldings > 0
@@ -101,6 +115,7 @@ function ValueTooltip({ active, payload }: TooltipPayload) {
 
 function PortfolioChartBody({
   points,
+  buylistPoints,
   width,
   plotClass,
 }: {
@@ -109,10 +124,11 @@ function PortfolioChartBody({
   plotClass: string;
   points: ValuePoint[];
   /**
-   * The same holdings valued across the whole window regardless of when they
-   * were bought. Plotted alongside so the gap between the lines is the part of
-   * the change that came from acquiring cards rather than from prices.
+   * What the same holdings would fetch if sold, over the same window. Shown
+   * only on the Card Kingdom view, because they are the one vendor here that
+   * publishes a buy price.
    */
+  buylistPoints?: ValuePoint[];
 }) {
   const gradientId = useId();
 
@@ -125,9 +141,17 @@ function PortfolioChartBody({
   }
 
 
+  // Keyed by date: the buylist is published on its own schedule, so it is
+  // missing on plenty of days the retail series has.
+  const buylistByDate = new Map(
+    (buylistPoints ?? []).map((point) => [point.date, point.valueCents]),
+  );
+  const hasBuylist = buylistByDate.size > 0;
+
   const full: ChartPoint[] = points.map((point) => ({
     date: point.date,
     valueCents: point.valueCents,
+    buylistCents: buylistByDate.get(point.date) ?? null,
     holdingsHeld: point.holdingsHeld,
     unpricedHoldings: point.unpricedHoldings,
     acquiredHoldings: point.acquiredHoldings,
@@ -156,7 +180,9 @@ function PortfolioChartBody({
   const last = data[data.length - 1];
   const { domain, ticks } = paddedScale(
     data.flatMap((point) =>
-      [point.valueCents],
+      point.buylistCents == null
+        ? [point.valueCents]
+        : [point.valueCents, point.buylistCents],
     ),
     // Eight bands rather than five. At a collection of this size five put the
     // gridlines $5,000 apart, which is too coarse to read a move off.
@@ -165,7 +191,7 @@ function PortfolioChartBody({
 
   return (
     <figure className="viz-root m-0">
-      {showAcquisitions ? (
+      {hasBuylist || showAcquisitions ? (
         <figcaption className="mb-3 flex flex-wrap items-center gap-x-5 gap-y-1 text-xs">
           <span className="flex items-center gap-1.5">
             <span
@@ -174,6 +200,19 @@ function PortfolioChartBody({
             />
             <span className="text-[var(--viz-text)]">As held</span>
           </span>
+          {hasBuylist ? (
+            <span className="flex items-center gap-1.5">
+              <span
+                aria-hidden
+                className="inline-block h-0.5 w-4 text-[var(--viz-series-2)]"
+                style={{
+                  backgroundImage:
+                    "repeating-linear-gradient(90deg, currentColor 0 4px, transparent 4px 7px)",
+                }}
+              />
+              <span className="text-[var(--viz-text)]">If sold today</span>
+            </span>
+          ) : null}
           {showAcquisitions ? (
             <span className="flex items-center gap-1.5">
               <span
@@ -286,6 +325,31 @@ function PortfolioChartBody({
               isAnimationActive={false}
             />
 
+            {/* What the collection would fetch if sold. Dashed, thinner and
+                unfilled: it is context for the value line, not a rival to it,
+                and the two answer different questions. `connectNulls` because
+                a missing day is one Card Kingdom did not publish, not a day
+                the collection was worth nothing. */}
+            {hasBuylist ? (
+              <Area
+                type="monotone"
+                dataKey="buylistCents"
+                stroke="var(--viz-series-2)"
+                strokeWidth={1.5}
+                strokeDasharray="4 3"
+                fill="none"
+                dot={false}
+                connectNulls
+                activeDot={{
+                  r: 3,
+                  fill: "var(--viz-series-2)",
+                  stroke: "var(--viz-surface)",
+                  strokeWidth: 2,
+                }}
+                isAnimationActive={false}
+              />
+            ) : null}
+
             {/* The end marker: >=8px across, with a 2px surface ring so it stays
                 legible where it meets the line. */}
             <ReferenceDot
@@ -366,7 +430,10 @@ function PortfolioChartBody({
  * of the series rather than the same thinned points stretched across more
  * pixels.
  */
-export function PortfolioChart(props: { points: ValuePoint[] }) {
+export function PortfolioChart(props: {
+  points: ValuePoint[];
+  buylistPoints?: ValuePoint[];
+}) {
   return (
     <ChartFrame label="of collection value over time">
       {({ width, plotClass }) => (

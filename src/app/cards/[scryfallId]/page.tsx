@@ -13,7 +13,7 @@ import {
   priceHistory,
   priceStats,
 } from "@/db/queries/printings";
-import { vendorQuotes } from "@/db/queries/vendors";
+import { vendorQuotes, vendorSeries } from "@/db/queries/vendors";
 import { FINISHES, type Finish } from "@/db/schema";
 import { FINISH_LABEL, formatUsd, printingCode } from "@/lib/format";
 import { rangeStart, resolveRange, spanInDays } from "@/lib/ranges";
@@ -49,6 +49,9 @@ export default async function CardPage(props: PageProps<"/cards/[scryfallId]">) 
       : (printing.finishes[0] ?? "nonfoil");
 
   const points = priceHistory(db, printing.id, finish);
+  // Card Kingdom is the only vendor here publishing a buy price, so this is
+  // the whole "what would a shop pay for it" story rather than one of several.
+  const buylist = vendorSeries(db, printing.id, finish, "cardkingdom", "buylist");
 
   // The range governs every figure in the price panel, not just the chart: a
   // "high" that ignored the selected window would contradict the line drawn
@@ -232,7 +235,12 @@ export default async function CardPage(props: PageProps<"/cards/[scryfallId]">) 
           />
         </div>
 
-        <CardPriceChart points={visible} />
+        <CardPriceChart
+          points={visible}
+          buylist={
+            from ? buylist.filter((point) => point.date >= from) : buylist
+          }
+        />
 
         {points.length > 0 ? (
           <p className="mt-3 text-xs text-neutral-600 dark:text-neutral-400">

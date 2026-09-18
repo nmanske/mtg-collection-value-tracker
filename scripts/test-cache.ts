@@ -90,7 +90,11 @@ assert.deepEqual(cold, portfolioSeries(db, {}), "a cold cache computes the real 
 // --- warm cache ---
 
 const built = rebuildPortfolioCache(db);
-assert.equal(built.views, 4, "two price sources times as-held and basket");
+assert.equal(
+  built.views,
+  5,
+  "two price sources times as-held and basket, plus the buylist view",
+);
 assert.equal(cacheIsFresh(db), true);
 
 // Every view must match what computing it directly produces, or the cache is

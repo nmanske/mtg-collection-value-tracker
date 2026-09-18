@@ -1,6 +1,10 @@
 import Link from "next/link";
 
-import type { Change, PortfolioSummary } from "@/db/queries/valuation";
+import type {
+  Change,
+  PortfolioSummary,
+  ValuePoint,
+} from "@/db/queries/valuation";
 import { formatUsd } from "@/lib/format";
 import {
   PRICE_VENDOR_LABEL,
@@ -75,11 +79,14 @@ function ChangeTile({
 
 export function PortfolioSummaryPanel({
   summary,
+  buylistPoints,
   range: requestedRange,
   priceSource,
   staleHoldings,
 }: {
   summary: PortfolioSummary;
+  /** What the collection would fetch if sold, when a buylist exists. */
+  buylistPoints?: ValuePoint[];
   range?: string;
   priceSource: PriceVendor;
   /** Holdings this vendor last quoted too long ago to count as current. */
@@ -97,6 +104,13 @@ export function PortfolioSummaryPanel({
   const firstHeldDate =
     summary.points.find((point) => point.holdingsHeld > 0)?.date ?? null;
   const from = last ? rangeStart(range, last.date, firstHeldDate) : null;
+
+  // Only on the Card Kingdom view: they are the one vendor here publishing a
+  // buy price, so on the TCGplayer view there is no such line to draw.
+  const visibleBuylist =
+    buylistPoints && from
+      ? buylistPoints.filter((point) => point.date >= from)
+      : buylistPoints;
 
   // Filtered from the already-computed series rather than re-queried: the full
   // series has carried prices forward from the beginning, so a slice of it is
@@ -192,7 +206,7 @@ export function PortfolioSummaryPanel({
       </div>
 
       <div className="money-chart">
-        <PortfolioChart points={visible} />
+        <PortfolioChart points={visible} buylistPoints={visibleBuylist} />
       </div>
 
       {/* One line of footnotes, not four paragraphs. Each states the fact and

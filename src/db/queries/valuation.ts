@@ -36,6 +36,17 @@ export const PRICE_VENDOR_LABEL: Record<PriceVendor, string> = {
  * canonical one in `price_snapshots`, everything else is in `vendor_prices` —
  * so valuing from a different vendor is a change of source table, not a filter.
  */
+/**
+ * What a shop would pay for the collection, rather than what it asks.
+ *
+ * Card Kingdom is the only vendor kept here that publishes a buylist, so this
+ * is the whole "if you sold it" story rather than one of several.
+ */
+export const BUYLIST_SOURCE_SQL = `select printing_key, finish, date, price_cents
+                  from vendor_prices
+                 where vendor = ${VENDOR_CODES.cardkingdom}
+                   and side = ${SIDE_CODES.buylist}`;
+
 const PRICE_SOURCE_SQL: Record<PriceVendor, string> = {
   tcgplayer: `select printing_key, finish, date, price_cents
                 from price_snapshots
@@ -212,6 +223,13 @@ export function portfolioSeries(
      */
     constantBasket?: boolean;
     /**
+     * Value from Card Kingdom's buy prices instead of retail.
+     *
+     * Overrides `priceSource`, because only one vendor publishes a buylist —
+     * offering it per vendor would imply a series the others do not have.
+     */
+    buylist?: boolean;
+    /**
      * Also return month-to-month links for the like-for-like index.
      *
      * Always computed with basket semantics — every holding, regardless of when
@@ -355,7 +373,11 @@ export function portfolioSeries(
   const statement = sqlite.prepare(
     `select ps.printing_key, ps.finish, ps.date, ps.price_cents
        from (select distinct printing_key, finish from holdings) h
-       join (${PRICE_SOURCE_SQL[options.priceSource ?? "tcgplayer"]}) ps
+       join (${
+         options.buylist
+           ? BUYLIST_SOURCE_SQL
+           : PRICE_SOURCE_SQL[options.priceSource ?? "tcgplayer"]
+       }) ps
          on ps.printing_key = h.printing_key and ps.finish = h.finish
       where ps.date <= ?
       order by ps.printing_key, ps.finish, ps.date`,
