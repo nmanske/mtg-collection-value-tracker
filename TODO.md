@@ -4,35 +4,30 @@ Working list. Newest context at the bottom of each item.
 
 ## Features
 
-### 1. Fill gaps in the price timeline
+### 1. Fill gaps in the price timeline — done
 
-The series has holes, and they have four different causes — only one of which
-is worth acting on.
-
-**Reporting is done** — `npm run audit:gaps` classifies every run by cause, so
-the list is actionable rather than 1,400 bare dates. Latest run:
+`npm run audit:gaps` classifies every run by cause. Latest:
 
 ```
-677 days of prices, 2020-12-15 .. 2026-09-11
-40 gap(s), 1,420 missing days
-  1,351  backfill has not reached these builds yet   (fills itself)
-     68  MTGJSON published no prices these days      (unfillable)
-      1  the daily job did not run                   (2026-09-10)
-      0  no archived build covers these days
+1,959 days of prices, 2020-12-15 .. 2026-09-17
+98 gap(s), 144 missing days
+144 day(s) — MTGJSON published no prices these days
+
+Nothing actionable: every gap either fills itself or has no upstream data.
 ```
 
-That last line matters: the three Kaggle packages permanently missing upstream
-cost nothing, because neighbouring builds' windows cover their dates.
+Every remaining gap is a day MTGJSON never published. Verified at source:
+grepping `2021-01-07` in build 0001 returns zero occurrences while the days
+either side return ~385,000 each.
 
-**Still to do:** fill 2026-09-10. No archived build reaches it — the newest is
-2026-09-04 — but MTGJSON's live `AllPrices` serves a rolling ~90-day window that
-does, so `backfill:mtgjson -- --all --vendors` should recover it along with any
-day since. Worth doing before that window rolls past it, and worth noting the
-window is why a missed run is urgent rather than merely untidy.
+The one gap that *was* ours — the missed daily run on 2026-09-10 — was
+recovered by `backfill:mtgjson -- --all --vendors` on 2026-09-18, inside
+MTGJSON's rolling ~90-day window. The three Kaggle packages permanently missing
+upstream cost nothing, because neighbouring builds' windows cover their dates.
 
-Beyond that, days with no upstream data can only ever be interpolated.
-`price_snapshots.estimated` exists for exactly this and is currently always
-false; the chart already draws estimated points differently.
+Days with no upstream data can only ever be interpolated.
+`price_snapshots.estimated` exists for that and is currently always false; the
+chart already draws estimated points differently.
 
 ### 2. Daily cron to load the database — done
 
@@ -78,21 +73,18 @@ database: 22.4s and 1.4s. `test:cache` asserts it.
 
 **Docker: deployed 2026-09-18.** See item 7.
 
-### 3. Click a card to zoom — done, pending a re-ingest
+### 3. Click a card to zoom — done
 
 Clicking a card image on the search or card page opens it full size; Escape or
 the backdrop closes it.
 
-`image_uri_large` is stored rather than derived. Scryfall's size variants do
-differ only by a path segment today, but the docs call image URIs opaque and the
-newer variants already disagree on file extension, so substitution would rely on
-a coincidence upstream never promised.
+`image_uri_large` is stored rather than derived. Scryfall's size variants differ
+only by a path segment today, but the docs call image URIs opaque and the newer
+variants already disagree on file extension, so substitution would rely on a
+coincidence upstream never promised.
 
-**Remaining:** the column is null for all 108,382 existing rows until a metadata
-ingest repopulates it, so the overlay currently shows the `normal` image
-(488px) rather than `large` (672px). Run `npm run ingest:scryfall` once the
-archive backfill is done — it is a 108k-row upsert and should not compete with
-the backfill for the write lock.
+Populated: 108,517 of 108,682 printings. Of the 165 without, 162 have no image
+at all on Scryfall, so the real shortfall is three.
 
 ### 4. Toggle Card Kingdom vs TCGplayer on the collection graph — done
 
@@ -190,6 +182,36 @@ Decisions made during the deployment, recorded so they are not re-litigated:
   is not. Judged an acceptable trade for a single user — see DEPLOYMENT.md
   section 8.
 
+### 8. The valuation query scans the whole price table
+
+The single most valuable optimisation available, and the answer to "does this
+scale". Measured 2026-09-18 on the real database:
+
+```
+plan today       SCAN price_snapshots            13,470 ms
+plan per-series  SEARCH ... USING PRIMARY KEY     2,160 ms
+                 identical 6,539,232 rows            6.2x
+```
+
+`portfolioSeries` loads every held printing's history with one joined statement.
+SQLite materialises the holdings subquery and then **scans all 215 million rows**
+of `price_snapshots` with a bloom filter, rather than seeking to the 6.5 million
+it needs. So the cost is proportional to the size of the price table, not to the
+size of the collection â€” which is why it takes the same 13s whether you hold
+3,868 cards or 40.
+
+Replacing it with one primary-key range scan per held series
+(`where printing_key = ? and finish = ?`, 3,868 statements) returns exactly the
+same rows 6.2x faster, and makes the cost proportional to what is actually held.
+
+Worth doing because it is the hot path behind every cache rebuild, every import,
+and the first page load after an ingest. It would take the rebuild from ~30s to
+roughly 15s, and it is the change that would make a second user's data cost a
+second user's worth of work rather than another full table scan.
+
+Not done yet: it is the most important query in the app and the deployment was
+in progress. The row counts match exactly, so the risk is low.
+
 ### 9. Serve a stale value history rather than recomputing — done
 
 Anything that changes holdings or prices invalidates the portfolio cache, and
@@ -215,84 +237,38 @@ set `REBUILD_COMMAND` empty — one of them was rebuilding the real database.
 
 ## Known issues
 
-- ~~**Stale vendor quotes.**~~ Done. A quote more than `STALE_AFTER_DAYS` (30)
-  behind its own series' newest date is excluded from collection totals and
-  flagged "not current" on the card page. Measured against a real collection
-  that removes 188 Card Kingdom buylist holdings, last quoted in 2023, from a
-  figure that had been presenting them as today's offer. Threshold is measured
-  per series rather than against today, so a missed daily run does not mark the
-  whole collection stale.
-- ~~**`next build` runs out of memory.**~~ Diagnosed and worked around on
-  2026-09-16. It is a **Turbopack** bug, not this app: the same source builds
-  fine on webpack.
+- **`next build` must use webpack.** The Turbopack build is a Next bug, not this
+  app: same source, same machine.
 
   | builder | result | time | peak RSS |
   |---|---|---|---|
   | Turbopack | `memory allocation of 1430734612 bytes failed` | 9.3 min | **42.4 GB** |
   | webpack | success | **0.5 min** | **0.4 GB** |
 
-  It dies during compilation, before any CSS or app chunk is emitted and before
-  build traces are collected, and a clean `.next` makes no difference. Tailwind
-  was ruled out by pinning its sources and rebuilding — still 42 GB.
+  It dies during compilation, before any chunk is emitted. A clean `.next`
+  changes nothing, and Tailwind was ruled out by pinning its sources. So
+  `npm run build` passes `--webpack`; `build:turbopack` keeps the old path for
+  retesting after a Next upgrade. `next dev` still uses Turbopack, unaffected.
 
-  `npm run build` therefore passes `--webpack`. `npm run build:turbopack` keeps
-  the old path for retesting when Next is upgraded; revisit then, because dev is
-  still on Turbopack and is unaffected.
+- **Tailwind scans only `src/`.** Its v4 auto-detection crawls the whole
+  project, which here means sitting beside 25 GB of SQLite and any stray build
+  directory. A renamed `.next` — not covered by `.gitignore`, unlike `.next`
+  itself — was read as source, produced class names out of binary chunks, and
+  broke *every page* with `Parsing CSS source code failed`. `globals.css` uses
+  `source(none)` and an explicit `@source`; anything added outside `src/` must
+  be listed there.
 
-  Note `next start` warns that it does not work with `output: "standalone"` and
-  says to use `node .next/standalone/server.js`. It serves correctly anyway, but
-  the standalone entry point is the one Docker uses and the one to trust.
-- ~~**No automated test for the daily ingest.**~~ Done. `test:today` drives the
-  whole job from a gzipped fixture: an unmapped uuid, a build already recorded,
-  `--force`, a new build, a dry run that must not mark the build done, and the
-  vendor rules (Cardmarket's euros and MTGO's ticket prices excluded, TCGplayer
-  retail kept out of `vendor_prices`). Only the HTTP fetch itself is unexercised.
-
-- **Tailwind scans only `src/` now.** Its v4 auto-detection crawls the whole
-  project for class-name candidates, which in this repo means sitting next to
-  `data/` and any stray build directory. A renamed `.next` — not covered by
-  `.gitignore`, unlike `.next` itself — got scanned as source, produced class
-  names out of binary chunks, and broke *every page* with `Parsing CSS source
-  code failed`. `globals.css` now uses `source(none)` plus an explicit
-  `@source`. Anything added outside `src/` must be added there.
+- **A cold cache is still computed in the request.** Item 9 made a *stale* cache
+  serve immediately, but an empty one has nothing to serve and pays 20-35s. Only
+  happens on a first run or after the cache table is cleared.
 
 ## Housekeeping
 
-- ~~**Run `npm run finalize` when the backfill ends.**~~ Done 2026-09-15.
-  1,952 days of prices, 2020-12-15 .. 2026-09-11. 145 missing days remain, of
-  which 144 were never published upstream and one is the missed daily run on
-  2026-09-10; **zero** are attributable to the corrupt `version_0165`, so
-  skipping it cost nothing. 539 acquisition dates inferred, cache rebuilt to
-  7,808 points, `VACUUM INTO` produced `data/mtg-compact.db` at 25.59 GB
-  (13% smaller).
-- **Replace `data/mtg.db` with `data/mtg-compact.db`** once you have verified
-  it — that file is also the one to copy to a server.
-- ~~**A slow request can starve the in-process scheduler.**~~ Largely fixed by
-  item 9: the rebuild that caused it now runs as a child process, so it no
-  longer blocks the event loop. The residual risk is any *other* synchronous
-  work in a request, and a cold cache is still computed in-request. Original
-  observation, kept for the measurement: on
-  2026-09-16: a metadata ingest invalidated the portfolio cache, the next page
-  load spent 20.2s recomputing it synchronously, and node-cron logged
-  `missed execution ... Possible blocking IO or high CPU`. The scheduled price
-  run simply did not happen that minute. The new `--rebuild-cache` flag reduces
-  the window — the cache is rebuilt in the ingest child rather than by the first
-  visitor — but it does not close it: any synchronous recompute in the request
-  path can still block the timer. A daily schedule makes a collision unlikely,
-  not impossible. The real fixes are to serve a stale-but-labelled cache while a
-  rebuild is pending, or to move the schedule out of the web process entirely.
-- ~~**The dashboard is slow while a bulk load runs**~~ Fixed by item 9 — a stale
-  cache is now served and labelled rather than recomputed per request. Original
-  note:  — 88s to no-response-in-120s
-  during the backfill, against 0.9s with a warm cache. The backfill advances a
-  watermark after every build, which correctly invalidates the cache, so every
-  page load recomputes 3,706 holdings across 1,700 dates against a table being
-  written to. Correct but unusable. Worth deciding whether a stale-but-labelled
-  cache would be better than a live recompute while an ingest is running.
-- **~78 GB of `AllIdentifiers.json`** across the archive is no longer needed —
-  the uuid map is merged and complete (108,379 of 108,382 printings reachable).
-  Deletable whenever disk matters.
+- **`AllIdentifiers.json` is ~610 MB per archived version** and is not needed
+  once the uuid map is merged (108,379 of 108,382 printings reachable). Dropping
+  it from `FILES_TO_KEEP` would cut the weekly archive download by a third —
+  worth it only if NAS space ever matters, which at 16 TB it does not.
 - **`refs/original/` still holds the pre-rewrite history** with the old work
   email. Local only, never pushed. Purge when the remote is trusted.
-- **`AGENTS.md` is still tracked.** Written by `next dev`, names no vendor, and
-  is recreated if deleted. Left deliberately; revisit if it becomes noise.
+- **`AGENTS.md` is tracked.** Written by `next dev`, names no vendor, recreated
+  if deleted. Left deliberately; revisit if it becomes noise.
