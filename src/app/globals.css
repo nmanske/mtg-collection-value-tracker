@@ -165,12 +165,6 @@ summary::-webkit-details-marker {
   --money-width: 7ch;
 }
 
-/* Sparklines and charts give the shape away even with the labels hidden. */
-.hide-money .money-chart {
-  filter: blur(1.2em);
-  user-select: none;
-}
-
 /*
  * The toggle's own label, driven by the same class rather than React state —
  * so it is correct on the very first paint and cannot disagree with the page.

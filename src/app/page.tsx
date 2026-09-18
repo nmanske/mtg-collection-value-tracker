@@ -284,9 +284,7 @@ export default async function CollectionPage(props: PageProps<"/">) {
                         </span>
                       ) : (
                         <>
-                          <span className="money">
-                            {formatUsd(row.unitPriceCents)}
-                          </span>
+                          {formatUsd(row.unitPriceCents)}
                           {row.overridden ? (
                             <span
                               className="ml-1 text-xs text-neutral-600 dark:text-neutral-400"
@@ -306,13 +304,9 @@ export default async function CollectionPage(props: PageProps<"/">) {
                       )}
                     </td>
                     <td className="py-2 pr-3 text-right tabular-nums">
-                      {row.unitPriceCents == null ? (
-                        "—"
-                      ) : (
-                        <span className="money">
-                          {formatUsd(row.unitPriceCents * row.quantity)}
-                        </span>
-                      )}
+                      {row.unitPriceCents == null
+                        ? "—"
+                        : formatUsd(row.unitPriceCents * row.quantity)}
                     </td>
                     <td className="py-2 pr-3 tabular-nums text-neutral-600 dark:text-neutral-400">
                       {row.dateAdded}

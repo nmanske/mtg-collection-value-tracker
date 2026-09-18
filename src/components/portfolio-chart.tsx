@@ -76,7 +76,7 @@ function ValueTooltip({ active, payload }: TooltipPayload) {
           aria-hidden
           className="inline-block h-2 w-2 rounded-full bg-[var(--viz-series)]"
         />
-        <span className="tabular-nums text-[var(--viz-text)]">
+        <span className="money tabular-nums text-[var(--viz-text)]">
           {formatUsd(point.valueCents)}
         </span>
       </div>
@@ -86,7 +86,7 @@ function ValueTooltip({ active, payload }: TooltipPayload) {
             aria-hidden
             className="inline-block h-0.5 w-2 bg-[var(--viz-series-2)]"
           />
-          <span className="tabular-nums text-[var(--viz-text)]">
+          <span className="money tabular-nums text-[var(--viz-text)]">
             {formatUsd(point.buylistCents)}
           </span>
           <span className="text-[var(--viz-muted)]">if sold</span>
@@ -402,7 +402,7 @@ function PortfolioChartBody({
                 <tr key={point.date}>
                   <td className="py-0.5 pr-4 tabular-nums">{point.date}</td>
                   <td className="py-0.5 pr-4 text-right tabular-nums">
-                    {formatUsd(point.valueCents)}
+                    <span className="money">{formatUsd(point.valueCents)}</span>
                   </td>
                   <td className="py-0.5 pr-4 text-right tabular-nums">
                     {point.holdingsHeld.toLocaleString()}

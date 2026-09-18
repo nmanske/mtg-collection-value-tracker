@@ -205,9 +205,7 @@ export function PortfolioSummaryPanel({
         />
       </div>
 
-      <div className="money-chart">
-        <PortfolioChart points={visible} buylistPoints={visibleBuylist} />
-      </div>
+      <PortfolioChart points={visible} buylistPoints={visibleBuylist} />
 
       {/* One line of footnotes, not four paragraphs. Each states the fact and
           the consequence; the reasoning lives on /faq. */}
