@@ -57,6 +57,13 @@
       "when": 1789571617531,
       "tag": "0007_portfolio_monthly",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "6",
+      "when": 1789772537696,
+      "tag": "0008_card_back_images",
+      "breakpoints": true
     }
   ]
 }

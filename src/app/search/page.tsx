@@ -99,6 +99,8 @@ export default async function SearchPage(props: PageProps<"/search">) {
                   <CardImage
                     src={printing.imageUriLarge ?? printing.imageUri}
                     largeSrc={printing.imageUriLarge}
+                    backSrc={printing.imageUriBack}
+                    backLargeSrc={printing.imageUriBackLarge}
                     alt={printing.name}
                     className="h-64 w-44"
                   />

@@ -89,6 +89,8 @@ export default async function CardPage(props: PageProps<"/cards/[scryfallId]">) 
           <CardImage
             src={printing.imageUriLarge ?? printing.imageUri}
             largeSrc={printing.imageUriLarge}
+            backSrc={printing.imageUriBack}
+            backLargeSrc={printing.imageUriBackLarge}
             alt={printing.name}
             className="h-[29rem] w-80 self-start"
           />

@@ -78,12 +78,19 @@ export function PortfolioSummaryPanel({
   range: requestedRange,
   priceSource,
   staleHoldings,
+  showBasket,
 }: {
   summary: PortfolioSummary;
   range?: string;
   priceSource: PriceVendor;
   /** Holdings this vendor last quoted too long ago to count as current. */
   staleHoldings: number;
+  /**
+   * Draw the second line as well. Off by default: two lines on one axis invite
+   * being read as a comparison of like with like, and most visits are asking
+   * the simpler question the first line answers.
+   */
+  showBasket: boolean;
 }) {
   const last = summary.points.at(-1);
 
@@ -134,10 +141,10 @@ export function PortfolioSummaryPanel({
               the three beside it — prices only, with buying held out. */}
           <div className="border-l border-neutral-200 pl-8 dark:border-neutral-800">
             <ChangeTile
-              label="Prices only"
+              label="Price change only"
               change={summary.marketOnly}
               tip={
-                <InfoTip label="What “prices only” means">
+                <InfoTip label="What “price change only” means">
                   Today&rsquo;s cards valued back through time, so buying is held
                   out and only price movement is left.{" "}
                   {summary.allTime.changeCents != null &&
@@ -184,15 +191,37 @@ export function PortfolioSummaryPanel({
           })}
         </nav>
 
-        <RangePicker
-          active={range.id}
-          spanDays={spanDays}
-          lastDate={last?.date ?? null}
-          hrefFor={(id) => `/?range=${id}`}
-        />
+        <div className="flex flex-wrap items-center gap-2">
+          <Link
+            href={`/?${new URLSearchParams({
+              ...(priceSource !== "tcgplayer" ? { prices: priceSource } : {}),
+              ...(requestedRange ? { range: requestedRange } : {}),
+              ...(showBasket ? {} : { basket: "1" }),
+            }).toString()}`}
+            scroll={false}
+            aria-pressed={showBasket}
+            className={`rounded-md border px-2.5 py-1 text-xs transition-colors ${
+              showBasket
+                ? "border-neutral-900 bg-neutral-900 text-white dark:border-neutral-100 dark:bg-neutral-100 dark:text-neutral-900"
+                : "border-neutral-300 hover:bg-neutral-50 dark:border-neutral-700 dark:hover:bg-neutral-900"
+            }`}
+          >
+            Price change only
+          </Link>
+
+          <RangePicker
+            active={range.id}
+            spanDays={spanDays}
+            lastDate={last?.date ?? null}
+            hrefFor={(id) => `/?range=${id}`}
+          />
+        </div>
       </div>
 
-      <PortfolioChart points={visible} basketPoints={visibleBasket} />
+      <PortfolioChart
+        points={visible}
+        basketPoints={showBasket ? visibleBasket : undefined}
+      />
 
       {/* One line of footnotes, not four paragraphs. Each states the fact and
           the consequence; the reasoning lives on /faq. */}

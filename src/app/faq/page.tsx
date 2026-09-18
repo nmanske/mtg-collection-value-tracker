@@ -59,7 +59,7 @@ export default function FaqPage() {
 
       <Q id="two-lines" question="What are the two lines on the chart?">
         <Term>As held</Term> is what your collection was worth each day — it
-        rises when prices rise and when you buy. <Term>Prices only</Term> values
+        rises when prices rise and when you buy. <Term>Price change only</Term> values
         today&rsquo;s cards on every past date, so buying is held out and only
         price movement is left.
       </Q>

@@ -167,6 +167,24 @@ function imageUriFor(
   );
 }
 
+/**
+ * The back of a double-faced card, or null for a single-faced one.
+ *
+ * Only faces with their own images count. Split and adventure cards also have
+ * two `card_faces`, but both halves are printed on one piece of card and
+ * neither face carries `image_uris` — treating those as flippable would offer
+ * a button that turns a card over to the same picture.
+ */
+function backImageUriFor(
+  card: ScryfallCard,
+  size: "normal" | "large",
+): string | null {
+  const faces = card.card_faces;
+  if (!faces || faces.length < 2) return null;
+  if (!faces[0]?.image_uris) return null;
+  return faces[1]?.image_uris?.[size] ?? null;
+}
+
 /** `reversible_card` layouts carry `oracle_id` per face rather than at the top. */
 function oracleIdFor(card: ScryfallCard): string | null {
   return card.oracle_id ?? card.card_faces?.[0]?.oracle_id ?? null;
@@ -259,6 +277,8 @@ export async function ingestScryfallBulk(
             // re-ingest populated it only on printings that happened to be
             // new: 229 rows of 108,449, with no error anywhere.
             imageUriLarge: sql`excluded.image_uri_large`,
+            imageUriBack: sql`excluded.image_uri_back`,
+            imageUriBackLarge: sql`excluded.image_uri_back_large`,
             finishes: sql`excluded.finishes`,
             updatedAt: sql`excluded.updated_at`,
           },
@@ -381,6 +401,8 @@ export async function ingestScryfallBulk(
         // Read from Scryfall rather than derived from the normal URL; see the
         // column's note in the schema.
         imageUriLarge: imageUriFor(card, "large"),
+        imageUriBack: backImageUriFor(card, "normal"),
+        imageUriBackLarge: backImageUriFor(card, "large"),
         finishes: finishes.length > 0 ? finishes : ["nonfoil"],
         updatedAt: ingestedAt,
       });

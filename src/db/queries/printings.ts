@@ -29,6 +29,8 @@ export interface PrintingSearchResult {
   collectorNumber: string;
   imageUri: string | null;
   imageUriLarge: string | null;
+  imageUriBack: string | null;
+  imageUriBackLarge: string | null;
   finishes: Finish[];
   /** Latest known price per finish. A finish absent here has no price at all. */
   prices: PrintingPrice[];
@@ -99,6 +101,8 @@ const PRINTING_COLUMNS = {
   collectorNumber: printings.collectorNumber,
   imageUri: printings.imageUri,
   imageUriLarge: printings.imageUriLarge,
+  imageUriBack: printings.imageUriBack,
+  imageUriBackLarge: printings.imageUriBackLarge,
   finishes: printings.finishes,
 };
 

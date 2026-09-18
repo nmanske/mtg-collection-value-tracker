@@ -3,7 +3,6 @@ import Link from "next/link";
 import { db } from "@/db";
 import { PortfolioSummaryPanel } from "@/components/portfolio-summary";
 import { VendorTotals } from "@/components/vendor-totals";
-import { RemoveHoldingButton } from "@/components/remove-holding-button";
 import { listHoldings } from "@/db/queries/holdings";
 import { CollectionControls } from "@/components/collection-controls";
 import {
@@ -26,7 +25,6 @@ import {
   FINISH_LABEL,
   daysAgo,
   formatUsd,
-  printingCode,
 } from "@/lib/format";
 
 // Reads the collection on every request; adds and removes must show at once.
@@ -82,7 +80,8 @@ function SortHeader({
 
 export default async function CollectionPage(props: PageProps<"/">) {
   // searchParams is a Promise in Next 16.
-  const { page, range, prices, sort, dir, filter, q } = await props.searchParams;
+  const { page, range, prices, sort, dir, filter, q, basket } =
+    await props.searchParams;
   const priceSource: PriceVendor =
     typeof prices === "string" && (PRICE_VENDORS as readonly string[]).includes(prices)
       ? (prices as PriceVendor)
@@ -163,6 +162,7 @@ export default async function CollectionPage(props: PageProps<"/">) {
         summary={summary}
         range={typeof range === "string" ? range : undefined}
         priceSource={priceSource}
+        showBasket={basket === "1"}
         // The retail row for the selected vendor is what the chart is drawn
         // from, so its stale count is what explains the gap between the two.
         staleHoldings={
@@ -234,12 +234,10 @@ export default async function CollectionPage(props: PageProps<"/">) {
                     search={search}
                   />
                 ))}
-                <th className="py-2 font-medium" />
               </tr>
             </thead>
             <tbody>
               {rows.map((row) => {
-                const label = `${row.name} (${printingCode(row.setCode, row.collectorNumber)})`;
                 const stale =
                   row.priceDate != null && daysAgo(row.priceDate) > 2;
 
@@ -304,9 +302,6 @@ export default async function CollectionPage(props: PageProps<"/">) {
                     </td>
                     <td className="py-2 pr-3 tabular-nums text-neutral-600 dark:text-neutral-400">
                       {row.dateAdded}
-                    </td>
-                    <td className="py-2 text-right">
-                      <RemoveHoldingButton holdingId={row.id} label={label} />
                     </td>
                   </tr>
                 );

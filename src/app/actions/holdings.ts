@@ -5,7 +5,7 @@ import { revalidatePath } from "next/cache";
 import { requestCacheRebuild } from "@/lib/cache-refresh";
 
 import { db } from "@/db";
-import { addHolding, removeHolding } from "@/db/queries/holdings";
+import { addHolding } from "@/db/queries/holdings";
 import { getPrinting } from "@/db/queries/printings";
 import { parseHoldingInput, todayIso } from "@/lib/holding-input";
 
@@ -62,22 +62,4 @@ export async function addHoldingAction(
       ? `Added ${parsed.value.quantity} to your existing ${label} — same finish, condition and date.`
       : `Added ${parsed.value.quantity} x ${label}.`,
   };
-}
-
-export async function removeHoldingAction(
-  _previous: ActionResult | null,
-  formData: FormData,
-): Promise<ActionResult> {
-  const id = Number(formData.get("holdingId"));
-  if (!Number.isInteger(id) || id <= 0) {
-    return { ok: false, message: "Invalid holding." };
-  }
-
-  if (!removeHolding(db, id)) {
-    return { ok: false, message: "That holding no longer exists." };
-  }
-
-  requestCacheRebuild();
-  revalidatePath("/");
-  return { ok: true, message: "Removed." };
 }

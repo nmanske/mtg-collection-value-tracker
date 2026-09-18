@@ -88,7 +88,7 @@ function ValueTooltip({ active, payload }: TooltipPayload) {
           <span className="tabular-nums text-[var(--viz-text)]">
             {formatUsd(point.basketCents)}
           </span>
-          <span className="text-[var(--viz-muted)]">prices only</span>
+          <span className="text-[var(--viz-muted)]">price change only</span>
         </div>
       ) : null}
       <div className="mt-0.5 text-[var(--viz-muted)]">
@@ -180,6 +180,9 @@ function PortfolioChartBody({
         ? [point.valueCents]
         : [point.valueCents, point.basketCents],
     ),
+    // Eight bands rather than five. At a collection of this size five put the
+    // gridlines $5,000 apart, which is too coarse to read a move off.
+    8,
   );
 
   return (
@@ -193,13 +196,18 @@ function PortfolioChartBody({
             />
             <span className="text-[var(--viz-text)]">As held</span>
           </span>
-          <span className="flex items-center gap-1.5">
-            <span
-              aria-hidden
-              className="inline-block h-0.5 w-4 rounded-full bg-[var(--viz-series-2)]"
-            />
-            <span className="text-[var(--viz-text)]">Prices only</span>
-          </span>
+          {/* Guarded like the line it describes. Unguarded, the legend named a
+              series that was not drawn whenever the second line was toggled
+              off. */}
+          {showBasket ? (
+            <span className="flex items-center gap-1.5">
+              <span
+                aria-hidden
+                className="inline-block h-0.5 w-4 rounded-full bg-[var(--viz-series-2)]"
+              />
+              <span className="text-[var(--viz-text)]">Price change only</span>
+            </span>
+          ) : null}
           {showAcquisitions ? (
             <span className="flex items-center gap-1.5">
               <span
@@ -375,7 +383,7 @@ function PortfolioChartBody({
                 </th>
                 {showBasket ? (
                   <th scope="col" className="py-1 pr-4 text-right font-medium">
-                    Prices only
+                    Price change only
                   </th>
                 ) : null}
                 <th scope="col" className="py-1 pr-4 text-right font-medium">

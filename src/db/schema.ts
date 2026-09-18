@@ -72,6 +72,15 @@ export const printings = sqliteTable(
      * the next metadata ingest, so readers must fall back to `imageUri`.
      */
     imageUriLarge: text("image_uri_large"),
+    /**
+     * The reverse of a double-faced card, when there is one.
+     *
+     * Scryfall gives multi-faced layouts no top-level `image_uris` and one
+     * entry per face instead. Only the front was ever stored, so a transform
+     * or modal card could not be turned over.
+     */
+    imageUriBack: text("image_uri_back"),
+    imageUriBackLarge: text("image_uri_back_large"),
     /** Scryfall `finishes`, as a JSON array of {@link Finish}. */
     finishes: text("finishes", { mode: "json" })
       .$type<Finish[]>()
