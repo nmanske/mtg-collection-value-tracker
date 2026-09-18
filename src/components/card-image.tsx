@@ -64,9 +64,21 @@ export function CardImage({
 
   // Focus moves into the overlay on open and back to the image on close, so a
   // keyboard user is not dropped at the top of the document.
+  //
+  // Guarded on having been open. Without the guard the else branch ran on
+  // mount, so every card image on a page called focus() on itself as it
+  // rendered — the last one won and the browser scrolled it into view. On a
+  // search results page that meant submitting the form landed you at the
+  // bottom of sixty results.
+  const wasOpen = useRef(false);
   useEffect(() => {
-    if (open) closeRef.current?.focus();
-    else openerRef.current?.focus();
+    if (open) {
+      wasOpen.current = true;
+      closeRef.current?.focus();
+    } else if (wasOpen.current) {
+      wasOpen.current = false;
+      openerRef.current?.focus();
+    }
   }, [open]);
 
   const close = useCallback(() => setOpen(false), []);
