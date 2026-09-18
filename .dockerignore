@@ -5,8 +5,8 @@ node_modules
 data
 shot
 *.log
-README.md
-AGENTS.md
-mtg-tracker-prompt.md
+# No documentation reaches the image. Excluding it also means a docs-only
+# commit does not invalidate `COPY . .` and re-run the app build for nothing.
+*.md
 .env
 .env.local
