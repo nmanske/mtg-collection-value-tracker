@@ -63,9 +63,9 @@ docker compose exec app node -e   "const d=require('better-sqlite3')('/app/data/
 Then open <http://kettlecorn:3010>. Expect 3,868 holdings from that last check
 — if it says 0, the database did not land where `DATA_DIR` points.
 
-Two things worth doing before you walk away: set `CRON_SCHEDULE="* * * * *"`,
+One thing worth doing before you walk away: set `CRON_SCHEDULE="* * * * *"`,
 restart, watch one run reach `prices: done`, then put it back to `0 10 * * *`.
-And set up the backup cron in section 8.
+Backups are optional here — section 8 says why.
 
 ---
 
@@ -305,47 +305,47 @@ Migrations run automatically at startup, so a newer schema upgrades in place.
 
 ---
 
-## 8. Backups
+## 8. Backups — optional, and probably not worth it
 
-This is the right use for the NAS: a backup is a sequential file copy, with none
-of the locking a live database needs.
+Skipped deliberately on this deployment. The reasoning, so a future reader can
+weigh it again rather than assume it was an oversight:
 
-`VACUUM INTO` earns its time here — it takes a consistent snapshot while the
-container keeps running, which a plain `cp` cannot. Write it to local disk
-first, then move it, so SQLite is not writing across NFS:
+**Almost everything here is rebuildable.** `price_snapshots` and
+`vendor_prices` — 564 million rows between them — come from the MTGJSON archive
+on the NAS, and card metadata comes from Scryfall. The portfolio caches are
+derived. A total loss costs days of re-ingesting, not data.
 
-```bash
-#!/usr/bin/env bash
-# /srv/mtg/backup.sh — run as root. The snapshot is written by uid 1001 into a
-# directory owned by uid 1001, which your own user cannot move a file out of.
-set -euo pipefail
-DEST=/mnt/nas_shared/mtg
-mkdir -p "$DEST"
+**One thing is not rebuildable.** `holdings` carries `date_added`, taken from
+Moxfield's `Last Modified` column, which moves forward every time a card is
+edited there. Re-importing later yields different dates, so the acquisition
+history as it stands exists only in this database. The same goes for
+`date_added_approx`, manual price overrides, notes, and any holding added by
+hand rather than imported. For a single user who can accept an approximate
+history, that is a fair trade.
 
-cd /srv/mtg/mtg-collection-value-tracker
-docker compose exec -T app node -e \
-  "require('better-sqlite3')('/app/data/mtg.db').exec(\"vacuum into '/app/data/backup.db'\")"
-
-mv /srv/mtg/data/backup.db "$DEST/mtg-$(date +%F).db"
-# keep the last 7
-ls -1t "$DEST"/mtg-*.db | tail -n +8 | xargs -r rm --
-```
-
-`-T` disables TTY allocation, which cron does not have. Run it from root's
-crontab so the `mv` out of the 1001-owned directory succeeds:
+If you change your mind, the cheap version covers exactly that gap. The
+collection export is keyed by `scryfall_id` rather than the local
+`printing_key`, so it re-imports into a database rebuilt from scratch:
 
 ```bash
-sudo chmod +x /srv/mtg/backup.sh
-sudo crontab -e
-# 30 3 * * *  /srv/mtg/backup.sh >> /srv/mtg/backup.log 2>&1
+curl -fsS http://localhost:3010/api/export/collection   -o /mnt/nas_headless_backup/other/mtg/collection-$(date +%F).csv
 ```
 
-Run it by hand once before trusting the schedule: `sudo /srv/mtg/backup.sh`.
+A few hundred KB, no root, no locking to think about. Thirty of them is still
+smaller than one page of the database.
 
-Expect roughly 15 minutes and ~25 GB per snapshot, so watch the retention count
-against free space on the share.
+The expensive version is only worth it for recovery *time* — restoring 25 GB is
+minutes, rebuilding from the archive is days. Run by hand when it matters:
 
----
+```bash
+cd ~/mtg-collection-value-tracker
+docker compose exec -T app node -e   "require('better-sqlite3')('/app/data/mtg.db').exec(\"vacuum into '/app/data/backup.db'\")"
+sudo mv data/backup.db /mnt/nas_headless_backup/other/mtg/mtg-$(date +%F).db
+```
+
+`VACUUM INTO` rather than `cp`, because it snapshots consistently while the
+container keeps running. It also reports fragmentation for free: if that file is
+meaningfully smaller than the live database, the difference is wasted space.
 
 ## Troubleshooting
 
