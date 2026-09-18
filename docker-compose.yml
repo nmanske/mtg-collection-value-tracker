@@ -34,7 +34,11 @@ services:
       # 25 GB database, and not something to trust a WAL to. Develop on the host
       # with `npm run dev` and run the container where the data actually lives;
       # if you must run it on a desktop, use a named volume instead.
-      - ./data:/app/data
+      #
+      # DATA_DIR keeps the host path out of this tracked file, so a deployment
+      # that stores its database somewhere else does not have to edit compose
+      # and then resolve a conflict on every `git pull`. Set it in .env.
+      - ${DATA_DIR:-./data}:/app/data
     healthcheck:
       test:
         [

@@ -114,6 +114,10 @@ USD listing at all.
 > container, so treat the first deployment as a test and check the boxes under
 > "Verifying a deployment" as you go.
 
+For a step-by-step deployment to a real host — deploy keys, moving the database
+across, backups to a NAS, and a troubleshooting table — see
+**[DEPLOYMENT.md](DEPLOYMENT.md)**. The section below is the summary.
+
 Intended for a **Linux host**. SQLite relies on POSIX advisory locking, and a
 bind mount from a Windows or macOS desktop crosses a filesystem translation
 layer that emulates it — slow against a 25 GB database and not something to
