@@ -9,14 +9,15 @@ services:
       # The SQLite file. Keep it inside the mounted volume or the collection is
       # lost when the container is replaced.
       DATABASE_PATH: /app/data/mtg.db
-      # Daily refresh: Scryfall metadata, then MTGJSON prices. 04:30 US Central,
-      # when nobody is using the site, so the ingest has the write lock to
-      # itself. A named zone keeps it at 04:30 local across daylight saving.
-      # MTGJSON's build time varies, and a run arriving before it finds the same
-      # version and skips.
+      # Daily refresh: Scryfall metadata, then MTGJSON prices. 10:00 UTC is
+      # overnight across the Americas, so the ingest has the write lock to
+      # itself, and it sits just under an hour after Scryfall's ~09:05 UTC
+      # build. UTC rather than a local zone, so that gap does not move with
+      # daylight saving. MTGJSON's build time varies, and a run arriving before
+      # it finds the same version and skips.
       CRON_ENABLED: "true"
-      CRON_SCHEDULE: "${CRON_SCHEDULE:-30 4 * * *}"
-      CRON_TIMEZONE: "${CRON_TIMEZONE:-America/Chicago}"
+      CRON_SCHEDULE: "${CRON_SCHEDULE:-0 10 * * *}"
+      CRON_TIMEZONE: "${CRON_TIMEZONE:-UTC}"
       # How the price ingest is launched. The image sets a working default;
       # override to point at a different runtime, or set it empty to skip
       # prices here and run `ingest:today` from outside the container.

@@ -168,11 +168,11 @@ itself rather than failing.
 
 ### What runs on its own
 
-- **Metadata and prices, daily at 04:30 US Central** (`CRON_SCHEDULE`,
-  `CRON_TIMEZONE`). A quiet hour, so the ingest has the write lock to itself,
-  and a named zone so it stays at 04:30 local across daylight saving. MTGJSON's
-  build hour varies, and a run that arrives early finds the same version and
-  skips.
+- **Metadata and prices, daily at 10:00 UTC** (`CRON_SCHEDULE`,
+  `CRON_TIMEZONE`). Overnight across the Americas, so the ingest has the write
+  lock to itself, and just under an hour after Scryfall's ~09:05 UTC build.
+  MTGJSON's build hour varies, and a run that arrives early finds the same
+  version and skips.
 - **The price half runs as a child process**, not inside the web server. It
   parses a 50 MB document and writes a few hundred thousand rows, which has no
   business competing with request handling for memory or for the write lock. As
@@ -316,8 +316,8 @@ checkout.
 | --- | --- | --- |
 | `DATABASE_PATH` | `./data/mtg.db` | SQLite file location |
 | `CRON_ENABLED` | on in production | Runs the daily refresh on a schedule |
-| `CRON_SCHEDULE` | `30 4 * * *` | Standard five-field cron expression |
-| `CRON_TIMEZONE` | `America/Chicago` | Timezone the schedule is read in; a named zone handles DST |
+| `CRON_SCHEDULE` | `0 10 * * *` | Standard five-field cron expression |
+| `CRON_TIMEZONE` | `UTC` | Timezone the schedule is read in; named zones work too |
 | `INGEST_COMMAND` | `npm run ingest:today -- --rebuild-cache` | How the price ingest is launched. Empty disables it |
 | `INGEST_TIMEOUT_MS` | `1800000` | Kills a wedged ingest rather than letting it hold the write lock |
 | `PORT` | `3000` | Host port the container publishes |

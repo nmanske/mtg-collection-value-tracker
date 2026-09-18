@@ -25,28 +25,31 @@ import { recordDailyRun, runDailyPriceIngest } from "@/lib/daily-ingest";
  */
 
 /**
- * 04:30 in `DEFAULT_TIMEZONE` — an hour nobody is looking at the site, so the
- * ingest has the write lock to itself.
+ * 10:00 UTC — overnight across the Americas, so the ingest has the write lock
+ * to itself rather than competing with someone loading the dashboard.
  *
- * A named zone rather than a fixed UTC offset, so the run stays at 04:30 local
- * across daylight saving rather than drifting an hour twice a year. Node ships
- * full ICU, so the zone resolves without a tzdata package in the image.
+ * UTC rather than a local zone on purpose: the run then lands at the same
+ * moment year-round, instead of shifting by an hour twice a year and changing
+ * how much slack it has against the upstream builds. The hour it corresponds
+ * to locally moves with daylight saving; the relationship to Scryfall does not,
+ * which is the one that matters here.
  *
- * The trade-off is upstream timing. Scryfall's `default_cards` was built at
- * 09:05 UTC on the day this was written, which leaves about 90 minutes of slack
- * under CST and only 25 under CDT. If a build is late the ingest finds the
- * previous one, skips, and catches it the next day; the dashboard only reports
- * a problem once prices are two days behind. Worth knowing, not worth moving
- * the schedule for.
+ * Scryfall's `default_cards` was built at 09:05 UTC on the day this was
+ * measured, so this leaves the best part of an hour. If a build is late the
+ * ingest finds the previous one, skips, and catches it the next day.
  *
  * MTGJSON rebuilds `AllPricesToday` daily too, and the price job skips when the
  * build version is one already recorded, so a run that lands between the two
  * upstream builds costs nothing beyond a wasted download.
  */
-const DEFAULT_SCHEDULE = "30 4 * * *";
+const DEFAULT_SCHEDULE = "0 10 * * *";
 
-/** US Central, which handles CST and CDT without the schedule moving. */
-const DEFAULT_TIMEZONE = "America/Chicago";
+/**
+ * UTC. A named zone works too — Node ships full ICU, so `America/Chicago` and
+ * friends resolve without a tzdata package — but an unrecognised one throws,
+ * which is why the scheduling call below is guarded.
+ */
+const DEFAULT_TIMEZONE = "UTC";
 
 /**
  * Guards against double registration. Next calls `register` once per server
