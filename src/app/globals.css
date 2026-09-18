@@ -139,3 +139,48 @@ body {
 summary::-webkit-details-marker {
   display: none;
 }
+
+/*
+ * Money hidden for a shoulder-surfer.
+ *
+ * Blur alone is not enough: a blurred "$15,719.93" is still obviously longer
+ * than "$8.25", so the order of magnitude leaks from the width. The element is
+ * therefore clamped to a fixed width and its overflow clipped, so every hidden
+ * figure occupies the same space whatever it says.
+ *
+ * `--money-width` lets a large figure reserve more room than a table cell
+ * without revealing anything: it is a constant per context, not per value.
+ */
+.hide-money .money {
+  display: inline-block;
+  width: var(--money-width, 4.5ch);
+  overflow: hidden;
+  white-space: nowrap;
+  vertical-align: bottom;
+  filter: blur(0.35em);
+  user-select: none;
+}
+
+.hide-money .money-lg {
+  --money-width: 7ch;
+}
+
+/* Sparklines and charts give the shape away even with the labels hidden. */
+.hide-money .money-chart {
+  filter: blur(1.2em);
+  user-select: none;
+}
+
+/*
+ * The toggle's own label, driven by the same class rather than React state —
+ * so it is correct on the very first paint and cannot disagree with the page.
+ */
+.when-hiding {
+  display: none;
+}
+.hide-money .when-hiding {
+  display: inline;
+}
+.hide-money .when-showing {
+  display: none;
+}

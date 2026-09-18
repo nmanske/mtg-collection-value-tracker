@@ -5,6 +5,7 @@ import { PortfolioSummaryPanel } from "@/components/portfolio-summary";
 import { VendorTotals } from "@/components/vendor-totals";
 import { listHoldings } from "@/db/queries/holdings";
 import { CollectionControls } from "@/components/collection-controls";
+import { PrivacyToggle } from "@/components/privacy-toggle";
 import {
   collectionHref,
   nextDir,
@@ -80,8 +81,7 @@ function SortHeader({
 
 export default async function CollectionPage(props: PageProps<"/">) {
   // searchParams is a Promise in Next 16.
-  const { page, range, prices, sort, dir, filter, q, basket } =
-    await props.searchParams;
+  const { page, range, prices, sort, dir, filter, q } = await props.searchParams;
   const priceSource: PriceVendor =
     typeof prices === "string" && (PRICE_VENDORS as readonly string[]).includes(prices)
       ? (prices as PriceVendor)
@@ -137,6 +137,7 @@ export default async function CollectionPage(props: PageProps<"/">) {
           >
             How it works
           </Link>
+          <PrivacyToggle />
           <Link
             href="/stats"
             className="rounded-md border border-neutral-300 px-4 py-2 text-sm font-medium hover:bg-neutral-50 dark:border-neutral-700 dark:hover:bg-neutral-900"
@@ -162,7 +163,6 @@ export default async function CollectionPage(props: PageProps<"/">) {
         summary={summary}
         range={typeof range === "string" ? range : undefined}
         priceSource={priceSource}
-        showBasket={basket === "1"}
         // The retail row for the selected vendor is what the chart is drawn
         // from, so its stale count is what explains the gap between the two.
         staleHoldings={
@@ -276,7 +276,9 @@ export default async function CollectionPage(props: PageProps<"/">) {
                         </span>
                       ) : (
                         <>
-                          {formatUsd(row.unitPriceCents)}
+                          <span className="money">
+                            {formatUsd(row.unitPriceCents)}
+                          </span>
                           {row.overridden ? (
                             <span
                               className="ml-1 text-xs text-neutral-600 dark:text-neutral-400"
@@ -296,9 +298,13 @@ export default async function CollectionPage(props: PageProps<"/">) {
                       )}
                     </td>
                     <td className="py-2 pr-3 text-right tabular-nums">
-                      {row.unitPriceCents == null
-                        ? "—"
-                        : formatUsd(row.unitPriceCents * row.quantity)}
+                      {row.unitPriceCents == null ? (
+                        "—"
+                      ) : (
+                        <span className="money">
+                          {formatUsd(row.unitPriceCents * row.quantity)}
+                        </span>
+                      )}
                     </td>
                     <td className="py-2 pr-3 tabular-nums text-neutral-600 dark:text-neutral-400">
                       {row.dateAdded}

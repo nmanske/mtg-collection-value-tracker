@@ -39,7 +39,6 @@ export interface ChartPoint {
   holdingsHeld: number;
   unpricedHoldings: number;
   /** Today's holdings valued on this date, ignoring acquisition dates. */
-  basketCents: number | null;
   acquiredHoldings: number;
   acquiredCards: number;
 }
@@ -79,18 +78,6 @@ function ValueTooltip({ active, payload }: TooltipPayload) {
           {formatUsd(point.valueCents)}
         </span>
       </div>
-      {point.basketCents != null ? (
-        <div className="mt-1 flex items-center gap-1.5">
-          <span
-            aria-hidden
-            className="inline-block h-2 w-2 rounded-full bg-[var(--viz-series-2)]"
-          />
-          <span className="tabular-nums text-[var(--viz-text)]">
-            {formatUsd(point.basketCents)}
-          </span>
-          <span className="text-[var(--viz-muted)]">price change only</span>
-        </div>
-      ) : null}
       <div className="mt-0.5 text-[var(--viz-muted)]">
         {point.holdingsHeld.toLocaleString()} holdings
         {point.unpricedHoldings > 0
@@ -114,7 +101,6 @@ function ValueTooltip({ active, payload }: TooltipPayload) {
 
 function PortfolioChartBody({
   points,
-  basketPoints,
   width,
   plotClass,
 }: {
@@ -127,7 +113,6 @@ function PortfolioChartBody({
    * were bought. Plotted alongside so the gap between the lines is the part of
    * the change that came from acquiring cards rather than from prices.
    */
-  basketPoints?: ValuePoint[];
 }) {
   const gradientId = useId();
 
@@ -139,17 +124,12 @@ function PortfolioChartBody({
     );
   }
 
-  const basketByDate = new Map(
-    (basketPoints ?? []).map((point) => [point.date, point.valueCents]),
-  );
-  const showBasket = basketByDate.size > 0;
 
   const full: ChartPoint[] = points.map((point) => ({
     date: point.date,
     valueCents: point.valueCents,
     holdingsHeld: point.holdingsHeld,
     unpricedHoldings: point.unpricedHoldings,
-    basketCents: basketByDate.get(point.date) ?? null,
     acquiredHoldings: point.acquiredHoldings,
     acquiredCards: point.acquiredCards,
   }));
@@ -176,9 +156,7 @@ function PortfolioChartBody({
   const last = data[data.length - 1];
   const { domain, ticks } = paddedScale(
     data.flatMap((point) =>
-      point.basketCents == null
-        ? [point.valueCents]
-        : [point.valueCents, point.basketCents],
+      [point.valueCents],
     ),
     // Eight bands rather than five. At a collection of this size five put the
     // gridlines $5,000 apart, which is too coarse to read a move off.
@@ -187,7 +165,7 @@ function PortfolioChartBody({
 
   return (
     <figure className="viz-root m-0">
-      {showBasket || showAcquisitions ? (
+      {showAcquisitions ? (
         <figcaption className="mb-3 flex flex-wrap items-center gap-x-5 gap-y-1 text-xs">
           <span className="flex items-center gap-1.5">
             <span
@@ -196,18 +174,6 @@ function PortfolioChartBody({
             />
             <span className="text-[var(--viz-text)]">As held</span>
           </span>
-          {/* Guarded like the line it describes. Unguarded, the legend named a
-              series that was not drawn whenever the second line was toggled
-              off. */}
-          {showBasket ? (
-            <span className="flex items-center gap-1.5">
-              <span
-                aria-hidden
-                className="inline-block h-0.5 w-4 rounded-full bg-[var(--viz-series-2)]"
-              />
-              <span className="text-[var(--viz-text)]">Price change only</span>
-            </span>
-          ) : null}
           {showAcquisitions ? (
             <span className="flex items-center gap-1.5">
               <span
@@ -299,28 +265,6 @@ function PortfolioChartBody({
               cursor={{ stroke: "var(--viz-grid)", strokeWidth: 1 }}
             />
 
-            {showBasket ? (
-              <Area
-                type="monotone"
-                dataKey="basketCents"
-                stroke="var(--viz-series-2)"
-                strokeWidth={2}
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                // No fill: two washes over one another muddies both, and this
-                // line is context for the primary rather than a second total.
-                fill="none"
-                dot={false}
-                activeDot={{
-                  r: 4,
-                  fill: "var(--viz-series-2)",
-                  stroke: "var(--viz-surface)",
-                  strokeWidth: 2,
-                }}
-                isAnimationActive={false}
-                connectNulls
-              />
-            ) : null}
 
             <Area
               type="monotone"
@@ -381,11 +325,6 @@ function PortfolioChartBody({
                 <th scope="col" className="py-1 pr-4 text-right font-medium">
                   As held
                 </th>
-                {showBasket ? (
-                  <th scope="col" className="py-1 pr-4 text-right font-medium">
-                    Price change only
-                  </th>
-                ) : null}
                 <th scope="col" className="py-1 pr-4 text-right font-medium">
                   Holdings
                 </th>
@@ -401,13 +340,6 @@ function PortfolioChartBody({
                   <td className="py-0.5 pr-4 text-right tabular-nums">
                     {formatUsd(point.valueCents)}
                   </td>
-                  {showBasket ? (
-                    <td className="py-0.5 pr-4 text-right tabular-nums">
-                      {point.basketCents == null
-                        ? "—"
-                        : formatUsd(point.basketCents)}
-                    </td>
-                  ) : null}
                   <td className="py-0.5 pr-4 text-right tabular-nums">
                     {point.holdingsHeld.toLocaleString()}
                   </td>
@@ -434,10 +366,7 @@ function PortfolioChartBody({
  * of the series rather than the same thinned points stretched across more
  * pixels.
  */
-export function PortfolioChart(props: {
-  points: ValuePoint[];
-  basketPoints?: ValuePoint[];
-}) {
+export function PortfolioChart(props: { points: ValuePoint[] }) {
   return (
     <ChartFrame label="of collection value over time">
       {({ width, plotClass }) => (

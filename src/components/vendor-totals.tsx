@@ -83,7 +83,7 @@ export function VendorTotals({
                   {SIDE_LABEL[row.side]}
                 </td>
                 <td className="py-2 pr-4 text-right font-medium tabular-nums">
-                  {formatUsd(row.totalCents)}
+                  <span className="money">{formatUsd(row.totalCents)}</span>
                 </td>
                 <td className="py-2 text-xs tabular-nums text-neutral-600 dark:text-neutral-400">
                   {/* Plain text, not a bar. Every vendor quotes 95-100% of a
