@@ -106,6 +106,14 @@ export interface ValuePoint {
 export interface ValuationSeries {
   points: ValuePoint[];
   /**
+   * Present and true when these points came from a cache that is out of date.
+   *
+   * A rebuild has been asked for; the figures are a few minutes behind at
+   * worst. Absent rather than false when current, so a cached read stays
+   * deep-equal to a freshly computed one.
+   */
+  stale?: boolean;
+  /**
    * Month-to-month links for the like-for-like index, when asked for.
    *
    * Computed here rather than in its own function because the expensive part —
@@ -524,6 +532,8 @@ export interface PortfolioSummary {
   basketPoints: ValuePoint[];
   /** All-time change of the fixed basket: market movement without buying. */
   marketOnly: Change;
+  /** True when these figures came from a cache a rebuild is catching up with. */
+  stale: boolean;
 }
 
 /**
@@ -565,14 +575,16 @@ export function portfolioSummary(
   priceSource: PriceVendor = "tcgplayer",
 ): PortfolioSummary {
   // Through the cache: this is the dashboard's hot path, and recomputing both
-  // series per request is what took 5.6 seconds over 930 dates. Falls back to
-  // computing when the cache is cold or stale, so it costs time, never
-  // correctness.
-  const { points } = cachedPortfolioSeries(db, { priceSource });
-  const { points: basketPoints } = cachedPortfolioSeries(db, {
+  // series per request is what took 5.6 seconds over 930 dates. A stale cache
+  // is served as-is with a rebuild asked for in the background; only a cold one
+  // is computed here.
+  const held = cachedPortfolioSeries(db, { priceSource });
+  const basket = cachedPortfolioSeries(db, {
     constantBasket: true,
     priceSource,
   });
+  const points = held.points;
+  const basketPoints = basket.points;
   const last = points.at(-1);
 
   const allTime: Change =
@@ -586,6 +598,7 @@ export function portfolioSummary(
       : { fromCents: null, fromDate: null, changeCents: null, changeRatio: null };
 
   return {
+    stale: (held.stale ?? false) || (basket.stale ?? false),
     currentCents: last?.valueCents ?? 0,
     currentDate: last?.date ?? null,
     day: changeOver(points, 1),

@@ -8,6 +8,11 @@
  *   npm run test:history
  */
 import assert from "node:assert/strict";
+
+// A stale read asks for a background rebuild, and the child would inherit the
+// default DATABASE_PATH — rebuilding the real database from a test. Empty
+// disables it; the request path is exercised, nothing is spawned.
+process.env.REBUILD_COMMAND = "";
 import { mkdirSync, rmSync } from "node:fs";
 
 import { drizzle } from "drizzle-orm/better-sqlite3";

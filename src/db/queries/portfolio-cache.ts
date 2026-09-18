@@ -2,6 +2,7 @@ import { eq, sql } from "drizzle-orm";
 
 import { VENDOR_CODES } from "@/db/codec";
 import { holdings, portfolioDaily, portfolioMonthly, syncMeta } from "@/db/schema";
+import { requestCacheRebuild } from "@/lib/cache-refresh";
 import { DAILY_RUN_KEY } from "@/lib/daily-ingest";
 
 import type { Db } from "./printings";
@@ -284,17 +285,31 @@ export function cachedPortfolioSeries(
   const source = options.priceSource ?? "tcgplayer";
   const basket = options.constantBasket ?? false;
 
-  if (cacheIsFresh(db)) {
-    const points = rowsFor(db, source, basket);
-    if (points.length > 0) {
-      return {
-        points,
-        firstDate: points[0].date,
-        lastDate: points[points.length - 1].date,
-      };
-    }
+  const fresh = cacheIsFresh(db);
+  const points = rowsFor(db, source, basket);
+
+  if (points.length > 0) {
+    // Stale is served rather than recomputed. Recomputing here costs 20-35s
+    // inside the request that noticed, and every concurrent request starts its
+    // own — which is what made adding a single card hang the site. A rebuild
+    // is asked for instead, out of process, and the page says it is updating.
+    //
+    // The numbers are a few minutes old at worst, which is a better answer to
+    // "what is my collection worth" than half a minute of nothing.
+    if (!fresh) requestCacheRebuild();
+
+    return {
+      points,
+      // Only present when true, so a fresh read stays deep-equal to a computed
+      // series — `test:cache` asserts exactly that.
+      ...(fresh ? {} : { stale: true }),
+      firstDate: points[0].date,
+      lastDate: points[points.length - 1].date,
+    };
   }
 
+  // Nothing cached at all: a cold start, or a view that has never been built.
+  // There is nothing stale to serve, so this one pays the cost.
   return portfolioSeries(db, {
     priceSource: source,
     constantBasket: basket,

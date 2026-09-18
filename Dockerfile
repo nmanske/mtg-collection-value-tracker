@@ -46,6 +46,12 @@ ENV DATABASE_PATH=/app/data/mtg.db
 # process tree for nothing. Set it empty to disable prices entirely and drive
 # the ingest from outside the container instead.
 ENV INGEST_COMMAND="node_modules/.bin/tsx scripts/ingest-today.mts --rebuild-cache"
+# How a stale portfolio cache is rebuilt. Triggered in the background when a
+# read notices the cache is behind, so the page is served from what exists
+# instead of recomputing for half a minute inside the request. `npm` is not in
+# the standalone image, hence the direct path. Empty disables it, leaving reads
+# to serve stale indefinitely.
+ENV REBUILD_COMMAND="node_modules/.bin/tsx scripts/rebuild-cache.ts"
 
 # Both upstreams are HTTPS, so a missing trust store means every ingest fails —
 # daily, and visibly only because the dashboard now reports a failed run. The

@@ -2,6 +2,8 @@
 
 import { revalidatePath } from "next/cache";
 
+import { requestCacheRebuild } from "@/lib/cache-refresh";
+
 import { db } from "@/db";
 import { addHolding, removeHolding } from "@/db/queries/holdings";
 import { getPrinting } from "@/db/queries/printings";
@@ -46,6 +48,10 @@ export async function addHoldingAction(
 
   const { merged } = addHolding(db, { ...parsed.value, createdAt: new Date() });
 
+  // Changing the holdings invalidates the value history. Asked for here rather
+  // than left to whoever loads a page next, and out of process so adding a card
+  // stays instant.
+  requestCacheRebuild();
   revalidatePath("/");
   revalidatePath("/search");
 
@@ -71,6 +77,7 @@ export async function removeHoldingAction(
     return { ok: false, message: "That holding no longer exists." };
   }
 
+  requestCacheRebuild();
   revalidatePath("/");
   return { ok: true, message: "Removed." };
 }

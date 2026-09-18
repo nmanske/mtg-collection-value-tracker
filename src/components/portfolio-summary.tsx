@@ -199,6 +199,18 @@ export function PortfolioSummaryPanel({
           ? `From ${summary.points[0]?.date ?? "—"}`
           : `${visible.length} day${visible.length === 1 ? "" : "s"} to ${last?.date}`}
 
+        {summary.stale ? (
+          <>
+            {" · "}
+            <span className="text-neutral-400">updating…</span>
+            <InfoTip label="Why the figures say updating">
+              Something changed &mdash; an import, an ingest, a card added
+              &mdash; so these are the previous figures while the value history
+              is recomputed in the background. Reload in a minute.
+            </InfoTip>
+          </>
+        ) : null}
+
         {last && last.unpricedHoldings > 0 ? (
           <>
             {" · "}

@@ -4,6 +4,11 @@
  *   npm run test:cache
  */
 import assert from "node:assert/strict";
+
+// A stale read asks for a background rebuild, and the child would inherit the
+// default DATABASE_PATH — rebuilding the real database from a test. Empty
+// disables it; the request path is exercised, nothing is spawned.
+process.env.REBUILD_COMMAND = "";
 import { mkdirSync, rmSync } from "node:fs";
 import { drizzle } from "drizzle-orm/better-sqlite3";
 import { migrate } from "drizzle-orm/better-sqlite3/migrator";
@@ -130,10 +135,19 @@ db.insert(holdings)
 
 assert.notEqual(cacheFingerprint(db), before);
 assert.equal(cacheIsFresh(db), false, "a backdated holding must invalidate the cache");
-assert.deepEqual(
-  cachedPortfolioSeries(db, {}),
-  portfolioSeries(db, {}),
-  "a stale cache is bypassed, not served",
+// A stale cache is SERVED, not bypassed, and says so. Recomputing here cost
+// 20-35s inside whichever request noticed, and every concurrent request started
+// its own — which is what made adding a single card hang the site. The figures
+// are behind by one change while a background rebuild catches up, which beats
+// half a minute of nothing.
+const staleRead = cachedPortfolioSeries(db, {});
+assert.equal(staleRead.stale, true, "a stale read must admit it is stale");
+assert.ok(staleRead.points.length > 0, "stale still serves points");
+// Served from the cache, so it does NOT yet include the holding just added.
+assert.notDeepEqual(
+  staleRead.points,
+  portfolioSeries(db, {}).points,
+  "the stale read is the old cache, not a recomputation",
 );
 
 // Each input that can move a point must move the fingerprint.
