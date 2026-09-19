@@ -31,7 +31,7 @@ function Stat({
 }: {
   label: string;
   value: string;
-  detail?: string;
+  detail?: React.ReactNode;
   /** A figure that reveals what the collection is worth. */
   hide?: boolean;
 }) {
@@ -425,9 +425,21 @@ export default async function StatsPage() {
                       : "—"
                   }
                   detail={
-                    period
-                      ? `${period.label}${period.partial ? " so far" : ""} · ${formatUsd(period.fromCents)} → ${formatUsd(period.toCents)}`
-                      : "not enough history"
+                    period ? (
+                      <>
+                        {period.label}
+                        {period.partial ? " so far" : ""} ·{" "}
+                        <span className="money">
+                          {formatUsd(period.fromCents)}
+                        </span>{" "}
+                        →{" "}
+                        <span className="money">
+                          {formatUsd(period.toCents)}
+                        </span>
+                      </>
+                    ) : (
+                      "not enough history"
+                    )
                   }
                 />
               ))}
@@ -551,7 +563,7 @@ export default async function StatsPage() {
                   sub={`${mover.quantity}x · ${formatUsd(mover.fromCents)} on ${mover.fromDate}${mover.fromDateApprox ? "*" : ""} → ${formatUsd(mover.toCents)}`}
                   right={
                     <span className="font-medium text-emerald-700 dark:text-emerald-400">
-                      +<span className="money">{formatUsd(mover.impactCents)}</span>
+                      +{formatUsd(mover.impactCents)}
                     </span>
                   }
                 />
@@ -572,7 +584,7 @@ export default async function StatsPage() {
                   sub={`${mover.quantity}x · ${formatUsd(mover.fromCents)} on ${mover.fromDate}${mover.fromDateApprox ? "*" : ""} → ${formatUsd(mover.toCents)}`}
                   right={
                     <span className="font-medium text-red-700 dark:text-red-400">
-                      <span className="money">{formatUsd(mover.impactCents)}</span>
+                      {formatUsd(mover.impactCents)}
                     </span>
                   }
                 />
