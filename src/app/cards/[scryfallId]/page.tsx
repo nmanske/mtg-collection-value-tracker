@@ -286,51 +286,52 @@ export default async function CardPage(props: PageProps<"/cards/[scryfallId]">) 
                 </dd>
               </div>
             </dl>
-
-            <div className="mt-5 flex flex-wrap items-center gap-x-4 gap-y-2">
-            {/* Same control, markup and labels as the collection chart. Beside
-                the range because it changes the same thing the range does: what
-                the chart is showing, not what the card is. */}
-            <nav aria-label="Price source" className="flex flex-wrap gap-1">
-              {PRICE_VENDORS.map((vendor) => {
-                const current = vendor === priceSource;
-                return (
-                  <Link
-                    key={vendor}
-                    href={`/cards/${printing.scryfallId}?finish=${finish}&prices=${vendor}${
-                      requestedRange ? `&range=${requestedRange}` : ""
-                    }`}
-                    scroll={false}
-                    aria-current={current ? "true" : undefined}
-                    className={`rounded-md border px-2.5 py-1 text-xs transition-colors ${
-                      current
-                        ? "border-neutral-900 bg-neutral-900 text-white dark:border-neutral-100 dark:bg-neutral-100 dark:text-neutral-900"
-                        : "border-neutral-300 hover:bg-neutral-50 dark:border-neutral-700 dark:hover:bg-neutral-900"
-                    }`}
-                  >
-                    {PRICE_VENDOR_LABEL[vendor]}
-                  </Link>
-                );
-              })}
-            </nav>
-
-            <RangePicker
-              active={range.id}
-              spanDays={spanDays}
-              lastDate={last}
-              exclude={["held"]}
-              hrefFor={(id) =>
-                `/cards/${printing.scryfallId}?finish=${finish}&range=${id}${
-                  priceSource === "tcgplayer" ? "" : `&prices=${priceSource}`
-                }`
-              }
-            />
-          </div>
           </div>
         </div>
       </header>
 
-      <section className="mb-8 rounded-lg border border-neutral-200 p-5 dark:border-neutral-800">
+      {/* The controls sit with the chart they scope, left-aligned above it
+          and clear of the card's own details. */}
+      <section className="mt-8 mb-8 rounded-lg border border-neutral-200 p-5 dark:border-neutral-800">
+        <div className="mb-4 flex flex-wrap items-center gap-x-4 gap-y-2">
+          {/* Same control, markup and labels as the collection chart. Beside
+              the range because it changes the same thing the range does: what
+              the chart is showing, not what the card is. */}
+          <nav aria-label="Price source" className="flex flex-wrap gap-1">
+            {PRICE_VENDORS.map((vendor) => {
+              const current = vendor === priceSource;
+              return (
+                <Link
+                  key={vendor}
+                  href={`/cards/${printing.scryfallId}?finish=${finish}&prices=${vendor}${
+                    requestedRange ? `&range=${requestedRange}` : ""
+                  }`}
+                  scroll={false}
+                  aria-current={current ? "true" : undefined}
+                  className={`rounded-md border px-2.5 py-1 text-xs transition-colors ${
+                    current
+                      ? "border-neutral-900 bg-neutral-900 text-white dark:border-neutral-100 dark:bg-neutral-100 dark:text-neutral-900"
+                      : "border-neutral-300 hover:bg-neutral-50 dark:border-neutral-700 dark:hover:bg-neutral-900"
+                  }`}
+                >
+                  {PRICE_VENDOR_LABEL[vendor]}
+                </Link>
+              );
+            })}
+          </nav>
+
+          <RangePicker
+            active={range.id}
+            spanDays={spanDays}
+            lastDate={last}
+            exclude={["held"]}
+            hrefFor={(id) =>
+              `/cards/${printing.scryfallId}?finish=${finish}&range=${id}${
+                priceSource === "tcgplayer" ? "" : `&prices=${priceSource}`
+              }`
+            }
+          />
+        </div>
         <CardPriceChart
           points={visible}
           buylist={
