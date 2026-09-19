@@ -202,3 +202,86 @@ summary::-webkit-details-marker {
 .hide-money .when-showing {
   display: none;
 }
+
+/*
+ * Foil.
+ *
+ * A band of light sweeping across the art, the way tilting a foil card catches
+ * a light source. Deliberately faint and slow: this runs on a page someone is
+ * reading numbers on, and anything brighter reads as a loading skeleton.
+ *
+ * The sweep is a pseudo-element rather than a background on the image, so it
+ * composites over the art without touching it, and `mix-blend-mode` keeps it
+ * from washing out a dark card into grey.
+ */
+@keyframes foil-sweep {
+  from {
+    transform: translateX(-140%) rotate(8deg);
+  }
+  to {
+    transform: translateX(140%) rotate(8deg);
+  }
+}
+
+.foil {
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
+}
+
+.foil::after {
+  content: "";
+  position: absolute;
+  /* Taller and wider than the box: the band is rotated, and its corners would
+     otherwise cut in from the edges as it crosses. */
+  inset: -30%;
+  pointer-events: none;
+  background: linear-gradient(
+    90deg,
+    transparent 35%,
+    rgba(255, 255, 255, 0.28) 48%,
+    rgba(186, 230, 253, 0.32) 52%,
+    transparent 65%
+  );
+  mix-blend-mode: screen;
+  animation: foil-sweep 3.6s ease-in-out infinite;
+}
+
+/*
+ * The table's foil rows. Nothing until the row is hovered, because a list of
+ * 100 holdings with a dozen of them glinting is a fairground, not a table.
+ */
+.foil-row .foil-mark {
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
+  border-radius: 0.25rem;
+  padding-inline: 0.25rem;
+  margin-inline: -0.25rem;
+}
+
+.foil-row:hover .foil-mark::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(
+    90deg,
+    transparent 30%,
+    rgba(125, 211, 252, 0.45) 50%,
+    transparent 70%
+  );
+  mix-blend-mode: screen;
+  animation: foil-sweep 2.2s ease-in-out infinite;
+}
+
+/* A foil that announces itself by moving is worse than no foil at all for
+   anyone who has asked the system for less motion. */
+@media (prefers-reduced-motion: reduce) {
+  .foil::after,
+  .foil-row:hover .foil-mark::after {
+    animation: none;
+    /* Parked off the art rather than left mid-sweep across it. */
+    transform: translateX(-140%);
+  }
+}

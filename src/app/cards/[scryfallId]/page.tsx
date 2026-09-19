@@ -147,11 +147,12 @@ export default async function CardPage(props: PageProps<"/cards/[scryfallId]">) 
         {printing.imageUri ? (
           <CardImage
             src={printing.imageUriLarge ?? printing.imageUri}
-            largeSrc={printing.imageUriLarge}
             backSrc={printing.imageUriBack}
-            backLargeSrc={printing.imageUriBackLarge}
             alt={printing.name}
             className="h-[29rem] w-80 self-start"
+            // The selected finish, not the printing's: the page is showing one
+            // series, and this is the art for that series.
+            foil={finish !== "nonfoil"}
           />
         ) : null}
 
@@ -217,115 +218,119 @@ export default async function CardPage(props: PageProps<"/cards/[scryfallId]">) 
               Not in your collection.
             </p>
           )}
+
+          {/* The price and the controls that scope it sit beside the art:
+              the column is as tall as a card image and was carrying four
+              lines of text. The chart keeps the full width below, where a
+              wide plot resolves more days. */}
+          <div className="mt-6 border-t border-neutral-200 pt-5 dark:border-neutral-800">
+            <div>
+              <h2 className="text-xs text-neutral-600 dark:text-neutral-400">
+                {FINISH_LABEL[finish]} price
+                {stats.currentDate ? ` · ${stats.currentDate}` : ""}
+              </h2>
+              <div className="mt-1 text-3xl font-semibold tabular-nums">
+                {stats.currentCents == null
+                  ? "No price"
+                  : formatUsd(stats.currentCents)}
+              </div>
+            </div>
+
+            <dl className="mt-4 flex flex-wrap gap-x-8 gap-y-3 text-sm">
+              <div>
+                <dt className="text-xs text-neutral-600 dark:text-neutral-400">
+                  {range.window === null ? "All time" : range.description}
+                </dt>
+                <dd
+                  className={`font-medium tabular-nums ${
+                    stats.changeCents == null || stats.changeCents === 0
+                      ? "text-neutral-600 dark:text-neutral-400"
+                      : stats.changeCents > 0
+                        ? "text-emerald-700 dark:text-emerald-400"
+                        : "text-red-700 dark:text-red-400"
+                  }`}
+                >
+                  {stats.changeCents == null ? (
+                    <span className="text-neutral-400">not enough history</span>
+                  ) : (
+                    <>
+                      {stats.changeCents > 0 ? "+" : ""}
+                      {formatUsd(stats.changeCents)}
+                      {stats.changeRatio != null
+                        ? ` (${stats.changeCents > 0 ? "+" : ""}${(stats.changeRatio * 100).toFixed(1)}%)`
+                        : ""}
+                    </>
+                  )}
+                </dd>
+              </div>
+              <div>
+                <dt className="text-xs text-neutral-600 dark:text-neutral-400">Low</dt>
+                <dd className="font-medium tabular-nums">
+                  {stats.lowCents == null ? "—" : formatUsd(stats.lowCents)}
+                  {stats.lowDate ? (
+                    <span className="ml-1 text-xs font-normal text-neutral-400">
+                      {stats.lowDate}
+                    </span>
+                  ) : null}
+                </dd>
+              </div>
+              <div>
+                <dt className="text-xs text-neutral-600 dark:text-neutral-400">High</dt>
+                <dd className="font-medium tabular-nums">
+                  {stats.highCents == null ? "—" : formatUsd(stats.highCents)}
+                  {stats.highDate ? (
+                    <span className="ml-1 text-xs font-normal text-neutral-400">
+                      {stats.highDate}
+                    </span>
+                  ) : null}
+                </dd>
+              </div>
+            </dl>
+
+            <div className="mt-5 flex flex-wrap items-center gap-x-4 gap-y-2">
+            {/* Same control, markup and labels as the collection chart. Beside
+                the range because it changes the same thing the range does: what
+                the chart is showing, not what the card is. */}
+            <nav aria-label="Price source" className="flex flex-wrap gap-1">
+              {PRICE_VENDORS.map((vendor) => {
+                const current = vendor === priceSource;
+                return (
+                  <Link
+                    key={vendor}
+                    href={`/cards/${printing.scryfallId}?finish=${finish}&prices=${vendor}${
+                      requestedRange ? `&range=${requestedRange}` : ""
+                    }`}
+                    scroll={false}
+                    aria-current={current ? "true" : undefined}
+                    className={`rounded-md border px-2.5 py-1 text-xs transition-colors ${
+                      current
+                        ? "border-neutral-900 bg-neutral-900 text-white dark:border-neutral-100 dark:bg-neutral-100 dark:text-neutral-900"
+                        : "border-neutral-300 hover:bg-neutral-50 dark:border-neutral-700 dark:hover:bg-neutral-900"
+                    }`}
+                  >
+                    {PRICE_VENDOR_LABEL[vendor]}
+                  </Link>
+                );
+              })}
+            </nav>
+
+            <RangePicker
+              active={range.id}
+              spanDays={spanDays}
+              lastDate={last}
+              exclude={["held"]}
+              hrefFor={(id) =>
+                `/cards/${printing.scryfallId}?finish=${finish}&range=${id}${
+                  priceSource === "tcgplayer" ? "" : `&prices=${priceSource}`
+                }`
+              }
+            />
+          </div>
+          </div>
         </div>
       </header>
 
       <section className="mb-8 rounded-lg border border-neutral-200 p-5 dark:border-neutral-800">
-        <div className="mb-5 flex flex-wrap items-end justify-between gap-4">
-          <div>
-            <h2 className="text-xs text-neutral-600 dark:text-neutral-400">
-              {FINISH_LABEL[finish]} price
-              {stats.currentDate ? ` · ${stats.currentDate}` : ""}
-            </h2>
-            <div className="mt-1 text-3xl font-semibold tabular-nums">
-              {stats.currentCents == null
-                ? "No price"
-                : formatUsd(stats.currentCents)}
-            </div>
-          </div>
-
-          <dl className="flex flex-wrap gap-x-8 gap-y-3 text-sm">
-            <div>
-              <dt className="text-xs text-neutral-600 dark:text-neutral-400">
-                {range.window === null ? "All time" : range.description}
-              </dt>
-              <dd
-                className={`font-medium tabular-nums ${
-                  stats.changeCents == null || stats.changeCents === 0
-                    ? "text-neutral-600 dark:text-neutral-400"
-                    : stats.changeCents > 0
-                      ? "text-emerald-700 dark:text-emerald-400"
-                      : "text-red-700 dark:text-red-400"
-                }`}
-              >
-                {stats.changeCents == null ? (
-                  <span className="text-neutral-400">not enough history</span>
-                ) : (
-                  <>
-                    {stats.changeCents > 0 ? "+" : ""}
-                    {formatUsd(stats.changeCents)}
-                    {stats.changeRatio != null
-                      ? ` (${stats.changeCents > 0 ? "+" : ""}${(stats.changeRatio * 100).toFixed(1)}%)`
-                      : ""}
-                  </>
-                )}
-              </dd>
-            </div>
-            <div>
-              <dt className="text-xs text-neutral-600 dark:text-neutral-400">Low</dt>
-              <dd className="font-medium tabular-nums">
-                {stats.lowCents == null ? "—" : formatUsd(stats.lowCents)}
-                {stats.lowDate ? (
-                  <span className="ml-1 text-xs font-normal text-neutral-400">
-                    {stats.lowDate}
-                  </span>
-                ) : null}
-              </dd>
-            </div>
-            <div>
-              <dt className="text-xs text-neutral-600 dark:text-neutral-400">High</dt>
-              <dd className="font-medium tabular-nums">
-                {stats.highCents == null ? "—" : formatUsd(stats.highCents)}
-                {stats.highDate ? (
-                  <span className="ml-1 text-xs font-normal text-neutral-400">
-                    {stats.highDate}
-                  </span>
-                ) : null}
-              </dd>
-            </div>
-          </dl>
-        </div>
-
-        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-          {/* Same control, markup and labels as the collection chart. Beside
-              the range because it changes the same thing the range does: what
-              the chart is showing, not what the card is. */}
-          <nav aria-label="Price source" className="flex flex-wrap gap-1">
-            {PRICE_VENDORS.map((vendor) => {
-              const current = vendor === priceSource;
-              return (
-                <Link
-                  key={vendor}
-                  href={`/cards/${printing.scryfallId}?finish=${finish}&prices=${vendor}${
-                    requestedRange ? `&range=${requestedRange}` : ""
-                  }`}
-                  scroll={false}
-                  aria-current={current ? "true" : undefined}
-                  className={`rounded-md border px-2.5 py-1 text-xs transition-colors ${
-                    current
-                      ? "border-neutral-900 bg-neutral-900 text-white dark:border-neutral-100 dark:bg-neutral-100 dark:text-neutral-900"
-                      : "border-neutral-300 hover:bg-neutral-50 dark:border-neutral-700 dark:hover:bg-neutral-900"
-                  }`}
-                >
-                  {PRICE_VENDOR_LABEL[vendor]}
-                </Link>
-              );
-            })}
-          </nav>
-
-          <RangePicker
-            active={range.id}
-            spanDays={spanDays}
-            lastDate={last}
-            exclude={["held"]}
-            hrefFor={(id) =>
-              `/cards/${printing.scryfallId}?finish=${finish}&range=${id}${
-                priceSource === "tcgplayer" ? "" : `&prices=${priceSource}`
-              }`
-            }
-          />
-        </div>
-
         <CardPriceChart
           points={visible}
           buylist={
@@ -382,6 +387,7 @@ export default async function CardPage(props: PageProps<"/cards/[scryfallId]">) 
                       src={other.imageUri}
                       alt={`${other.name}, ${other.setName}`}
                       className="min-w-0 truncate"
+                      foil={!other.finishes.includes("nonfoil")}
                     >
                       {other.setName}{" "}
                       <span className="font-mono text-xs text-neutral-600 dark:text-neutral-400">

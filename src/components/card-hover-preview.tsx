@@ -83,6 +83,8 @@ export function CardHoverPreview({
   delayMs = 0,
   /** Track the pointer. Off means anchored to the element. */
   follow = true,
+  /** Give the preview a foil sheen. */
+  foil = false,
 }: {
   src: string | null;
   alt: string;
@@ -90,6 +92,7 @@ export function CardHoverPreview({
   className?: string;
   delayMs?: number;
   follow?: boolean;
+  foil?: boolean;
 }) {
   const [at, setAt] = useState<{ left: number; top: number } | null>(null);
   // Resolved on first use rather than in an effect: a tap on a touchscreen
@@ -157,15 +160,21 @@ export function CardHoverPreview({
         ? createPortal(
             // Plain <img> as everywhere else here: remote Scryfall URLs in a
             // local single-user tool.
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-              src={src}
-              alt={alt}
-              width={WIDTH}
-              height={HEIGHT}
-              className="pointer-events-none fixed z-50 rounded-xl shadow-2xl ring-1 ring-black/10"
+            <span
+              className={`pointer-events-none fixed z-50 block rounded-xl shadow-2xl ring-1 ring-black/10 ${
+                foil ? "foil" : ""
+              }`}
               style={{ left: at.left, top: at.top, width: WIDTH }}
-            />,
+            >
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={src}
+                alt={alt}
+                width={WIDTH}
+                height={HEIGHT}
+                className="block w-full rounded-xl"
+              />
+            </span>,
             document.body,
           )
         : null}

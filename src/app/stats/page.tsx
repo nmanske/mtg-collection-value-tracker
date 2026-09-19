@@ -90,7 +90,12 @@ function CardLine({
   return (
     <li className="flex items-baseline justify-between gap-3 py-1.5 text-sm">
       <span className="min-w-0">
-        <CardHoverPreview src={card.imageUri} alt={card.name} {...NAMED_CARD_PREVIEW}>
+        <CardHoverPreview
+          src={card.imageUri}
+          alt={card.name}
+          foil={card.finish !== "nonfoil"}
+          {...NAMED_CARD_PREVIEW}
+        >
           <Link
             href={cardHref(card)}
             className="underline-offset-4 hover:underline"

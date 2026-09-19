@@ -281,13 +281,16 @@ export default async function CollectionPage(props: PageProps<"/">) {
                 return (
                   <tr
                     key={row.id}
-                    className="border-b border-neutral-100 dark:border-neutral-900"
+                    className={`border-b border-neutral-100 dark:border-neutral-900 ${
+                      row.finish === "nonfoil" ? "" : "foil-row"
+                    }`}
                   >
                     <td className="py-2 pr-3">
                       <div className="font-medium">
                         <CardHoverPreview
                           src={row.imageUri}
                           alt={row.name}
+                          foil={row.finish !== "nonfoil"}
                           {...NAMED_CARD_PREVIEW}
                         >
                           <Link
@@ -310,7 +313,14 @@ export default async function CollectionPage(props: PageProps<"/">) {
                         row.releasedAt,
                       )}
                     </td>
-                    <td className="py-2 pr-3">{FINISH_LABEL[row.finish]}</td>
+                    <td className="py-2 pr-3">
+                      {/* The sheen is on the label rather than the whole row:
+                          a row is mostly numbers, and a band of light crossing
+                          a price is harder to read, not more special. */}
+                      <span className="foil-mark">
+                        {FINISH_LABEL[row.finish]}
+                      </span>
+                    </td>
                     <td className="py-2 pr-3">{row.condition}</td>
                     <td className="py-2 pr-3 text-right tabular-nums">
                       {row.quantity}
