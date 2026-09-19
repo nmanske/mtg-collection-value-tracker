@@ -111,7 +111,12 @@ export interface CollectionStats {
 
   mostValuable: ValuedCard[];
   cheapest: ValuedCard | null;
-  mostCopies: { name: string; scryfallId: string; quantity: number }[];
+  mostCopies: {
+    name: string;
+    scryfallId: string;
+    quantity: number;
+    imageUri: string | null;
+  }[];
 
   gainers: Mover[];
   losers: Mover[];
@@ -262,7 +267,10 @@ export function collectionStats(db: Db): CollectionStats {
       };
     });
 
-  const copies = new Map<string, { name: string; scryfallId: string; quantity: number }>();
+  const copies = new Map<
+    string,
+    { name: string; scryfallId: string; quantity: number; imageUri: string | null }
+  >();
   for (const row of rows) {
     // Grouped by oracle id, so every printing of Sol Ring counts as Sol Ring.
     const existing = copies.get(row.oracleId);
@@ -272,6 +280,7 @@ export function collectionStats(db: Db): CollectionStats {
         name: row.name,
         scryfallId: row.scryfallId,
         quantity: row.quantity,
+        imageUri: row.imageUri,
       });
   }
 

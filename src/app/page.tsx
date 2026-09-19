@@ -6,6 +6,10 @@ import { PortfolioSummaryPanel } from "@/components/portfolio-summary";
 import { VendorTotals } from "@/components/vendor-totals";
 import { listHoldings } from "@/db/queries/holdings";
 import { CollectionControls } from "@/components/collection-controls";
+import {
+  CardHoverPreview,
+  NAMED_CARD_PREVIEW,
+} from "@/components/card-hover-preview";
 import { PrivacyToggle } from "@/components/privacy-toggle";
 import {
   collectionHref,
@@ -281,12 +285,18 @@ export default async function CollectionPage(props: PageProps<"/">) {
                   >
                     <td className="py-2 pr-3">
                       <div className="font-medium">
-                        <Link
-                          href={`/cards/${row.scryfallId}?finish=${row.finish}`}
-                          className="underline-offset-4 hover:underline"
+                        <CardHoverPreview
+                          src={row.imageUri}
+                          alt={row.name}
+                          {...NAMED_CARD_PREVIEW}
                         >
-                          {row.name}
-                        </Link>
+                          <Link
+                            href={`/cards/${row.scryfallId}?finish=${row.finish}`}
+                            className="underline-offset-4 hover:underline"
+                          >
+                            {row.name}
+                          </Link>
+                        </CardHoverPreview>
                       </div>
                     </td>
                     {/* One line, and the same shape a card page uses: set,

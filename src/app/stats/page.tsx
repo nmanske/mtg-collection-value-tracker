@@ -8,6 +8,10 @@ import {
   type Spread,
   collectionStats,
 } from "@/db/queries/stats";
+import {
+  CardHoverPreview,
+  NAMED_CARD_PREVIEW,
+} from "@/components/card-hover-preview";
 import { PrivacyToggle } from "@/components/privacy-toggle";
 import { InfoTip } from "@/components/info-tip";
 import { FINISH_LABEL, formatUsd, printingCode } from "@/lib/format";
@@ -86,12 +90,14 @@ function CardLine({
   return (
     <li className="flex items-baseline justify-between gap-3 py-1.5 text-sm">
       <span className="min-w-0">
-        <Link
-          href={cardHref(card)}
-          className="underline-offset-4 hover:underline"
-        >
-          {card.name}
-        </Link>{" "}
+        <CardHoverPreview src={card.imageUri} alt={card.name} {...NAMED_CARD_PREVIEW}>
+          <Link
+            href={cardHref(card)}
+            className="underline-offset-4 hover:underline"
+          >
+            {card.name}
+          </Link>
+        </CardHoverPreview>{" "}
         <span className="font-mono text-xs text-neutral-600 dark:text-neutral-400">
           {printingCode(card.setCode, card.collectorNumber)}
         </span>
@@ -258,12 +264,18 @@ export default async function StatsPage() {
             {stats.cheapest ? (
               <li className="text-neutral-600 dark:text-neutral-400">
                 Cheapest card:{" "}
-                <Link
-                  href={cardHref(stats.cheapest)}
-                  className="underline-offset-4 hover:underline"
+                <CardHoverPreview
+                  src={stats.cheapest.imageUri}
+                  alt={stats.cheapest.name}
+                  {...NAMED_CARD_PREVIEW}
                 >
-                  {stats.cheapest.name}
-                </Link>{" "}
+                  <Link
+                    href={cardHref(stats.cheapest)}
+                    className="underline-offset-4 hover:underline"
+                  >
+                    {stats.cheapest.name}
+                  </Link>
+                </CardHoverPreview>{" "}
                 at {formatUsd(stats.cheapest.priceCents)}.
               </li>
             ) : null}
@@ -410,12 +422,19 @@ export default async function StatsPage() {
                 key={card.scryfallId}
                 className="flex items-baseline justify-between gap-3 py-1.5 text-sm"
               >
-                <Link
-                  href={`/cards/${card.scryfallId}`}
-                  className="min-w-0 truncate underline-offset-4 hover:underline"
+                <CardHoverPreview
+                  src={card.imageUri}
+                  alt={card.name}
+                  className="min-w-0 truncate"
+                  {...NAMED_CARD_PREVIEW}
                 >
-                  {card.name}
-                </Link>
+                  <Link
+                    href={`/cards/${card.scryfallId}`}
+                    className="underline-offset-4 hover:underline"
+                  >
+                    {card.name}
+                  </Link>
+                </CardHoverPreview>
                 <span className="shrink-0 font-medium tabular-nums">
                   {card.quantity}
                 </span>

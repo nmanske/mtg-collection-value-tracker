@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
 /**
- * Shows a card's art next to the cursor while a row is hovered.
+ * Shows a card's art while a card is hovered.
  *
  * A list of other printings is a list of set names, and the art is what
  * actually distinguishes them — an alternate-art reprint is a different card
@@ -15,7 +15,24 @@ import { createPortal } from "react-dom";
  * ancestor with `overflow` set, and one placed blindly at the cursor runs off
  * the bottom of the window on the last row, which is exactly the row a reader
  * is most likely to be on when they reach the end of a long list.
+ *
+ * Two behaviours, because the two uses want different things. Scanning a list
+ * of printings, the preview tracks the pointer and appears at once: the whole
+ * point is to sweep the list. A card name in running text is passed over
+ * constantly on the way to something else, so there it waits out a short
+ * hover and then sits beside the name, where it does not move under a pointer
+ * that is on its way somewhere.
  */
+
+/**
+ * The settings for a card name in running text, spread at every such site so
+ * they cannot drift apart between pages.
+ *
+ * Half a second: long enough that a pointer crossing a name on its way
+ * somewhere else never triggers it, short enough that deliberately resting on
+ * a name does not feel like waiting.
+ */
+export const NAMED_CARD_PREVIEW = { delayMs: 500, follow: false } as const;
 
 /** Scryfall `normal` art is 488x680. */
 const WIDTH = 240;
@@ -25,6 +42,7 @@ const OFFSET = 18;
 /** Never flush against a window edge. */
 const MARGIN = 8;
 
+/** Where a preview goes for a cursor, or for an element's box. */
 function place(x: number, y: number) {
   const { innerWidth, innerHeight } = window;
   // Right of the cursor by default; flipped to the left when that would
@@ -41,16 +59,37 @@ function place(x: number, y: number) {
   };
 }
 
+/**
+ * Anchored to an element rather than the pointer: beside it, level with it.
+ *
+ * `place` does the clamping, so the rules are identical — the only difference
+ * is what the preview is measured from.
+ */
+function placeBeside(rect: DOMRect) {
+  const from = place(rect.right, rect.top + rect.height / 2);
+  // `place` offsets from a point; against a box the gap should start at the
+  // edge, and flipping left has to clear the whole name rather than its end.
+  return from.left > rect.right
+    ? from
+    : { ...from, left: Math.max(MARGIN, rect.left - OFFSET - WIDTH) };
+}
+
 export function CardHoverPreview({
   src,
   alt,
   children,
   className,
+  /** Hover this long before the preview appears. 0 shows it immediately. */
+  delayMs = 0,
+  /** Track the pointer. Off means anchored to the element. */
+  follow = true,
 }: {
   src: string | null;
   alt: string;
   children: React.ReactNode;
   className?: string;
+  delayMs?: number;
+  follow?: boolean;
 }) {
   const [at, setAt] = useState<{ left: number; top: number } | null>(null);
   // Resolved on first use rather than in an effect: a tap on a touchscreen
@@ -58,12 +97,23 @@ export function CardHoverPreview({
   // pointer to move it away.
   const hoverable = useRef<boolean | null>(null);
 
-  // A preview anchored to the pointer goes stale the moment the page moves
-  // under it, and a wheel over the list is the common way to reach the rest
-  // of it.
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const cancel = () => {
+    if (timer.current) clearTimeout(timer.current);
+    timer.current = null;
+  };
+  // A timer outliving the element would show a preview for a card that is no
+  // longer on screen.
+  useEffect(() => cancel, []);
+
+  // A preview goes stale the moment the page moves under it, and a wheel over
+  // a list is the common way to reach the rest of it.
   useEffect(() => {
     if (!at) return;
-    const clear = () => setAt(null);
+    const clear = () => {
+      cancel();
+      setAt(null);
+    };
     window.addEventListener("scroll", clear, { passive: true });
     return () => window.removeEventListener("scroll", clear);
   }, [at]);
@@ -72,7 +122,25 @@ export function CardHoverPreview({
     if (!src) return;
     hoverable.current ??= window.matchMedia("(hover: hover)").matches;
     if (!hoverable.current) return;
+
+    if (!follow) {
+      // Already showing: a move within the name must not re-arm the timer and
+      // make the preview flicker.
+      if (at || timer.current) return;
+      const rect = event.currentTarget.getBoundingClientRect();
+      timer.current = setTimeout(() => {
+        timer.current = null;
+        setAt(placeBeside(rect));
+      }, delayMs);
+      return;
+    }
+
     setAt(place(event.clientX, event.clientY));
+  };
+
+  const leave = () => {
+    cancel();
+    setAt(null);
   };
 
   return (
@@ -81,7 +149,7 @@ export function CardHoverPreview({
         className={className}
         onMouseEnter={track}
         onMouseMove={track}
-        onMouseLeave={() => setAt(null)}
+        onMouseLeave={leave}
       >
         {children}
       </span>
