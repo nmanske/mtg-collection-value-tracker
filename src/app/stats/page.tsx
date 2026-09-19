@@ -303,9 +303,9 @@ export default async function StatsPage() {
         />
         {allTime ? (
           <Stat
-            label="Market, all history"
+            label={`Market since ${allTime.from.slice(0, 4)}`}
             value={`${allTime.ratio > 0 ? "+" : ""}${(allTime.ratio * 100).toFixed(1)}%`}
-            detail={`today's cards since ${allTime.from}, not yours`}
+            detail="what today's cards did, owned or not"
           />
         ) : null}
       </dl>
@@ -322,10 +322,10 @@ export default async function StatsPage() {
             <span className="font-medium text-neutral-800 dark:text-neutral-200">
               The market, not your collection.
             </span>{" "}
-            These three measure what today&rsquo;s cards did across the whole
-            price history, whether or not you owned them at the time. For what
-            your collection has actually done, the dashboard chart starts when
-            you bought your first card.
+            The three panels below price the cards you hold today against the
+            whole price history, whether or not you owned them at the time. For
+            what your collection has actually done, the dashboard chart starts
+            when you bought your first card.
           </p>
           <div className="mb-5 grid grid-cols-1 gap-5 lg:grid-cols-2 3xl:grid-cols-3">
           <Panel
