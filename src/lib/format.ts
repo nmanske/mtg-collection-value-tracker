@@ -25,14 +25,19 @@ export const FINISH_LABEL: Record<Finish, string> = {
   etched: "Etched",
 };
 
-/** e.g. "BLB 280" — how players actually identify a printing. */
+/**
+ * e.g. "BLB #280 (2024)" — how players actually identify a printing.
+ *
+ * The hash marks the collector number as a number rather than a second part of
+ * the set code, which matters where the two sit side by side.
+ */
 export function printingCode(
   setCode: string,
   collectorNumber: string,
   /** The set's release date, `YYYY-MM-DD`. Omitted before a metadata ingest. */
   releasedAt?: string | null,
 ): string {
-  const base = `${setCode.toUpperCase()} ${collectorNumber}`;
+  const base = `${setCode.toUpperCase()} #${collectorNumber}`;
   const year = releaseYear(releasedAt);
   return year ? `${base} (${year})` : base;
 }

@@ -27,7 +27,7 @@ import {
   FINISH_LABEL,
   daysAgo,
   formatUsd,
-  releaseYear,
+  printingCode,
 } from "@/lib/format";
 
 // Reads the collection on every request; adds and removes must show at once.
@@ -271,24 +271,16 @@ export default async function CollectionPage(props: PageProps<"/">) {
                         </Link>
                       </div>
                     </td>
-                    {/* The year sits beside the set code, not the collector
-                        number. It describes the set, and codes are a steady
-                        three or four characters where numbers run from "6" to
-                        "280★" — hanging the year off those left it ragged down
-                        the column. The fixed-width code absorbs the remaining
-                        one-character difference. */}
-                    <td className="py-2 pr-3">
-                      <div className="font-mono text-xs">
-                        <span className="inline-block w-12 uppercase">
-                          {row.setCode}
-                        </span>
-                        <span className="text-neutral-600 dark:text-neutral-400">
-                          {releaseYear(row.releasedAt) ?? ""}
-                        </span>
-                      </div>
-                      <div className="font-mono text-xs text-neutral-600 dark:text-neutral-400">
-                        #{row.collectorNumber}
-                      </div>
+                    {/* One line, and the same shape a card page uses: set,
+                        number, year. Splitting the number onto a second row
+                        made the cell two lines tall down the whole table to
+                        save a few characters of width. */}
+                    <td className="py-2 pr-3 whitespace-nowrap font-mono text-xs">
+                      {printingCode(
+                        row.setCode,
+                        row.collectorNumber,
+                        row.releasedAt,
+                      )}
                     </td>
                     <td className="py-2 pr-3">{FINISH_LABEL[row.finish]}</td>
                     <td className="py-2 pr-3">{row.condition}</td>
