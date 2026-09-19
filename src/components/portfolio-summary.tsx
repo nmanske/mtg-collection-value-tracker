@@ -156,9 +156,15 @@ export function PortfolioSummaryPanel({
                   {summary.allTime.changeCents != null &&
                   summary.marketOnly.changeCents != null ? (
                     <>
-                      Of the {formatUsd(summary.allTime.changeCents)} all-time
-                      change, {formatUsd(summary.marketOnly.changeCents)} came
-                      from prices and the rest from cards arriving.{" "}
+                      Of the{" "}
+                      <span className="money">
+                        {formatUsd(summary.allTime.changeCents)}
+                      </span>{" "}
+                      all-time change,{" "}
+                      <span className="money">
+                        {formatUsd(summary.marketOnly.changeCents)}
+                      </span>{" "}
+                      came from prices and the rest from cards arriving.{" "}
                     </>
                   ) : null}
                   <Link href="/faq#two-lines" className="underline underline-offset-2">

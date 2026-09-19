@@ -270,5 +270,11 @@ set `REBUILD_COMMAND` empty — one of them was rebuilding the real database.
   worth it only if NAS space ever matters, which at 16 TB it does not.
 - **`refs/original/` still holds the pre-rewrite history** with the old work
   email. Local only, never pushed. Purge when the remote is trusted.
+- **REVERT LATER: the price blur is on by default and gated by a password.**
+  Added 2026-09-18 to stop people on the LAN reading the totals over a
+  shoulder. `PRIVACY_PASSWORD` in `src/components/privacy-toggle.tsx` ships in
+  the client bundle and the figures are in the HTML regardless — the blur is
+  CSS. It is a screen cover, not a security control. Reverting means: default
+  the `PrivacyScript` check back to `=== "1"` and drop the password form.
 - **`AGENTS.md` is tracked.** Written by `next dev`, names no vendor, recreated
   if deleted. Left deliberately; revisit if it becomes noise.
