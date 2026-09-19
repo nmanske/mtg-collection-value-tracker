@@ -138,6 +138,14 @@ assert.equal(stats.totalCards, 1 + 4 + 1 + 1 + 1 + 3 + 2);
 assert.equal(stats.totalHoldings, 7);
 assert.equal(stats.distinctSets, 7);
 
+// Unit prices, one per priced holding and not weighted by quantity:
+// 12, 900, 200, 10000, 1100, 200, 150 -> median 200, mean 1,794.57 -> 1,795.
+assert.equal(stats.medianCardCents, 200);
+assert.equal(stats.meanCardCents, 1_795);
+// The pair is the point: one $100 card drags the mean an order of magnitude
+// above the typical holding, which is what the two figures together say.
+assert.ok(stats.meanCardCents > stats.medianCardCents * 5);
+
 // --- movers ---
 // The penny card doubled but is below the floor, so it is not a "riser".
 assert.ok(

@@ -293,7 +293,7 @@ export default async function CollectionPage(props: PageProps<"/">) {
                         number, year. Splitting the number onto a second row
                         made the cell two lines tall down the whole table to
                         save a few characters of width. */}
-                    <td className="py-2 pr-3 whitespace-nowrap font-mono text-xs">
+                    <td className="py-2 pr-3 whitespace-nowrap font-mono text-xs text-neutral-600 dark:text-neutral-400">
                       {printingCode(
                         row.setCode,
                         row.collectorNumber,

@@ -93,8 +93,16 @@ export interface CollectionStats {
   totalHoldings: number;
   distinctPrintings: number;
   distinctSets: number;
-  /** Median unit price — the typical card, which a mean would badly overstate. */
+  /** Median unit price — the typical card. */
   medianCardCents: number;
+  /**
+   * Mean unit price.
+   *
+   * Shown beside the median rather than instead of it: the gap between the
+   * two is the shape of the collection. A mean well above the median says a
+   * handful of cards carry it, which is the usual case.
+   */
+  meanCardCents: number;
   /** How few holdings carry half the value. */
   holdingsForHalfValue: number;
   underOneDollar: number;
@@ -333,6 +341,13 @@ export function collectionStats(db: Db): CollectionStats {
     distinctPrintings: new Set(rows.map((row) => row.scryfallId)).size,
     distinctSets: new Set(rows.map((row) => row.setCode)).size,
     medianCardCents: unitValues[Math.floor(unitValues.length / 2)] ?? 0,
+    meanCardCents:
+      unitValues.length > 0
+        ? Math.round(
+            unitValues.reduce((sum, value) => sum + value, 0) /
+              unitValues.length,
+          )
+        : 0,
     holdingsForHalfValue,
     underOneDollar: cheapValues.length,
     underOneDollarShare:

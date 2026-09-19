@@ -98,15 +98,6 @@ export default function FaqPage() {
         than a better price.
       </Q>
 
-      <Q id="like-for-like" question="How is “best year” calculated?">
-        Each month compares only the cards priced at both of its ends, and the
-        months are chained together. A card cannot be priced before it was
-        printed, so reading the raw chart instead reports years of new printings
-        as growth — on this collection, +58% against a true &minus;13%. Those
-        figures cover today&rsquo;s cards across all history, whether or not you
-        owned them then.
-      </Q>
-
       <Q id="unpriced" question="What happens to cards with no price?">
         They are left out of totals rather than counted as $0, and flagged
         wherever that changes a figure.
