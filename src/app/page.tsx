@@ -1,3 +1,4 @@
+import { Fragment } from "react";
 import Link from "next/link";
 
 import { db } from "@/db";
@@ -109,7 +110,11 @@ export default async function CollectionPage(props: PageProps<"/">) {
     dir: activeDir,
     filter: activeFilter,
     search,
+    // The table follows the vendor toggle, as the chart above it does.
+    vendor: priceSource,
+    buylist: priceSource === "cardkingdom",
   });
+  const showBuylist = priceSource === "cardkingdom";
   const summary = portfolioSummary(db, priceSource);
   // Card Kingdom is the only vendor here that publishes a buy price, so the
   // "if sold today" line exists on their view and nowhere else.
@@ -238,16 +243,29 @@ export default async function CollectionPage(props: PageProps<"/">) {
                     ["acquired", "Acquired", undefined],
                   ] as const
                 ).map(([column, label, align]) => (
-                  <SortHeader
-                    key={column}
-                    column={column}
-                    label={label}
-                    align={align}
-                    sort={activeSort}
-                    dir={activeDir}
-                    filter={activeFilter}
-                    search={search}
-                  />
+                  <Fragment key={column}>
+                    <SortHeader
+                      column={column}
+                      label={label}
+                      align={align}
+                      sort={activeSort}
+                      dir={activeDir}
+                      filter={activeFilter}
+                      search={search}
+                    />
+                    {/* Beside Value, where it is compared, rather than at the
+                        end of the row. Not sortable: there is no buylist
+                        ordering in the query, and a header that looks
+                        clickable and is not is worse than one that does not. */}
+                    {showBuylist && column === "value" ? (
+                      <th
+                        scope="col"
+                        className="py-2 pr-3 text-right font-medium"
+                      >
+                        CK pays
+                      </th>
+                    ) : null}
+                  </Fragment>
                 ))}
               </tr>
             </thead>
@@ -318,6 +336,15 @@ export default async function CollectionPage(props: PageProps<"/">) {
                         ? "—"
                         : formatUsd(row.unitPriceCents * row.quantity)}
                     </td>
+                    {/* Unit, not line: it sits beside the unit ask, and the
+                        pair is what a reader compares. */}
+                    {showBuylist ? (
+                      <td className="py-2 pr-3 text-right tabular-nums text-neutral-600 dark:text-neutral-400">
+                        {row.buylistCents == null
+                          ? "—"
+                          : formatUsd(row.buylistCents)}
+                      </td>
+                    ) : null}
                     <td className="py-2 pr-3 tabular-nums text-neutral-600 dark:text-neutral-400">
                       {row.dateAdded}
                     </td>

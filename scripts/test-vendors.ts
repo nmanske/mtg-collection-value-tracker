@@ -9,10 +9,12 @@ import { drizzle } from "drizzle-orm/better-sqlite3";
 import { migrate } from "drizzle-orm/better-sqlite3/migrator";
 
 import { openDatabase } from "@/db/client";
-import { countHoldings } from "@/db/queries/holdings";
+import { countHoldings, listHoldings } from "@/db/queries/holdings";
+import { FINISH_CODES } from "@/db/codec";
 import {
   collectionByVendor,
   hasVendorData,
+  latestQuotesFor,
   vendorQuotes,
   vendorSeries,
 } from "@/db/queries/vendors";
@@ -282,6 +284,67 @@ assert.equal(
   vendorSeries(db, BETA, "nonfoil", "cardkingdom", "retail").length,
   0,
 );
+
+// --- batch quotes, for lists of printings ---
+const batch = latestQuotesFor(
+  db,
+  [
+    { printingKey: ALPHA, finish: "nonfoil" },
+    { printingKey: BETA, finish: "nonfoil" },
+  ],
+  "cardkingdom",
+);
+assert.deepEqual(batch.get(`${ALPHA}.${FINISH_CODES.nonfoil}`), {
+  retailCents: 1_200,
+  buylistCents: 600,
+});
+// Beta is TCGplayer-only, so Card Kingdom has nothing to say about it — and
+// says nothing, rather than reporting a zero.
+assert.equal(batch.get(`${BETA}.${FINISH_CODES.nonfoil}`), undefined);
+assert.equal(latestQuotesFor(db, [], "cardkingdom").size, 0);
+
+// The TCGplayer buylist row seeded above is not a series the app reports, and
+// must not reappear here through the union.
+const tcgBatch = latestQuotesFor(
+  db,
+  [{ printingKey: ALPHA, finish: "nonfoil" }],
+  "tcgplayer",
+);
+assert.deepEqual(tcgBatch.get(`${ALPHA}.${FINISH_CODES.nonfoil}`), {
+  retailCents: 1_000,
+  buylistCents: null,
+});
+
+// --- the collection table follows the vendor ---
+const tcgRows = listHoldings(db, { vendor: "tcgplayer" }).rows;
+const alphaTcg = tcgRows.find((row) => row.printingKey === ALPHA)!;
+assert.equal(alphaTcg.unitPriceCents, 1_000);
+// Not asked for, so not read: null here means "not requested", not "unquoted".
+assert.equal(alphaTcg.buylistCents, null);
+
+const ckRows = listHoldings(db, {
+  vendor: "cardkingdom",
+  buylist: true,
+}).rows;
+const alphaCk = ckRows.find((row) => row.printingKey === ALPHA)!;
+assert.equal(alphaCk.unitPriceCents, 1_200, "unit follows the selected vendor");
+assert.equal(alphaCk.buylistCents, 600);
+// Card Kingdom does not quote Beta at all, on either side.
+const betaCk = ckRows.find((row) => row.printingKey === BETA)!;
+assert.equal(betaCk.unitPriceCents, null);
+assert.equal(betaCk.buylistCents, null);
+
+// Sorting reads the same price expression, so it follows the vendor too.
+const byUnit = (vendor: "tcgplayer" | "cardkingdom") =>
+  listHoldings(db, { vendor, sort: "unit", dir: "desc" }).rows.map(
+    (row) => row.printingKey,
+  );
+// Alpha (1,000) beats Beta (500) at TCGplayer and Gamma (100) trails both.
+assert.deepEqual(byUnit("tcgplayer"), [ALPHA, BETA, GAMMA]);
+// At Card Kingdom, Gamma's delisted 9,900 leads and Beta has no quote at all,
+// so it sorts last rather than first. A row shows a stale price where a total
+// excludes it: the table is the card page's answer, not the portfolio's.
+assert.deepEqual(byUnit("cardkingdom"), [GAMMA, ALPHA, BETA]);
 
 sqlite.close();
 cleanup();

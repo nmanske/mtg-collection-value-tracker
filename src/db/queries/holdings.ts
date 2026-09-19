@@ -1,6 +1,6 @@
 import { and, asc, eq, sql, type SQL } from "drizzle-orm";
 
-import { FINISH_CODES } from "@/db/codec";
+import { FINISH_CODES, SIDE_CODES, VENDOR_CODES } from "@/db/codec";
 import type { Db } from "@/db/queries/printings";
 import {
   DEFAULT_FILTER,
@@ -17,6 +17,8 @@ import {
   type HoldingSource,
   type NewHolding,
   printings,
+  type Vendor,
+  vendorPrices,
 } from "@/db/schema";
 
 export interface HoldingRow {
@@ -42,6 +44,16 @@ export interface HoldingRow {
   priceDate: string | null;
   /** True when the unit price is the user's manual override. */
   overridden: boolean;
+  /**
+   * What the selected vendor would pay for one, or null.
+   *
+   * Only populated when the caller asks for it, which only the Card Kingdom
+   * view does — nobody else here publishes a buy price. Null therefore means
+   * "not quoted" only when a buylist was requested.
+   */
+  buylistCents: number | null;
+  /** The date `buylistCents` came from. */
+  buylistDate: string | null;
 }
 
 export interface CollectionTotals {
@@ -129,6 +141,17 @@ export interface ListOptions {
   filter?: FilterId;
   /** Case-insensitive substring of the card or set name. */
   search?: string;
+  /**
+   * Whose retail price the Unit and Value columns show.
+   *
+   * The table used to be TCGplayer-only while the chart above it followed the
+   * vendor toggle, so switching to Card Kingdom changed the headline and left
+   * every row beneath it unchanged. Sorting reads the same expression, so a
+   * "most valuable" ordering follows the vendor too.
+   */
+  vendor?: Vendor;
+  /** Also read what the vendor would pay. Card Kingdom is the only one that says. */
+  buylist?: boolean;
 }
 
 export function listHoldings(
@@ -141,21 +164,49 @@ export function listHoldings(
   const filter = options.filter ?? DEFAULT_FILTER;
   const search = options.search?.trim() ?? "";
 
-  const latestPrice = sql<number | null>`(
-    select ps.price_cents
+  const vendor = options.vendor ?? "tcgplayer";
+
+  /**
+   * Latest `column` for one holding from the selected vendor's retail series.
+   *
+   * TCGplayer retail lives in `price_snapshots` and every other series in
+   * `vendor_prices`; see `queries/vendors.ts` for why the two are not merged.
+   * Both lookups run along their table's primary key, so this is a short range
+   * scan per row rather than a scan of either table.
+   */
+  const latestRetail = <T>(column: "price_cents" | "date") =>
+    vendor === "tcgplayer"
+      ? sql<T>`(
+    select ps.${sql.raw(column)}
     from price_snapshots ps
     where ps.printing_key = ${holdings.printingKey}
       and ps.finish = ${holdings.finish}
     order by ps.date desc
     limit 1
+  )`
+      : sql<T>`(
+    select vp.${sql.raw(column)}
+    from ${vendorPrices} vp
+    where vp.printing_key = ${holdings.printingKey}
+      and vp.finish = ${holdings.finish}
+      and vp.vendor = ${VENDOR_CODES[vendor]}
+      and vp.side = ${SIDE_CODES.retail}
+    order by vp.date desc
+    limit 1
   )`;
 
-  const latestDate = sql<string | null>`(
-    select ps.date
-    from price_snapshots ps
-    where ps.printing_key = ${holdings.printingKey}
-      and ps.finish = ${holdings.finish}
-    order by ps.date desc
+  const latestPrice = latestRetail<number | null>("price_cents");
+  const latestDate = latestRetail<string | null>("date");
+
+  const latestBuylist = <T>(column: "price_cents" | "date") =>
+    sql<T>`(
+    select vp.${sql.raw(column)}
+    from ${vendorPrices} vp
+    where vp.printing_key = ${holdings.printingKey}
+      and vp.finish = ${holdings.finish}
+      and vp.vendor = ${VENDOR_CODES[vendor]}
+      and vp.side = ${SIDE_CODES.buylist}
+    order by vp.date desc
     limit 1
   )`;
 
@@ -270,6 +321,14 @@ export function listHoldings(
       priceOverrideCents: holdings.priceOverrideCents,
       snapshotPriceCents: latestPrice,
       priceDate: latestDate,
+      // Read as a constant when unwanted, so the shape of the row does not
+      // depend on the option and the subquery is not paid for.
+      buylistCents: options.buylist
+        ? latestBuylist<number | null>("price_cents")
+        : sql<number | null>`null`,
+      buylistDate: options.buylist
+        ? latestBuylist<string | null>("date")
+        : sql<string | null>`null`,
     })
     .from(holdings)
     .innerJoin(printings, eq(printings.id, holdings.printingKey))
@@ -306,6 +365,8 @@ export function listHoldings(
       unitPriceCents,
       priceDate: overridden ? null : row.priceDate,
       overridden,
+      buylistCents: row.buylistCents ?? null,
+      buylistDate: row.buylistDate ?? null,
     };
   });
 

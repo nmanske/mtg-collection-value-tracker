@@ -342,6 +342,59 @@ export function vendorSeries(
     .all(printingKey, FINISH_CODES[finish]) as VendorSeriesPoint[];
 }
 
+export interface SideQuotes {
+  retailCents: number | null;
+  buylistCents: number | null;
+}
+
+/**
+ * One vendor's latest ask and bid for many printings at once.
+ *
+ * For lists — the other printings of a card — where a query per row would be
+ * dozens of round trips. Keyed `printingKey.finishCode`, because a printing
+ * can be quoted differently foil and non-foil.
+ *
+ * Staleness is not reported here. A list of forty printings is read for
+ * comparison rather than for a decision on any one of them, and forty
+ * asterisks say less than none.
+ */
+export function latestQuotesFor(
+  db: Db,
+  printings: { printingKey: number; finish: Finish }[],
+  vendor: Vendor,
+): Map<string, SideQuotes> {
+  const quotes = new Map<string, SideQuotes>();
+  if (printings.length === 0) return quotes;
+
+  const keys = [...new Set(printings.map((row) => row.printingKey))];
+  const placeholders = keys.map(() => "?").join(", ");
+  const rows = client(db)
+    .prepare(
+      `select printing_key as printingKey, finish, side,
+              -- SQLite takes the non-aggregated columns from the max() row.
+              max(date) as date, price_cents as priceCents
+         from (${ALL_VENDOR_PRICES})
+        where vendor = ${VENDOR_CODES[vendor]}
+          and printing_key in (${placeholders})
+        group by printing_key, finish, side`,
+    )
+    .all(...keys) as {
+    printingKey: number;
+    finish: number;
+    side: number;
+    priceCents: number;
+  }[];
+
+  for (const row of rows) {
+    const key = `${row.printingKey}.${row.finish}`;
+    const entry = quotes.get(key) ?? { retailCents: null, buylistCents: null };
+    if (row.side === SIDE_CODES.buylist) entry.buylistCents = row.priceCents;
+    else entry.retailCents = row.priceCents;
+    quotes.set(key, entry);
+  }
+  return quotes;
+}
+
 /** Whether any vendor data exists at all, for empty states. */
 export function hasVendorData(db: Db): boolean {
   return (

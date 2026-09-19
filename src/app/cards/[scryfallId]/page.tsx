@@ -19,7 +19,12 @@ import {
   PRICE_VENDORS,
   type PriceVendor,
 } from "@/db/queries/valuation";
-import { vendorQuotes, vendorSeries } from "@/db/queries/vendors";
+import {
+  latestQuotesFor,
+  vendorQuotes,
+  vendorSeries,
+} from "@/db/queries/vendors";
+import { FINISH_CODES } from "@/db/codec";
 import { FINISHES, type Finish } from "@/db/schema";
 import { FINISH_LABEL, formatUsd, printingCode } from "@/lib/format";
 import { rangeStart, resolveRange, spanInDays } from "@/lib/ranges";
@@ -100,6 +105,21 @@ export default async function CardPage(props: PageProps<"/cards/[scryfallId]">) 
   const owned = holdingsForPrinting(db, printing.id);
   const quotes = vendorQuotes(db, printing.id, finish);
   const others = otherPrintings(db, printing.oracleId, printing.scryfallId);
+  // Other printings are priced from `price_snapshots`, which is TCGplayer
+  // retail only. On the Card Kingdom view that left the list contradicting
+  // every other figure on the page, so their quotes are read in one pass and
+  // substituted -- ask and bid, as the collection table shows them.
+  const otherQuotes =
+    priceSource === "cardkingdom"
+      ? latestQuotesFor(
+          db,
+          others.map((other) => ({
+            printingKey: other.id,
+            finish: other.finishes[0] ?? "nonfoil",
+          })),
+          "cardkingdom",
+        )
+      : null;
 
   const ownedForFinish = owned.filter((holding) => holding.finish === finish);
   const ownedQuantity = ownedForFinish.reduce(
@@ -335,9 +355,15 @@ export default async function CardPage(props: PageProps<"/cards/[scryfallId]">) 
           </h2>
           <ul className="flex flex-col divide-y divide-neutral-100 dark:divide-neutral-900">
             {others.map((other) => {
-              const price = other.prices.find(
-                (candidate) => candidate.finish === other.finishes[0],
+              const otherFinish = other.finishes[0] ?? "nonfoil";
+              const quote = otherQuotes?.get(
+                `${other.id}.${FINISH_CODES[otherFinish]}`,
               );
+              const askCents = otherQuotes
+                ? (quote?.retailCents ?? null)
+                : (other.prices.find(
+                    (candidate) => candidate.finish === otherFinish,
+                  )?.priceCents ?? null);
               return (
                 <li key={other.scryfallId}>
                   <Link
@@ -355,7 +381,15 @@ export default async function CardPage(props: PageProps<"/cards/[scryfallId]">) 
                       </span>
                     </span>
                     <span className="shrink-0 tabular-nums text-neutral-600 dark:text-neutral-400">
-                      {price ? formatUsd(price.priceCents) : "no price"}
+                      {askCents == null ? "no price" : formatUsd(askCents)}
+                      {/* What they would pay, beside what they ask. Shown only
+                          where it exists: a printing Card Kingdom sells but
+                          does not buy is the common case, not an error. */}
+                      {quote?.buylistCents != null ? (
+                        <span className="ml-2 text-xs">
+                          pays {formatUsd(quote.buylistCents)}
+                        </span>
+                      ) : null}
                     </span>
                   </Link>
                 </li>
