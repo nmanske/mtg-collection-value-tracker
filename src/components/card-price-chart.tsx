@@ -115,6 +115,11 @@ function CardPriceChartBody({
     (buylist ?? []).map((point) => [point.date, point.priceCents]),
   );
   const hasBuylist = buylistByDate.size > 0;
+  // The caller passes a buylist only on the Card Kingdom view, so this says
+  // "Card Kingdom is selected" where hasBuylist says "there is a line to
+  // draw". The table column follows the selection: a card nobody buys should
+  // say so with dashes, not by quietly dropping the column.
+  const buylistSelected = buylist != null;
 
   const full: Row[] = points.map((point) => ({
     date: point.date,
@@ -299,14 +304,16 @@ function CardPriceChartBody({
                 <th scope="col" className="py-1 pr-4 font-medium">
                   Date
                 </th>
+                {/* Named as the chart names them: the table is the same data
+                    read a different way, not a second vocabulary. */}
                 <th scope="col" className="py-1 pr-4 text-right font-medium">
-                  Price
+                  Retail
                 </th>
                 {/* The table carries every series the chart draws, or it is
                     not an alternative to it. */}
-                {hasBuylist ? (
+                {buylistSelected ? (
                   <th scope="col" className="py-1 text-right font-medium">
-                    If sold today
+                    Card Kingdom buylist
                   </th>
                 ) : null}
               </tr>
@@ -330,7 +337,7 @@ function CardPriceChartBody({
                     ) : null}
                   </td>
                   {/* A day Card Kingdom did not publish is blank, not zero. */}
-                  {hasBuylist ? (
+                  {buylistSelected ? (
                     <td className="py-0.5 text-right tabular-nums">
                       {row.buylistCents == null
                         ? "—"

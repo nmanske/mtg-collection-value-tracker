@@ -147,6 +147,8 @@ function PortfolioChartBody({
     (buylistPoints ?? []).map((point) => [point.date, point.valueCents]),
   );
   const hasBuylist = buylistByDate.size > 0;
+  // See card-price-chart: selected is not the same question as has data.
+  const buylistSelected = buylistPoints != null;
 
   const full: ChartPoint[] = points.map((point) => ({
     date: point.date,
@@ -399,7 +401,7 @@ function PortfolioChartBody({
                 </th>
                 {/* The table carries every series the chart draws, or it is
                     not an alternative to it. Same label as the legend. */}
-                {hasBuylist ? (
+                {buylistSelected ? (
                   <th scope="col" className="py-1 pr-4 text-right font-medium">
                     If sold today
                   </th>
@@ -421,7 +423,7 @@ function PortfolioChartBody({
                   </td>
                   {/* A day Card Kingdom did not publish is blank, not zero —
                       the same reason the line uses connectNulls. */}
-                  {hasBuylist ? (
+                  {buylistSelected ? (
                     <td className="py-0.5 pr-4 text-right tabular-nums">
                       {point.buylistCents == null ? (
                         "—"

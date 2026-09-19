@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
+import { CardHoverPreview } from "@/components/card-hover-preview";
 import { CardImage } from "@/components/card-image";
 import { CardPriceChart } from "@/components/card-price-chart";
 import { RangePicker } from "@/components/range-picker";
@@ -82,10 +83,13 @@ export default async function CardPage(props: PageProps<"/cards/[scryfallId]">) 
   // Card Kingdom is the only vendor kept here that publishes a buy price, so
   // the second line exists on their view and nowhere else — exactly as on the
   // collection chart.
+  // Undefined rather than empty on the other view: the chart reads the
+  // difference as "not selected" against "selected, but this card is not
+  // bought", and only the second should get a column of dashes.
   const buylist =
     priceSource === "cardkingdom"
       ? vendorSeries(db, printing.id, finish, "cardkingdom", "buylist")
-      : [];
+      : undefined;
 
   // The range governs every figure in the price panel, not just the chart: a
   // "high" that ignored the selected window would contradict the line drawn
@@ -325,7 +329,9 @@ export default async function CardPage(props: PageProps<"/cards/[scryfallId]">) 
         <CardPriceChart
           points={visible}
           buylist={
-            from ? buylist.filter((point) => point.date >= from) : buylist
+            buylist && from
+              ? buylist.filter((point) => point.date >= from)
+              : buylist
           }
         />
 
@@ -370,7 +376,13 @@ export default async function CardPage(props: PageProps<"/cards/[scryfallId]">) 
                     href={`/cards/${other.scryfallId}`}
                     className="flex items-baseline justify-between gap-4 py-2 text-sm hover:bg-neutral-50 dark:hover:bg-neutral-900"
                   >
-                    <span className="min-w-0 truncate">
+                    {/* The art is what tells two printings apart; the set
+                        name often does not. */}
+                    <CardHoverPreview
+                      src={other.imageUri}
+                      alt={`${other.name}, ${other.setName}`}
+                      className="min-w-0 truncate"
+                    >
                       {other.setName}{" "}
                       <span className="font-mono text-xs text-neutral-600 dark:text-neutral-400">
                         {printingCode(
@@ -379,7 +391,7 @@ export default async function CardPage(props: PageProps<"/cards/[scryfallId]">) 
                           other.releasedAt,
                         )}
                       </span>
-                    </span>
+                    </CardHoverPreview>
                     <span className="shrink-0 tabular-nums text-neutral-600 dark:text-neutral-400">
                       {askCents == null ? "no price" : formatUsd(askCents)}
                       {/* What they would pay, beside what they ask. Shown only
