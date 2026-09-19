@@ -302,9 +302,13 @@ function CardPriceChartBody({
                 <th scope="col" className="py-1 pr-4 text-right font-medium">
                   Price
                 </th>
-                <th scope="col" className="py-1 font-medium">
-                  Source
-                </th>
+                {/* The table carries every series the chart draws, or it is
+                    not an alternative to it. */}
+                {hasBuylist ? (
+                  <th scope="col" className="py-1 text-right font-medium">
+                    If sold today
+                  </th>
+                ) : null}
               </tr>
             </thead>
             <tbody>
@@ -313,10 +317,26 @@ function CardPriceChartBody({
                   <td className="py-0.5 pr-4 tabular-nums">{row.date}</td>
                   <td className="py-0.5 pr-4 text-right tabular-nums">
                     {formatUsd(row.priceCents)}
+                    {/* The source column said "mtgjson" on every tracked row
+                        and carried one bit of real information, which moves
+                        here: an estimated price is not a quoted one. */}
+                    {row.estimated ? (
+                      <span
+                        className="ml-1.5 text-[var(--viz-muted)]"
+                        title="Estimated, not a tracked price"
+                      >
+                        est.
+                      </span>
+                    ) : null}
                   </td>
-                  <td className="py-0.5">
-                    {row.estimated ? "estimated" : row.source}
-                  </td>
+                  {/* A day Card Kingdom did not publish is blank, not zero. */}
+                  {hasBuylist ? (
+                    <td className="py-0.5 text-right tabular-nums">
+                      {row.buylistCents == null
+                        ? "—"
+                        : formatUsd(row.buylistCents)}
+                    </td>
+                  ) : null}
                 </tr>
               ))}
             </tbody>

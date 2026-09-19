@@ -397,6 +397,13 @@ function PortfolioChartBody({
                 <th scope="col" className="py-1 pr-4 text-right font-medium">
                   As held
                 </th>
+                {/* The table carries every series the chart draws, or it is
+                    not an alternative to it. Same label as the legend. */}
+                {hasBuylist ? (
+                  <th scope="col" className="py-1 pr-4 text-right font-medium">
+                    If sold today
+                  </th>
+                ) : null}
                 <th scope="col" className="py-1 pr-4 text-right font-medium">
                   Holdings
                 </th>
@@ -412,6 +419,19 @@ function PortfolioChartBody({
                   <td className="py-0.5 pr-4 text-right tabular-nums">
                     <span className="money">{formatUsd(point.valueCents)}</span>
                   </td>
+                  {/* A day Card Kingdom did not publish is blank, not zero —
+                      the same reason the line uses connectNulls. */}
+                  {hasBuylist ? (
+                    <td className="py-0.5 pr-4 text-right tabular-nums">
+                      {point.buylistCents == null ? (
+                        "—"
+                      ) : (
+                        <span className="money">
+                          {formatUsd(point.buylistCents)}
+                        </span>
+                      )}
+                    </td>
+                  ) : null}
                   <td className="py-0.5 pr-4 text-right tabular-nums">
                     {point.holdingsHeld.toLocaleString()}
                   </td>
