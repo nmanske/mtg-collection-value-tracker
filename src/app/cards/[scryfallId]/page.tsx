@@ -149,7 +149,7 @@ export default async function CardPage(props: PageProps<"/cards/[scryfallId]">) 
             src={printing.imageUriLarge ?? printing.imageUri}
             backSrc={printing.imageUriBack}
             alt={printing.name}
-            className="h-[29rem] w-80 self-start"
+            className="w-80 self-start"
             // The selected finish, not the printing's: the page is showing one
             // series, and this is the art for that series.
             foil={finish !== "nonfoil"}

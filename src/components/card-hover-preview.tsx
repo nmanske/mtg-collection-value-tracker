@@ -161,7 +161,7 @@ export function CardHoverPreview({
             // Plain <img> as everywhere else here: remote Scryfall URLs in a
             // local single-user tool.
             <span
-              className={`pointer-events-none fixed z-50 block rounded-xl shadow-2xl ring-1 ring-black/10 ${
+              className={`card-art pointer-events-none fixed z-50 block overflow-hidden shadow-2xl ${
                 foil ? "foil" : ""
               }`}
               style={{ left: at.left, top: at.top, width: WIDTH }}
@@ -172,7 +172,7 @@ export function CardHoverPreview({
                 alt={alt}
                 width={WIDTH}
                 height={HEIGHT}
-                className="block w-full rounded-xl"
+                className="card-art block w-full"
               />
             </span>,
             document.body,

@@ -285,3 +285,33 @@ summary::-webkit-details-marker {
     transform: translateX(-140%);
   }
 }
+
+/*
+ * Card art.
+ *
+ * Scryfall's images are rectangles with the card's rounded black border drawn
+ * inside them, so the four corners of the file are white. Against a dark page
+ * those corners poke out past a small radius as white flecks.
+ *
+ * A Magic card is 63x88mm with a 3mm corner, so the radius is 4.76% of the
+ * width and 3.41% of the height. Given as a percentage pair it stays correct
+ * at every size this is rendered at, from a 176px search result to a 320px
+ * card page, without a radius per call site.
+ *
+ * The ring is what stops the card's own black border dissolving into a dark
+ * background: a hairline of the page's text colour at very low opacity, which
+ * reads as an edge without reading as a frame.
+ */
+.card-art {
+  border-radius: 4.76% / 3.41%;
+}
+
+.card-art-edge {
+  box-shadow: 0 0 0 1px rgb(0 0 0 / 0.12);
+}
+
+@media (prefers-color-scheme: dark) {
+  .card-art-edge {
+    box-shadow: 0 0 0 1px rgb(255 255 255 / 0.12);
+  }
+}

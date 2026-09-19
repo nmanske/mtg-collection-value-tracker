@@ -39,13 +39,21 @@ export function CardImage({
 
   return (
     <div className={className ? "shrink-0" : undefined}>
-      <div className={`relative overflow-hidden rounded ${className ?? ""} ${foil ? "foil" : ""}`}>
+      {/* The box takes the card's own proportions rather than a height in
+          rems: `object-contain` inside a box of a different shape letterboxes
+          the art, and then the container's rounded corners sit somewhere the
+          image's corners are not. */}
+      <div
+        className={`card-art card-art-edge relative aspect-[63/88] overflow-hidden ${
+          className ?? ""
+        } ${foil ? "foil" : ""}`}
+      >
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
           src={face}
           alt={faceAlt}
           loading="lazy"
-          className="h-full w-full rounded object-contain"
+          className="card-art block h-full w-full object-cover"
         />
       </div>
 

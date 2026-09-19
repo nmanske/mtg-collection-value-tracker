@@ -98,14 +98,14 @@ export default async function SearchPage(props: PageProps<"/search">) {
                     src={printing.imageUriLarge ?? printing.imageUri}
                     backSrc={printing.imageUriBack}
                     alt={printing.name}
-                    className="h-64 w-44"
+                    className="w-44"
                     // Only when there is no plain version to confuse it with:
                     // a printing that exists both ways is not a foil card, it
                     // is a card you could buy either way.
                     foil={!printing.finishes.includes("nonfoil")}
                   />
                 ) : (
-                  <div className="h-64 w-44 shrink-0 rounded bg-neutral-100 dark:bg-neutral-800" />
+                  <div className="card-art aspect-[63/88] w-44 shrink-0 bg-neutral-100 dark:bg-neutral-800" />
                 )}
 
                 <div className="min-w-0 flex-1">
