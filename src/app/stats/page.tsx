@@ -9,6 +9,7 @@ import {
   collectionStats,
 } from "@/db/queries/stats";
 import { portfolioHistory } from "@/db/queries/history";
+import { PrivacyToggle } from "@/components/privacy-toggle";
 import { InfoTip } from "@/components/info-tip";
 import type { PeriodChange } from "@/lib/portfolio-history";
 import { FINISH_LABEL, formatUsd, printingCode } from "@/lib/format";
@@ -26,17 +27,24 @@ function Stat({
   label,
   value,
   detail,
+  hide,
 }: {
   label: string;
   value: string;
   detail?: string;
+  /** A figure that reveals what the collection is worth. */
+  hide?: boolean;
 }) {
   return (
     <div>
       <dt className="text-xs text-neutral-600 dark:text-neutral-400">{label}</dt>
-      <dd className="mt-0.5 text-2xl font-semibold tabular-nums">{value}</dd>
+      <dd className="mt-0.5 text-2xl font-semibold tabular-nums">
+        {hide ? <span className="money money-lg">{value}</span> : value}
+      </dd>
       {detail ? (
-        <div className="mt-0.5 text-xs text-neutral-600 dark:text-neutral-400">{detail}</div>
+        <div className="mt-0.5 text-xs text-neutral-600 dark:text-neutral-400">
+          {hide ? <span className="money">{detail}</span> : detail}
+        </div>
       ) : null}
     </div>
   );
@@ -181,7 +189,8 @@ function YearRow({ year, widest }: { year: PeriodChange; widest: number }) {
         </span>
         <span className="shrink-0 tabular-nums">
           <span className="mr-3 text-xs text-neutral-600 dark:text-neutral-400">
-            {formatUsd(year.fromCents)} → {formatUsd(year.toCents)}
+            <span className="money">{formatUsd(year.fromCents)}</span> →{" "}
+            <span className="money">{formatUsd(year.toCents)}</span>
           </span>
           <Pct ratio={year.changeRatio} />
         </span>
@@ -250,7 +259,10 @@ export default async function StatsPage() {
     <main className="page-shell py-10">
       <header className="mb-8 flex items-baseline justify-between gap-4">
         <h1 className="text-2xl font-semibold tracking-tight">Statistics</h1>
-        <div className="flex items-center gap-4">
+        <div className="flex flex-wrap items-center gap-4">
+          {/* The preference is global, so it has to be reachable from the page
+              it is hiding things on — not only from the dashboard. */}
+          <PrivacyToggle />
           <Link
             href="/faq"
             className="text-sm text-neutral-600 dark:text-neutral-400 underline-offset-4 hover:underline"
@@ -267,7 +279,7 @@ export default async function StatsPage() {
       </header>
 
       <dl className="mb-8 grid grid-cols-2 gap-6 sm:grid-cols-3 lg:grid-cols-7">
-        <Stat label="Value" value={formatUsd(stats.totalValueCents)} />
+        <Stat label="Value" value={formatUsd(stats.totalValueCents)} hide />
         <Stat
           label="Cards"
           value={stats.totalCards.toLocaleString()}
@@ -281,11 +293,13 @@ export default async function StatsPage() {
         <Stat
           label="Median card"
           value={formatUsd(stats.medianCardCents)}
+          hide
           detail="half are worth less"
         />
         <Stat
           label="If you sold it all"
           value={formatUsd(stats.buylistTotalCents)}
+          hide
           detail={`${Math.round(sellRatio * 100)}% of Card Kingdom's ask`}
         />
         {allTime ? (
@@ -355,6 +369,7 @@ export default async function StatsPage() {
                   label="Deepest fall"
                   value={`-${(history.drawdown.depthRatio * 100).toFixed(1)}%`}
                   detail={`${formatUsd(history.drawdown.peakCents)} → ${formatUsd(history.drawdown.troughCents)}`}
+                  hide
                 />
                 <Stat
                   label="Took"
@@ -536,7 +551,7 @@ export default async function StatsPage() {
                   sub={`${mover.quantity}x · ${formatUsd(mover.fromCents)} on ${mover.fromDate}${mover.fromDateApprox ? "*" : ""} → ${formatUsd(mover.toCents)}`}
                   right={
                     <span className="font-medium text-emerald-700 dark:text-emerald-400">
-                      +{formatUsd(mover.impactCents)}
+                      +<span className="money">{formatUsd(mover.impactCents)}</span>
                     </span>
                   }
                 />
@@ -557,7 +572,7 @@ export default async function StatsPage() {
                   sub={`${mover.quantity}x · ${formatUsd(mover.fromCents)} on ${mover.fromDate}${mover.fromDateApprox ? "*" : ""} → ${formatUsd(mover.toCents)}`}
                   right={
                     <span className="font-medium text-red-700 dark:text-red-400">
-                      {formatUsd(mover.impactCents)}
+                      <span className="money">{formatUsd(mover.impactCents)}</span>
                     </span>
                   }
                 />
@@ -581,7 +596,7 @@ export default async function StatsPage() {
                     </span>
                   </span>
                   <span className="shrink-0 tabular-nums">
-                    {formatUsd(set.valueCents)}
+                    <span className="money">{formatUsd(set.valueCents)}</span>
                   </span>
                 </div>
                 {/* A thin bar with a rounded data-end, one hue, grown from a
@@ -688,7 +703,7 @@ export default async function StatsPage() {
               >
                 <span>{FINISH_LABEL[row.finish as Finish]}</span>
                 <span className="shrink-0 tabular-nums">
-                  {formatUsd(row.valueCents)}{" "}
+                  <span className="money">{formatUsd(row.valueCents)}</span>{" "}
                   <span className="text-xs text-neutral-600 dark:text-neutral-400">
                     · {row.holdings.toLocaleString()} holdings
                   </span>
