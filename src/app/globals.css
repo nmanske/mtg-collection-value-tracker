@@ -223,8 +223,13 @@ summary::-webkit-details-marker {
   }
 }
 
+/*
+ * No `position` here. This file is loaded after Tailwind's utilities, so a
+ * `position: relative` in it beat the `fixed` on the hover preview and
+ * dropped every foil preview back into the document flow. Each element this
+ * is put on positions itself; all the sheen needs is a box to be clipped to.
+ */
 .foil {
-  position: relative;
   overflow: hidden;
   isolation: isolate;
 }
@@ -247,39 +252,10 @@ summary::-webkit-details-marker {
   animation: foil-sweep 3.6s ease-in-out infinite;
 }
 
-/*
- * The table's foil rows. Nothing until the row is hovered, because a list of
- * 100 holdings with a dozen of them glinting is a fairground, not a table.
- */
-.foil-row .foil-mark {
-  position: relative;
-  overflow: hidden;
-  isolation: isolate;
-  border-radius: 0.25rem;
-  padding-inline: 0.25rem;
-  margin-inline: -0.25rem;
-}
-
-.foil-row:hover .foil-mark::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  background: linear-gradient(
-    90deg,
-    transparent 30%,
-    rgba(125, 211, 252, 0.45) 50%,
-    transparent 70%
-  );
-  mix-blend-mode: screen;
-  animation: foil-sweep 2.2s ease-in-out infinite;
-}
-
 /* A foil that announces itself by moving is worse than no foil at all for
    anyone who has asked the system for less motion. */
 @media (prefers-reduced-motion: reduce) {
-  .foil::after,
-  .foil-row:hover .foil-mark::after {
+  .foil::after {
     animation: none;
     /* Parked off the art rather than left mid-sweep across it. */
     transform: translateX(-140%);
