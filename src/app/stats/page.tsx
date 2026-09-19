@@ -293,7 +293,6 @@ export default async function StatsPage() {
         <Stat
           label="Median card"
           value={formatUsd(stats.medianCardCents)}
-          hide
           detail="half are worth less"
         />
         <Stat
