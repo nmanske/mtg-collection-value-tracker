@@ -271,15 +271,23 @@ export default async function CollectionPage(props: PageProps<"/">) {
                         </Link>
                       </div>
                     </td>
+                    {/* The year sits beside the set code, not the collector
+                        number. It describes the set, and codes are a steady
+                        three or four characters where numbers run from "6" to
+                        "280★" — hanging the year off those left it ragged down
+                        the column. The fixed-width code absorbs the remaining
+                        one-character difference. */}
                     <td className="py-2 pr-3">
-                      <div className="font-mono text-xs uppercase">
-                        {row.setCode}
+                      <div className="font-mono text-xs">
+                        <span className="inline-block w-12 uppercase">
+                          {row.setCode}
+                        </span>
+                        <span className="text-neutral-600 dark:text-neutral-400">
+                          {releaseYear(row.releasedAt) ?? ""}
+                        </span>
                       </div>
                       <div className="font-mono text-xs text-neutral-600 dark:text-neutral-400">
                         #{row.collectorNumber}
-                        {releaseYear(row.releasedAt) ? (
-                          <> ({releaseYear(row.releasedAt)})</>
-                        ) : null}
                       </div>
                     </td>
                     <td className="py-2 pr-3">{FINISH_LABEL[row.finish]}</td>
