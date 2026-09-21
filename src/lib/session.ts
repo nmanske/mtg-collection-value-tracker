@@ -30,7 +30,22 @@ import type { CollectionSession } from "@/db/schema";
  * instead of a broken one.
  */
 
-export const SESSION_COOKIE = "mtg.collection";
+/**
+ * The cookie's name, which differs per instance on purpose.
+ *
+ * Cookies ignore the port. A cookie set by the public site at
+ * `http://host:3011` is sent to the personal site at `http://host:3010` as
+ * well, and since both read the same database the id resolved there too — so
+ * uploading a list on the public site quietly replaced the host's own
+ * collection on the personal one, banner and all.
+ *
+ * Distinct names keep the two apart without needing distinct hosts. Neither
+ * is `mtg.collection`, the name both used to share, so any cookie issued
+ * before this is orphaned rather than honoured by the wrong instance.
+ */
+export function sessionCookieName(): string {
+  return publicMode() ? "mtg.session.public" : "mtg.session.owner";
+}
 
 /** Matches the sweep, so the browser forgets at roughly the same time we do. */
 const COOKIE_MAX_AGE = SESSION_TTL_HOURS * 3_600;
@@ -52,7 +67,7 @@ export interface ActiveCollection {
  * anything gets the landing page instead of a page of zeroes.
  */
 export async function activeCollection(): Promise<ActiveCollection> {
-  const id = (await cookies()).get(SESSION_COOKIE)?.value;
+  const id = (await cookies()).get(sessionCookieName())?.value;
 
   if (id && id !== OWNER) {
     const session = getSession(db, id);
@@ -90,7 +105,7 @@ export function newSessionId(): string {
  * while a cross-site POST cannot act as the visitor.
  */
 export async function setSessionCookie(id: string): Promise<void> {
-  (await cookies()).set(SESSION_COOKIE, id, {
+  (await cookies()).set(sessionCookieName(), id, {
     httpOnly: true,
     sameSite: "lax",
     path: "/",
@@ -109,6 +124,6 @@ export async function setSessionCookie(id: string): Promise<void> {
 }
 
 export async function clearSessionCookie(): Promise<void> {
-  (await cookies()).delete(SESSION_COOKIE);
+  (await cookies()).delete(sessionCookieName());
 }
 
