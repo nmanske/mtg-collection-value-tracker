@@ -66,6 +66,13 @@ x-env: &env
   # Kills a wedged ingest rather than letting it hold the write lock until
   # the next day's run collides with it.
   INGEST_TIMEOUT_MS: "${INGEST_TIMEOUT_MS:-1800000}"
+  # How a stale or missing value history is rebuilt, in the background.
+  #
+  # Overridden for the same reason INGEST_COMMAND is: the default is an npm
+  # script, and the standalone image has no package.json scripts to run. Left
+  # at the default it failed silently in the container, so a cache that needed
+  # rebuilding never got one and every page load recomputed it instead.
+  REBUILD_COMMAND: "${REBUILD_COMMAND:-node_modules/.bin/tsx scripts/rebuild-cache.ts}"
   # Two processes write to one file now, so a write waits out another
   # process's write rather than failing. See src/db/client.ts.
   SQLITE_BUSY_TIMEOUT_MS: "${SQLITE_BUSY_TIMEOUT_MS:-30000}"

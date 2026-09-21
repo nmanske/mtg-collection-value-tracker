@@ -363,8 +363,21 @@ export function cachedPortfolioSeries(
     };
   }
 
-  // Nothing cached at all: a cold start, or a view that has never been built.
-  // There is nothing stale to serve, so this one pays the cost.
+  // Nothing cached at all: a cold start, a view that has never been built, or
+  // a migration that dropped the cache table.
+  //
+  // Ask for a rebuild before computing. Without this the empty case never
+  // repaired itself: `requestCacheRebuild` was only reached on the *stale*
+  // path, where rows exist but the fingerprint has moved, so an empty cache
+  // meant every request recomputed the whole series inline, forever, until
+  // somebody ran `cache:portfolio` by hand. better-sqlite3 is synchronous, so
+  // those recomputes queue behind each other and the dashboard simply hangs —
+  // which is exactly what 0010 caused, since it drops both cache tables.
+  //
+  // This request still pays the cost, because there is nothing stale to serve
+  // instead. The next one should not have to.
+  requestCacheRebuild();
+
   return portfolioSeries(db, {
     priceSource: source,
     constantBasket: basket,
