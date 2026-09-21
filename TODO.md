@@ -332,6 +332,29 @@ Worth deciding first whether it appears on the personal instance too, or only
 where `PUBLIC_MODE` is set. Asking yourself for money on your own dashboard is
 odd, and the flag already exists to tell the two apart.
 
+### 13. A default blur password on the non-public version
+
+Today `PRIVACY_PASSWORD` is unset by default, so values show and the toggle is
+an ordinary hide button; the Beelink sets it in `.env`. The personal version
+should arrive with blurring on and a password already in place, so a
+self-hosted instance is covered without anybody having to read the
+configuration first.
+
+Two things to settle before implementing:
+
+- **A default committed to the repo is a published default.** This repo is
+  public, so a constant in it protects nobody who knows where it came from.
+  The threat model is somebody glancing at the screen, which it still covers —
+  but it is worth being clear that is all it does.
+- **Generating one per install would be better than shipping one.** A random
+  password written to `sync_meta` on first boot and printed once to the
+  container log is unique per instance, needs no `.env` editing, and is
+  recoverable from `docker compose logs`. `PRIVACY_PASSWORD` would still
+  override it.
+
+Either way this only covers a screen. The check runs in the browser and the
+figures are in the HTML regardless — see the note in `privacy-toggle.tsx`.
+
 ## Known issues
 
 - **`next build` must use webpack.** The Turbopack build is a Next bug, not this
