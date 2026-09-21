@@ -19,7 +19,7 @@ import { downsample, pointBudget } from "@/lib/downsample";
 import { ChartFrame } from "./chart-frame";
 import { formatUsd } from "@/lib/format";
 
-import { axisMoney, paddedScale, shortDate } from "./chart-utils";
+import { axisMoney, dateAxisFormat, paddedScale } from "./chart-utils";
 
 /**
  * Portfolio value over time.
@@ -174,6 +174,9 @@ function PortfolioChartBody({
     }),
   });
 
+  // Read off what is plotted, so the labels follow the range picker.
+  const dateAxis = dateAxisFormat(data.map((point) => point.date));
+
   // Only worth a pane if anything was actually acquired inside the window.
   const acquisitions = data.filter((point) => point.acquiredHoldings > 0);
   const showAcquisitions = acquisitions.length > 0;
@@ -254,11 +257,11 @@ function PortfolioChartBody({
 
             <XAxis
               dataKey="date"
-              tickFormatter={shortDate}
+              tickFormatter={dateAxis.format}
               tickLine={false}
               axisLine={{ stroke: "var(--viz-grid)" }}
               tick={{ fill: "var(--viz-muted)", fontSize: 11 }}
-              minTickGap={28}
+              minTickGap={dateAxis.minTickGap}
             />
             <YAxis
               domain={domain}

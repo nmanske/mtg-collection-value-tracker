@@ -9,7 +9,14 @@
  */
 import assert from "node:assert/strict";
 
-import { axisMoney, niceScale, paddedScale, shortDate } from "@/components/chart-utils";
+import {
+  axisMoney,
+  dateAxisFormat,
+  monthYear,
+  niceScale,
+  paddedScale,
+  shortDate,
+} from "@/components/chart-utils";
 
 // --- labels ---
 
@@ -28,6 +35,33 @@ assert.equal(axisMoney(-2_550), "$-25.50");
 assert.equal(shortDate("2026-09-09"), "9/9");
 assert.equal(shortDate("2026-01-01"), "1/1");
 assert.equal(shortDate("2026-12-31"), "12/31");
+
+assert.equal(monthYear("2025-09-09"), "Sep '25");
+assert.equal(monthYear("2020-01-31"), "Jan '20");
+assert.equal(monthYear("2026-12-01"), "Dec '26");
+
+// --- which label an axis gets ---
+
+const span = (first: string, last: string) => dateAxisFormat([first, last]);
+
+// A quarter of days: the day of the month is the useful part.
+assert.equal(span("2026-06-01", "2026-08-30").format("2026-07-04"), "7/4");
+// Five years of it is a column of day numbers with nothing to place them
+// against, so the year comes back.
+assert.equal(span("2020-12-15", "2026-09-17").format("2023-03-04"), "Mar '23");
+// The wider label needs more room between ticks, or Recharts packs them
+// until they touch.
+assert.ok(
+  span("2020-12-15", "2026-09-17").minTickGap >
+    span("2026-06-01", "2026-08-30").minTickGap,
+);
+// The boundary is a span, not a date: 180 days keeps the dense label and 181
+// does not.
+assert.equal(span("2026-01-01", "2026-06-30").format("2026-03-01"), "3/1");
+assert.equal(span("2026-01-01", "2026-07-01").format("2026-03-01"), "Mar '26");
+// An empty or one-point series must not throw on the way to a label.
+assert.equal(dateAxisFormat([]).format("2026-03-01"), "3/1");
+assert.equal(dateAxisFormat(["2026-03-01"]).format("2026-03-01"), "3/1");
 
 // --- scale ---
 

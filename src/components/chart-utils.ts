@@ -9,6 +9,61 @@ export function shortDate(iso: string): string {
   return `${Number(month)}/${Number(day)}`;
 }
 
+const MONTHS = [
+  "Jan",
+  "Feb",
+  "Mar",
+  "Apr",
+  "May",
+  "Jun",
+  "Jul",
+  "Aug",
+  "Sep",
+  "Oct",
+  "Nov",
+  "Dec",
+];
+
+/**
+ * `2025-09-09` -> `Sep '25`.
+ *
+ * A month name rather than a number, because `9/25` on a dated axis reads as
+ * the 25th of September as readily as September 2025, and the whole point of
+ * the label is to say which year.
+ */
+export function monthYear(iso: string): string {
+  const [year, month] = iso.split("-");
+  return `${MONTHS[Number(month) - 1]} '${year.slice(2)}`;
+}
+
+/** Beyond this many days, a label without a year says nothing. */
+const YEAR_AFTER_DAYS = 180;
+
+/**
+ * The right label for an axis covering `dates`.
+ *
+ * `9/9` is fine across a quarter and useless across five years, where the
+ * reader is given a column of day-of-month numbers with nothing to place them
+ * against. The series decides, not the caller: the same chart switches format
+ * as the range picker changes what it covers.
+ */
+export function dateAxisFormat(
+  dates: string[],
+): { format: (iso: string) => string; minTickGap: number } {
+  const first = dates[0];
+  const last = dates[dates.length - 1];
+  const days =
+    first && last
+      ? (Date.parse(`${last}T00:00:00Z`) - Date.parse(`${first}T00:00:00Z`)) /
+        86_400_000
+      : 0;
+
+  // The wider label needs more room, or Recharts packs them until they touch.
+  return days > YEAR_AFTER_DAYS
+    ? { format: monthYear, minTickGap: 52 }
+    : { format: shortDate, minTickGap: 28 };
+}
+
 /**
  * Whole dollars, thousands-comma'd.
  *

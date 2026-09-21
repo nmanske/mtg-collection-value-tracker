@@ -204,6 +204,16 @@ summary::-webkit-details-marker {
 }
 
 /*
+ * Gone entirely while values are hidden, not merely blurred.
+ *
+ * For the export: the blur is a screen cover, and a CSV of every price walks
+ * straight past it.
+ */
+.hide-money .hide-entirely {
+  display: none;
+}
+
+/*
  * Foil.
  *
  * A band of light sweeping across the art, the way tilting a foil card catches

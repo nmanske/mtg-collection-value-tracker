@@ -18,7 +18,7 @@ import { downsample, pointBudget } from "@/lib/downsample";
 import { ChartFrame } from "./chart-frame";
 import { formatUsd } from "@/lib/format";
 
-import { axisMoney, paddedScale, shortDate } from "./chart-utils";
+import { axisMoney, dateAxisFormat, paddedScale } from "./chart-utils";
 
 /**
  * One printing-and-finish's price history.
@@ -137,6 +137,9 @@ function CardPriceChartBody({
     value: (row) => row.priceCents,
   });
 
+  // Read off what is plotted, so the labels follow the range picker.
+  const dateAxis = dateAxisFormat(data.map((row) => row.date));
+
   const last = data[data.length - 1];
   // Both series share the axis, so the scale has to cover the lower one too or
   // the buylist line would be clipped off the bottom.
@@ -169,11 +172,11 @@ function CardPriceChartBody({
 
             <XAxis
               dataKey="date"
-              tickFormatter={shortDate}
+              tickFormatter={dateAxis.format}
               tickLine={false}
               axisLine={{ stroke: "var(--viz-grid)" }}
               tick={{ fill: "var(--viz-muted)", fontSize: 11 }}
-              minTickGap={28}
+              minTickGap={dateAxis.minTickGap}
             />
             <YAxis
               domain={domain}

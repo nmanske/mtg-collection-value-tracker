@@ -215,11 +215,13 @@ export default async function StatsPage() {
         <Stat
           label="Average card"
           value={formatUsd(stats.meanCardCents)}
+          hide
           detail="every priced card, averaged"
         />
         <Stat
           label="Median card"
           value={formatUsd(stats.medianCardCents)}
+          hide
           detail="half are worth less"
         />
         <Stat
@@ -238,31 +240,41 @@ export default async function StatsPage() {
           <ul className="flex flex-col gap-3 text-sm">
             <li>
               <strong className="tabular-nums">
-                {stats.holdingsForHalfValue.toLocaleString()}
+                <span className="money">
+                  {stats.holdingsForHalfValue.toLocaleString()}
+                </span>
               </strong>{" "}
               holdings carry half the value — {" "}
               <span className="text-neutral-600 dark:text-neutral-400">
-                {(
-                  (stats.holdingsForHalfValue / stats.totalHoldings) *
-                  100
-                ).toFixed(1)}
-                % of the collection.
+                <span className="money">
+                  {`${(
+                    (stats.holdingsForHalfValue / stats.totalHoldings) *
+                    100
+                  ).toFixed(1)}%`}
+                </span>{" "}
+                of the collection.
               </span>
             </li>
             <li>
               <strong className="tabular-nums">
-                {stats.underOneDollar.toLocaleString()}
+                <span className="money">
+                  {stats.underOneDollar.toLocaleString()}
+                </span>
               </strong>{" "}
               holdings are worth under a dollar, and together they are{" "}
               <strong className="tabular-nums">
-                {(stats.underOneDollarShare * 100).toFixed(1)}%
+                <span className="money">
+                  {(stats.underOneDollarShare * 100).toFixed(1)}%
+                </span>
               </strong>{" "}
               of the total.
             </li>
             <li>
               The ten most valuable are{" "}
               <strong className="tabular-nums">
-                {(stats.topTenShare * 100).toFixed(1)}%
+                <span className="money">
+                  {(stats.topTenShare * 100).toFixed(1)}%
+                </span>
               </strong>{" "}
               of everything.
             </li>
@@ -295,7 +307,7 @@ export default async function StatsPage() {
                 card={card}
                 right={
                   <span className="font-medium">
-                    {formatUsd(card.priceCents)}
+                    <span className="money">{formatUsd(card.priceCents)}</span>
                   </span>
                 }
               />
