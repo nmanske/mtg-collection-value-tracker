@@ -2,6 +2,7 @@ import { and, asc, eq, sql, type SQL } from "drizzle-orm";
 
 import { FINISH_CODES, SIDE_CODES, VENDOR_CODES } from "@/db/codec";
 import type { Db } from "@/db/queries/printings";
+import { collectionWhere, OWNER, type CollectionScope } from "@/db/scope";
 import {
   DEFAULT_FILTER,
   DEFAULT_SORT,
@@ -95,7 +96,10 @@ export const PAGE_SIZE = 100;
  * Kept separate from the row query so that paging the table never changes the
  * headline value: the total is always the whole collection.
  */
-export function collectionTotals(db: Db): CollectionTotals {
+export function collectionTotals(
+  db: Db,
+  scope: CollectionScope = OWNER,
+): CollectionTotals {
   const latest = sql`(
     select ps.price_cents
     from price_snapshots ps
@@ -117,6 +121,7 @@ export function collectionTotals(db: Db): CollectionTotals {
       unpricedCount: sql<number>`coalesce(sum(case when ${unit} is null then 1 else 0 end), 0)`,
     })
     .from(holdings)
+    .where(collectionWhere(scope))
     .get();
 
   return {
@@ -152,13 +157,16 @@ export interface ListOptions {
   vendor?: Vendor;
   /** Also read what the vendor would pay. Card Kingdom is the only one that says. */
   buylist?: boolean;
+  /** Whose collection to list. Defaults to the host's own. */
+  scope?: CollectionScope;
 }
 
 export function listHoldings(
   db: Db,
   options: ListOptions = {},
 ): CollectionPage {
-  const totals = collectionTotals(db);
+  const scope = options.scope ?? OWNER;
+  const totals = collectionTotals(db, scope);
   const sort = options.sort ?? DEFAULT_SORT;
   const dir = options.dir ?? defaultDir(sort);
   const filter = options.filter ?? DEFAULT_FILTER;
@@ -215,7 +223,9 @@ export function listHoldings(
   // describes the whole collection while the rows describe a subset, and the
   // last pages are empty.
   const unitPrice = sql`coalesce(${holdings.priceOverrideCents}, ${latestPrice})`;
-  const conditions = [];
+  // First, and unconditional: every other predicate narrows within one
+  // collection, never across them.
+  const conditions = [collectionWhere(scope)];
 
   if (filter === "nonfoil") {
     conditions.push(sql`${holdings.finish} = ${FINISH_CODES.nonfoil}`);
@@ -250,7 +260,7 @@ export function listHoldings(
     );
   }
 
-  const where = conditions.length > 0 ? and(...conditions) : undefined;
+  const where = and(...conditions);
 
   const matched =
     db
@@ -398,6 +408,8 @@ export function addHolding(
         eq(holdings.finish, input.finish),
         eq(holdings.condition, input.condition),
         eq(holdings.dateAdded, input.dateAdded),
+        // Two collections holding the same card are two holdings, not one.
+        collectionWhere(input.sessionId ?? OWNER),
       ),
     )
     .get();
@@ -486,7 +498,11 @@ export function reconcileHoldings(
       dateAddedApprox: holdings.dateAddedApprox,
     })
     .from(holdings)
-    .where(eq(holdings.source, source))
+    // Scoped to the owner. An import reconciles by deleting rows the file does
+    // not mention, and `source` alone would let it delete an uploaded
+    // collection's rows, which carry the same source and belong to somebody
+    // else entirely.
+    .where(and(eq(holdings.source, source), collectionWhere(OWNER)))
     .all();
 
   const result: ReconcileResult = {
@@ -568,7 +584,11 @@ export function previewReconcile(
       dateAdded: holdings.dateAdded,
     })
     .from(holdings)
-    .where(adopt ? undefined : eq(holdings.source, source))
+    .where(
+      adopt
+        ? collectionWhere(OWNER)
+        : and(eq(holdings.source, source), collectionWhere(OWNER)),
+    )
     .all();
 
   const result: ReconcileResult = {
@@ -611,12 +631,16 @@ export function adoptHoldings(db: Db, source: HoldingSource): number {
   return db
     .update(holdings)
     .set({ source })
-    .where(eq(holdings.source, "manual"))
+    .where(and(eq(holdings.source, "manual"), collectionWhere(OWNER)))
     .run().changes;
 }
 
 /** Every holding of one printing, for the card page's "you own this" line. */
-export function holdingsForPrinting(db: Db, printingKey: number) {
+export function holdingsForPrinting(
+  db: Db,
+  printingKey: number,
+  scope: CollectionScope = OWNER,
+) {
   return db
     .select({
       id: holdings.id,
@@ -626,15 +650,31 @@ export function holdingsForPrinting(db: Db, printingKey: number) {
       dateAdded: holdings.dateAdded,
     })
     .from(holdings)
-    .where(eq(holdings.printingKey, printingKey))
+    .where(and(eq(holdings.printingKey, printingKey), collectionWhere(scope)))
     .orderBy(asc(holdings.dateAdded))
     .all();
 }
 
-export function removeHolding(db: Db, id: number): boolean {
-  return db.delete(holdings).where(eq(holdings.id, id)).run().changes > 0;
+export function removeHolding(
+  db: Db,
+  id: number,
+  scope: CollectionScope = OWNER,
+): boolean {
+  // Scoped, so an id from one collection cannot delete a row in another.
+  return (
+    db
+      .delete(holdings)
+      .where(and(eq(holdings.id, id), collectionWhere(scope)))
+      .run().changes > 0
+  );
 }
 
-export function countHoldings(db: Db): number {
-  return db.select({ n: sql<number>`count(*)` }).from(holdings).get()?.n ?? 0;
+export function countHoldings(db: Db, scope: CollectionScope = OWNER): number {
+  return (
+    db
+      .select({ n: sql<number>`count(*)` })
+      .from(holdings)
+      .where(collectionWhere(scope))
+      .get()?.n ?? 0
+  );
 }

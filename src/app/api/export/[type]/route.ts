@@ -1,6 +1,7 @@
 import { db } from "@/db";
 import { exportFilename } from "@/export/csv";
 import { EXPORTS, isExportId } from "@/export/datasets";
+import { currentScope } from "@/lib/session";
 
 /**
  * Streams an export as CSV.
@@ -27,7 +28,8 @@ export async function GET(
   }
 
   const spec = EXPORTS[type];
-  const rows = spec.stream(db);
+  // Whatever collection this browser is looking at, and only that one.
+  const rows = spec.stream(db, await currentScope());
 
   const encoder = new TextEncoder();
   const iterator = rows[Symbol.iterator]();

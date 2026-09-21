@@ -9,6 +9,13 @@ import {
   VENDOR_CODES,
 } from "@/db/codec";
 
+import {
+  collectionSql,
+  collectionWhere,
+  OWNER,
+  type CollectionScope,
+} from "@/db/scope";
+
 import type { MonthLink } from "@/lib/portfolio-history";
 
 import { cachedPortfolioSeries } from "./portfolio-cache";
@@ -250,9 +257,12 @@ export function portfolioSeries(
      * asks it.
      */
     priceSource?: PriceVendor;
+    /** Whose collection to value. Defaults to the host's own. */
+    scope?: CollectionScope;
   } = {},
 ): ValuationSeries {
   const sqlite = clientOf(db);
+  const scope = options.scope ?? OWNER;
   const dates = priceDates(db, options.from, options.to);
   if (dates.length === 0) {
     return { points: [], firstDate: null, lastDate: null };
@@ -268,6 +278,7 @@ export function portfolioSeries(
       finish: holdings.finish,
     })
     .from(holdings)
+    .where(collectionWhere(scope))
     .all();
 
   if (held.length === 0) {
@@ -372,7 +383,8 @@ export function portfolioSeries(
   //   object per snapshot for a third of a million rows.
   const statement = sqlite.prepare(
     `select ps.printing_key, ps.finish, ps.date, ps.price_cents
-       from (select distinct printing_key, finish from holdings) h
+       from (select distinct printing_key, finish from holdings
+              where ${collectionSql("holdings", scope)}) h
        join (${
          options.buylist
            ? BUYLIST_SOURCE_SQL
@@ -523,10 +535,14 @@ export function portfolioSeries(
 }
 
 /** The collection's value on one date. */
-export function portfolioValueAt(db: Db, date: string): ValuePoint | null {
+export function portfolioValueAt(
+  db: Db,
+  date: string,
+  scope: CollectionScope = OWNER,
+): ValuePoint | null {
   // Ask for everything up to the date so carry-forward has the history it
   // needs, then keep the last point.
-  const series = portfolioSeries(db, { to: date });
+  const series = portfolioSeries(db, { to: date, scope });
   return series.points.at(-1) ?? null;
 }
 
@@ -595,15 +611,17 @@ function changeOver(points: ValuePoint[], days: number): Change {
 export function portfolioSummary(
   db: Db,
   priceSource: PriceVendor = "tcgplayer",
+  scope: CollectionScope = OWNER,
 ): PortfolioSummary {
   // Through the cache: this is the dashboard's hot path, and recomputing both
   // series per request is what took 5.6 seconds over 930 dates. A stale cache
   // is served as-is with a rebuild asked for in the background; only a cold one
   // is computed here.
-  const held = cachedPortfolioSeries(db, { priceSource });
+  const held = cachedPortfolioSeries(db, { priceSource, scope });
   const basket = cachedPortfolioSeries(db, {
     constantBasket: true,
     priceSource,
+    scope,
   });
   const points = held.points;
   const basketPoints = basket.points;
@@ -644,12 +662,17 @@ export function priceDateCount(db: Db): number {
 }
 
 /** Holdings with no usable price at all, for the "price unavailable" callout. */
-export function unpricedHoldingIds(db: Db, date: string): number[] {
+export function unpricedHoldingIds(
+  db: Db,
+  date: string,
+  scope: CollectionScope = OWNER,
+): number[] {
   return db
     .select({ id: holdings.id })
     .from(holdings)
     .where(
       and(
+        collectionWhere(scope),
         lte(holdings.dateAdded, date),
         sql`${holdings.priceOverrideCents} is null`,
         sql`not exists (

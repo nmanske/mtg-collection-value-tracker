@@ -1,4 +1,5 @@
 import { eq, sql } from "drizzle-orm";
+import { collectionWhere, OWNER, type CollectionScope } from "@/db/scope";
 
 import { VENDOR_CODES } from "@/db/codec";
 import { holdings, portfolioDaily, portfolioMonthly, syncMeta } from "@/db/schema";
@@ -61,7 +62,10 @@ export const CACHE_FINGERPRINT_KEY = "portfolio_cache_fingerprint";
  * a real risk, and the cost of being wrong is one stale figure until the next
  * ingest, not corruption.
  */
-export function cacheFingerprint(db: Db): string {
+export function cacheFingerprint(
+  db: Db,
+  scope: CollectionScope = OWNER,
+): string {
   const h = db
     .select({
       rows: sql<number>`count(*)`,
@@ -72,6 +76,7 @@ export function cacheFingerprint(db: Db): string {
       dates: sql<string>`coalesce(group_concat(distinct ${holdings.dateAdded}), '')`,
     })
     .from(holdings)
+    .where(collectionWhere(scope))
     .get();
 
   const client = (db as unknown as {
@@ -165,6 +170,7 @@ function rowsFor(
   source: PriceVendor,
   basket: boolean,
   buylist = false,
+  scope: CollectionScope = OWNER,
 ): ValuePoint[] {
   return db
     .select({
@@ -182,7 +188,8 @@ function rowsFor(
       sql`${portfolioDaily.priceSource} = ${
         buylist ? BUYLIST_CACHE_SOURCE : VENDOR_CODES[source]
       }
-          and ${portfolioDaily.basket} = ${basket ? 1 : 0}`,
+          and ${portfolioDaily.basket} = ${basket ? 1 : 0}
+          and ${portfolioDaily.sessionId} = ${scope}`,
     )
     .orderBy(portfolioDaily.date)
     .all();
@@ -252,8 +259,13 @@ export function rebuildPortfolioCache(
   let points = 0;
 
   sqlite.transaction(() => {
-    db.delete(portfolioDaily).run();
-    db.delete(portfolioMonthly).run();
+    // Scoped. An unqualified delete here would throw away every uploaded
+    // collection's cached views as well, which the daily job does at 10:00
+    // UTC — under whoever happened to be reading one at the time.
+    db.delete(portfolioDaily).where(eq(portfolioDaily.sessionId, OWNER)).run();
+    db.delete(portfolioMonthly)
+      .where(eq(portfolioMonthly.sessionId, OWNER))
+      .run();
     for (const { source, basket, buylist, series } of computed) {
       for (let i = 0; i < series.points.length; i += 500) {
         const slice = series.points.slice(i, i + 500);
@@ -313,14 +325,23 @@ export function cachedPortfolioSeries(
     priceSource?: PriceVendor;
     constantBasket?: boolean;
     buylist?: boolean;
+    scope?: CollectionScope;
   } = {},
 ): ValuationSeries {
   const source = options.priceSource ?? "tcgplayer";
   const basket = options.constantBasket ?? false;
   const buylist = options.buylist ?? false;
+  const scope = options.scope ?? OWNER;
+
+  // An uploaded collection never changes after it is uploaded, so there is
+  // nothing to invalidate and no fingerprint to keep: rows present means rows
+  // correct. Prices move under it during the session, which is the right
+  // trade — a visitor looking at a chart for ten minutes wants it to stay
+  // still, not to pay a recompute because MTGJSON published.
+  if (scope !== OWNER) return sessionSeries(db, scope, source, basket, buylist);
 
   const fresh = cacheIsFresh(db);
-  const points = rowsFor(db, source, basket, buylist);
+  const points = rowsFor(db, source, basket, buylist, scope);
 
   if (points.length > 0) {
     // Stale is served rather than recomputed. Recomputing here costs 20-35s
@@ -348,5 +369,72 @@ export function cachedPortfolioSeries(
     priceSource: source,
     constantBasket: basket,
     buylist,
+    scope,
   });
+}
+
+/**
+ * One view of an uploaded collection, computed on first ask and kept.
+ *
+ * Per view rather than the owner's all-at-once rebuild. That rebuild computes
+ * five series and takes 20-35 seconds against a real collection, which is a
+ * fine price to pay once a day in the background and an impossible one inside
+ * an upload. A visitor who never opens the Card Kingdom tab never pays for it.
+ */
+function sessionSeries(
+  db: Db,
+  scope: CollectionScope,
+  source: PriceVendor,
+  basket: boolean,
+  buylist: boolean,
+): ValuationSeries {
+  const cached = rowsFor(db, source, basket, buylist, scope);
+  if (cached.length > 0) {
+    return {
+      points: cached,
+      firstDate: cached[0].date,
+      lastDate: cached[cached.length - 1].date,
+    };
+  }
+
+  const series = portfolioSeries(db, {
+    priceSource: source,
+    constantBasket: basket,
+    buylist,
+    scope,
+  });
+  storeView(db, scope, source, basket, buylist, series);
+  return series;
+}
+
+/** Writes one computed view into the cache. */
+function storeView(
+  db: Db,
+  scope: CollectionScope,
+  source: PriceVendor,
+  basket: boolean,
+  buylist: boolean,
+  series: ValuationSeries,
+): void {
+  const sqlite = (db as unknown as { $client: import("better-sqlite3").Database })
+    .$client;
+  const priceSource = buylist ? BUYLIST_CACHE_SOURCE : VENDOR_CODES[source];
+
+  sqlite.transaction(() => {
+    for (let i = 0; i < series.points.length; i += 500) {
+      db.insert(portfolioDaily)
+        .values(
+          series.points.slice(i, i + 500).map((point) => ({
+            priceSource,
+            basket,
+            sessionId: scope,
+            ...point,
+          })),
+        )
+        // A second tab asking for the same view at the same moment writes the
+        // same numbers; the first one there wins and the other is a no-op.
+        .onConflictDoNothing()
+        .run();
+    }
+  })();
 }

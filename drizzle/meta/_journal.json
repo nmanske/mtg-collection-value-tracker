@@ -71,6 +71,13 @@
       "when": 1789775252543,
       "tag": "0009_set_release_date",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "6",
+      "when": 1790014588774,
+      "tag": "0010_session_collections",
+      "breakpoints": true
     }
   ]
 }

@@ -8,6 +8,11 @@ import {
   VENDOR_CODES,
 } from "@/db/codec";
 import { MARKET_SIDES, VENDORS } from "@/db/schema";
+import {
+  collectionSql,
+  scopeLiteral,
+  type CollectionScope,
+} from "@/db/scope";
 
 import { csvRow, moneyCell, UTF8_BOM } from "./csv";
 
@@ -39,9 +44,9 @@ export interface ExportSpec {
   title: string;
   description: string;
   /** Rows this export would produce right now. */
-  rows: (db: Db) => number;
+  rows: (db: Db, scope: CollectionScope) => number;
   /** Emits the file a chunk at a time, so a large one never lands in memory. */
-  stream: (db: Db) => Iterable<string>;
+  stream: (db: Db, scope: CollectionScope) => Iterable<string>;
 }
 
 /** The vendor and side pairs that become columns, in a fixed order. */
@@ -81,8 +86,9 @@ const collection: ExportSpec = {
   title: "Collection",
   description:
     "One row per holding: card, quantity, condition, acquisition date, current value, and the latest price from every vendor including Card Kingdom's buylist.",
-  rows: (db) => count(db, "select count(*) c from holdings"),
-  *stream(db) {
+  rows: (db, scope) =>
+    count(db, `select count(*) c from holdings h where ${collectionSql("h", scope)}`),
+  *stream(db, scope) {
     const header = [
       "name",
       "set_code",
@@ -158,6 +164,7 @@ const collection: ExportSpec = {
              ${vendorSelects}
         from holdings h
         join printings p on p.id = h.printing_key
+       where ${collectionSql("h", scope)}
        order by p.name, p.set_code, p.collector_number, h.finish
     `);
 
@@ -210,15 +217,16 @@ const valueHistory: ExportSpec = {
   // 10 seconds measured — and better-sqlite3 is synchronous, so it blocks every
   // other request on the way past. Next prefetches links on hover, so pointing
   // at "Export" from the dashboard froze the whole site.
-  rows: (db) => {
+  rows: (db, scope) => {
     const cached = count(
       db,
       `select count(*) c from portfolio_daily
-        where price_source = ${VENDOR_CODES.tcgplayer} and basket = 0`,
+        where price_source = ${VENDOR_CODES.tcgplayer} and basket = 0
+          and session_id = '${scopeLiteral(scope)}'`,
     );
     return cached > 0 ? cached : priceDates(db).length;
   },
-  *stream(db) {
+  *stream(db, scope) {
     yield UTF8_BOM +
       csvRow([
         "date",
@@ -232,9 +240,9 @@ const valueHistory: ExportSpec = {
     // Through the cache: computing both series here was two full scans of the
     // price table, ~27s of blocked server for a download the cache answers
     // instantly.
-    const asHeld = cachedPortfolioSeries(db).points;
+    const asHeld = cachedPortfolioSeries(db, { scope }).points;
     const basket = new Map(
-      cachedPortfolioSeries(db, { constantBasket: true }).points.map((point) => [
+      cachedPortfolioSeries(db, { constantBasket: true, scope }).points.map((point) => [
         point.date,
         point.valueCents,
       ]),
@@ -265,6 +273,9 @@ export function isExportId(value: string): value is ExportId {
 }
 
 /** Row counts for every export, for the download page. */
-export function exportSizes(db: Db): { id: ExportId; rows: number }[] {
-  return EXPORT_ORDER.map((id) => ({ id, rows: EXPORTS[id].rows(db) }));
+export function exportSizes(
+  db: Db,
+  scope: CollectionScope,
+): { id: ExportId; rows: number }[] {
+  return EXPORT_ORDER.map((id) => ({ id, rows: EXPORTS[id].rows(db, scope) }));
 }

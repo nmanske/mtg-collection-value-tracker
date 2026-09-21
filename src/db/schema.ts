@@ -110,6 +110,15 @@ export const printings = sqliteTable(
  * A card the user owns. Quantity is per (printing, finish, condition) — the
  * same printing in NM foil and LP foil are two holdings.
  */
+/**
+ * The scope value standing for the host's own collection.
+ *
+ * A sentinel rather than NULL so that every scope comparison is an equality
+ * and a primary key containing it behaves. Empty because no generated session
+ * id can collide with it.
+ */
+export const OWNER_SCOPE = "";
+
 export const holdings = sqliteTable(
   "holdings",
   {
@@ -170,6 +179,27 @@ export const holdings = sqliteTable(
       .notNull()
       .default("manual"),
     createdAt: integer("created_at", { mode: "timestamp" }).notNull(),
+    /**
+     * Which collection this row belongs to. `OWNER_SCOPE` is the host's own.
+     *
+     * The empty string is the collection a self-hosted instance imports and
+     * the daily job prices — the one this app was built around. Any other
+     * value is somebody else's file, uploaded to look at once: it belongs to a
+     * browser rather than a person, there is no account behind it, and a sweep
+     * deletes it after its time is up.
+     *
+     * One table rather than two, because every valuation and statistics query
+     * already joins holdings to the price tables and would otherwise need a
+     * second copy of itself. The scope is one extra predicate, applied in
+     * `collectionWhere`, and no query can see rows outside its scope.
+     *
+     * Not null, and not a foreign key. SQLite permits NULLs in a PRIMARY KEY,
+     * so a nullable scope column on the cache tables below would let the
+     * owner's rows duplicate silently; the same shape is used here so both
+     * read the same way. Deleting a session deletes its rows explicitly, which
+     * has to be reliable rather than implied — see `deleteSession`.
+     */
+    sessionId: text("session_id").notNull().default(OWNER_SCOPE),
   },
   (t) => [
     index("holdings_printing_idx").on(t.printingKey),
@@ -177,8 +207,41 @@ export const holdings = sqliteTable(
     index("holdings_source_idx").on(t.source),
     // The valuation query walks holdings by date_added.
     index("holdings_date_added_idx").on(t.dateAdded),
+    // Every read is scoped to one collection, so this leads most queries.
+    index("holdings_session_idx").on(t.sessionId),
   ],
 );
+
+/**
+ * An uploaded collection, for as long as one browser is looking at it.
+ *
+ * There are no accounts here and nothing is kept: a visitor uploads a file,
+ * gets an opaque id in a cookie, and both the id and the rows it points at are
+ * swept away on a timer. The row exists to carry what the dashboard needs to
+ * describe the upload — where it came from and how big it was — and to give
+ * the sweep and the cascade something to hang off.
+ */
+export const collectionSessions = sqliteTable(
+  "collection_sessions",
+  {
+    /** Opaque, 128 bits of randomness. Never derived from anything.  */
+    id: text("id").primaryKey(),
+    /** What the reader called it: a file name, or a deck's title. */
+    label: text("label").notNull(),
+    /** How it arrived, for the dashboard's provenance line. */
+    source: text("source").$type<SessionSource>().notNull(),
+    createdAt: integer("created_at", { mode: "timestamp" }).notNull(),
+    /** Touched on every read, so an open tab is not swept out from under it. */
+    lastSeenAt: integer("last_seen_at", { mode: "timestamp" }).notNull(),
+    /** Rows that resolved to a printing, and rows the file named but we could not. */
+    matched: integer("matched").notNull(),
+    unmatched: integer("unmatched").notNull(),
+  },
+  (t) => [index("collection_sessions_last_seen_idx").on(t.lastSeenAt)],
+);
+
+export const SESSION_SOURCES = ["csv", "decklist", "url"] as const;
+export type SessionSource = (typeof SESSION_SOURCES)[number];
 
 /**
  * Daily price per printing and finish — the largest table by a wide margin,
@@ -304,8 +367,12 @@ export const portfolioDaily = sqliteTable(
     inferredHoldings: integer("inferred_holdings").notNull(),
     acquiredHoldings: integer("acquired_holdings").notNull(),
     acquiredCards: integer("acquired_cards").notNull(),
+    /** The collection this row was computed for; see `holdings.sessionId`. */
+    sessionId: text("session_id").notNull().default(OWNER_SCOPE),
   },
-  (t) => [primaryKey({ columns: [t.priceSource, t.basket, t.date] })],
+  (t) => [
+    primaryKey({ columns: [t.priceSource, t.basket, t.date, t.sessionId] }),
+  ],
 );
 
 /**
@@ -334,8 +401,10 @@ export const portfolioMonthly = sqliteTable(
     toCents: integer("to_cents").notNull(),
     compared: integer("compared").notNull(),
     excluded: integer("excluded").notNull(),
+    /** The collection this row was computed for; see `holdings.sessionId`. */
+    sessionId: text("session_id").notNull().default(OWNER_SCOPE),
   },
-  (t) => [primaryKey({ columns: [t.priceSource, t.month] })],
+  (t) => [primaryKey({ columns: [t.priceSource, t.month, t.sessionId] })],
 );
 
 /**
@@ -396,6 +465,8 @@ export const syncMeta = sqliteTable("sync_meta", {
 
 export type Printing = typeof printings.$inferSelect;
 export type NewPrinting = typeof printings.$inferInsert;
+export type CollectionSession = typeof collectionSessions.$inferSelect;
+export type NewCollectionSession = typeof collectionSessions.$inferInsert;
 export type Holding = typeof holdings.$inferSelect;
 export type NewHolding = typeof holdings.$inferInsert;
 export type PriceSnapshot = typeof priceSnapshots.$inferSelect;

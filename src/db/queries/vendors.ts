@@ -1,4 +1,10 @@
 import { sql } from "drizzle-orm";
+import {
+  collectionSql,
+  collectionWhere,
+  OWNER,
+  type CollectionScope,
+} from "@/db/scope";
 
 import {
   type Finish,
@@ -243,7 +249,10 @@ export interface CollectionTotalsByVendor {
  * UI can say what each figure actually spans — a buylist total over 78% of the
  * collection is not comparable to a retail total over all of it.
  */
-export function collectionByVendor(db: Db): CollectionTotalsByVendor[] {
+export function collectionByVendor(
+  db: Db,
+  scope: CollectionScope = OWNER,
+): CollectionTotalsByVendor[] {
   // One correlated lookup per holding per series, rather than grouping the
   // price tables and joining the result back.
   //
@@ -272,7 +281,8 @@ export function collectionByVendor(db: Db): CollectionTotalsByVendor[] {
               from (select h.quantity as quantity,
                            ${latest("x.price_cents")} as cents,
                            ${latest("x.date")} as seen
-                      from holdings h)`;
+                      from holdings h
+                     where ${collectionSql("h", scope)})`;
   }).join("\n  union all\n  ");
 
   const rows = client(db).prepare(selects).all() as (Omit<
@@ -286,7 +296,11 @@ export function collectionByVendor(db: Db): CollectionTotalsByVendor[] {
   })[];
 
   const totalHoldings =
-    db.select({ n: sql<number>`count(*)` }).from(holdings).get()?.n ?? 0;
+    db
+      .select({ n: sql<number>`count(*)` })
+      .from(holdings)
+      .where(collectionWhere(scope))
+      .get()?.n ?? 0;
 
   return rows
     // A series nothing quotes yields a row of nulls rather than no row at all.

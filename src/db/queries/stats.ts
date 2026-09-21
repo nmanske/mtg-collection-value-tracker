@@ -1,4 +1,5 @@
 import { FINISH_CODES, SIDE_CODES, VENDOR_CODES } from "@/db/codec";
+import { collectionSql, OWNER, type CollectionScope } from "@/db/scope";
 
 import type { Db } from "./printings";
 
@@ -172,7 +173,10 @@ function top<T>(rows: T[], score: (row: T) => number, count: number): T[] {
   return [...rows].sort((a, b) => score(b) - score(a)).slice(0, count);
 }
 
-export function collectionStats(db: Db): CollectionStats {
+export function collectionStats(
+  db: Db,
+  scope: CollectionScope = OWNER,
+): CollectionStats {
   const rows = client(db)
     .prepare(
       `select p.name, p.set_code as setCode, p.set_name as setName,
@@ -208,7 +212,8 @@ export function collectionStats(db: Db): CollectionStats {
                 where v.printing_key = h.printing_key and v.finish = h.finish
                   and v.vendor = ${VENDOR_CODES.cardkingdom} and v.side = ${SIDE_CODES.buylist}
                 order by v.date desc limit 1) as ckBuylist
-         from holdings h join printings p on p.id = h.printing_key`,
+         from holdings h join printings p on p.id = h.printing_key
+        where ${collectionSql("h", scope)}`,
     )
     .all() as Row[];
 

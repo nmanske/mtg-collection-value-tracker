@@ -7,6 +7,7 @@ import assert from "node:assert/strict";
 import { mkdirSync, rmSync } from "node:fs";
 import { drizzle } from "drizzle-orm/better-sqlite3";
 import { migrate } from "drizzle-orm/better-sqlite3/migrator";
+import { OWNER } from "@/db/scope";
 
 import { openDatabase } from "@/db/client";
 import { holdings, printings, priceSnapshots, vendorPrices } from "@/db/schema";
@@ -120,14 +121,14 @@ db.insert(vendorPrices)
   ])
   .run();
 
-const render = (id: (typeof EXPORT_ORDER)[number]) =>
-  [...EXPORTS[id].stream(db)].join("");
+const render = (id: (typeof EXPORT_ORDER)[number], scope = OWNER) =>
+  [...EXPORTS[id].stream(db, scope)].join("");
 
 // ------------------------------------------------------------- collection ---
 
 const collectionCsv = render("collection");
 assert.ok(collectionCsv.startsWith(UTF8_BOM), "must start with a BOM for Excel");
-assert.equal(EXPORTS.collection.rows(db), 1);
+assert.equal(EXPORTS.collection.rows(db, OWNER), 1);
 
 const collection = parseCsvTable(collectionCsv);
 assert.equal(collection.rows.length, 1);
@@ -193,7 +194,7 @@ assert.deepEqual(history.header.slice(0, 3), [
 assert.equal(history.rows[0][0], "2026-01-01");
 assert.equal(history.rows[0][1], "30.00");
 assert.equal(history.rows[1][1], "36.00");
-assert.equal(EXPORTS["value-history"].rows(db), 2);
+assert.equal(EXPORTS["value-history"].rows(db, OWNER), 2);
 
 // The per-card daily price series was removed: providers' terms forbid
 // repackaging their data as a standalone feed, and an export emitting one row
@@ -208,8 +209,8 @@ assert.ok(
 
 // Both remaining exports describe the collection, so neither can grow with the
 // price tables: one row per holding and one row per date.
-assert.ok(EXPORTS.collection.rows(db) <= 10);
-assert.ok(EXPORTS["value-history"].rows(db) <= 10);
+assert.ok(EXPORTS.collection.rows(db, OWNER) <= 10);
+assert.ok(EXPORTS["value-history"].rows(db, OWNER) <= 10);
 
 sqlite.close();
 cleanup();

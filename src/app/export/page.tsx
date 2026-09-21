@@ -3,6 +3,7 @@ import Link from "next/link";
 
 import { db } from "@/db";
 import { EXPORTS, EXPORT_ORDER, exportSizes } from "@/export/datasets";
+import { currentScope } from "@/lib/session";
 
 export const metadata = { title: "Export" };
 
@@ -20,7 +21,8 @@ function formatBytes(bytes: number): string {
 }
 
 export default async function ExportPage() {
-  const sizes = new Map(exportSizes(db).map((row) => [row.id, row.rows]));
+  const scope = await currentScope();
+  const sizes = new Map(exportSizes(db, scope).map((row) => [row.id, row.rows]));
 
   return (
     <main className="mx-auto w-full max-w-3xl px-6 py-10">
