@@ -81,6 +81,8 @@ export function importCsvSession(
     source: "csv",
     matched: report.importedRows,
     unmatched: report.problems.length,
+    // Nothing is priced yet. A child process does that; see session-warm.
+    warmState: "pending",
   });
 
   return {
@@ -135,6 +137,7 @@ export function importDecklistSession(
       source,
       matched: resolved.length,
       unmatched: unmatched.length,
+      warmState: "pending",
     });
 
     for (let i = 0; i < resolved.length; i += 500) {
@@ -170,12 +173,12 @@ export function importDecklistSession(
 /**
  * Computes the views the dashboard will ask for, before it asks.
  *
- * Done here, inside the upload, because this is the one moment a wait is
- * expected and explained. Left to the first page load it would be the same
- * seconds spent looking at a blank dashboard instead.
+ * Called from the worker process, never from a request: it is seconds of
+ * synchronous work and better-sqlite3 blocks the event loop for all of them.
+ * See `scripts/warm-session.mts`.
  *
- * Only the two views that page draws. The Card Kingdom ones are computed if
- * and when somebody switches to them, which most visitors never will.
+ * Only the views that page draws. The Card Kingdom ones are computed if and
+ * when somebody switches to them, which most visitors never will.
  */
 export function warmSession(db: Db, sessionId: string, basketOnly = false): void {
   if (!basketOnly) cachedPortfolioSeries(db, { scope: sessionId });

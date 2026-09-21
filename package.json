@@ -21,6 +21,7 @@
     "audit:archive": "tsx scripts/audit-archive.mts",
     "audit:gaps": "tsx scripts/audit-gaps.mts",
     "cache:portfolio": "tsx scripts/rebuild-cache.ts",
+    "warm:session": "tsx scripts/warm-session.mts",
     "test:holdings": "tsx scripts/test-holdings.ts",
     "test:sessions": "tsx scripts/test-sessions.ts",
     "test": "npm run test:ingest && npm run test:holdings && npm run test:sessions && npm run test:import && npm run test:valuation && npm run test:vendors && npm run test:stats && npm run test:history && npm run test:chart && npm run test:ranges && npm run test:fuzzy && npm run test:downsample && npm run test:gaps && npm run test:cache && npm run test:today && npm run test:daily && npm run test:export && npm run db:smoke",

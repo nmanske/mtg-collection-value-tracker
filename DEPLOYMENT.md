@@ -431,7 +431,13 @@ nothing warns you: the symptom is `Bind for 0.0.0.0:3010 failed: port is
 already allocated` while `docker ps` shows a healthy container you thought you
 had stopped. `docker compose ls -a` lists every project if you suspect this.
 
-Writes from the two processes are serialised by SQLite. In WAL mode readers
+Uploads are priced by a third kind of process, spawned per upload and capped
+by `WARM_CONCURRENCY`. That is why an upload no longer blocks the site: the
+request writes its rows in about 230ms and returns, and the page waits on a
+worker rather than on the server. `UPLOAD_RATE_LIMIT` caps how often one
+address may start one.
+
+Writes from these processes are serialised by SQLite. In WAL mode readers
 never block, so the public site's pages are unaffected by an ingest in
 progress; only its *writes* — an upload, a sweep — wait, for up to
 `SQLITE_BUSY_TIMEOUT_MS` (30s by default, against an ingest that holds the lock

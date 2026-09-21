@@ -73,6 +73,14 @@ x-env: &env
   # at the default it failed silently in the container, so a cache that needed
   # rebuilding never got one and every page load recomputed it instead.
   REBUILD_COMMAND: "${REBUILD_COMMAND:-node_modules/.bin/tsx scripts/rebuild-cache.ts}"
+  # How an uploaded collection is priced. Same reasoning as the two above: the
+  # default is an npm script and the standalone image has no scripts to run.
+  WARM_COMMAND: "${WARM_COMMAND:-node_modules/.bin/tsx scripts/warm-session.mts}"
+  # How many collections may be priced at once, and how many uploads one
+  # address may start in a minute. Both exist because this work is CPU-bound
+  # and a stranger can ask for it.
+  WARM_CONCURRENCY: "${WARM_CONCURRENCY:-2}"
+  UPLOAD_RATE_LIMIT: "${UPLOAD_RATE_LIMIT:-5}"
   # Two processes write to one file now, so a write waits out another
   # process's write rather than failing. See src/db/client.ts.
   SQLITE_BUSY_TIMEOUT_MS: "${SQLITE_BUSY_TIMEOUT_MS:-30000}"

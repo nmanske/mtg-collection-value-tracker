@@ -20,6 +20,7 @@ import {
   getSession,
   listSessions,
   SESSION_TTL_HOURS,
+  setWarmState,
   sweepSessions,
   touchSession,
 } from "@/db/queries/sessions";
@@ -32,7 +33,8 @@ import {
 } from "@/db/schema";
 import { parseDecklist, resolveDecklist } from "@/import/decklist";
 import { isPrivateAddress } from "@/import/remote";
-import { isSecureRequest } from "@/lib/request";
+import { checkRateLimit, resetRateLimits } from "@/lib/rate-limit";
+import { clientAddress, isSecureRequest } from "@/lib/request";
 import {
   importCsvSession,
   importDecklistSession,
@@ -358,6 +360,69 @@ assert.equal(
 touchSession(db, deck.sessionId, now);
 assert.equal(sweepSessions(db, now).expired, 0);
 assert.equal(listSessions(db).length, 1);
+
+// ------------------------------------------------------- warm state ---
+
+// An upload is not ready the moment its rows land: a child process prices it.
+// The page has to be able to tell "still working" from "died", which derived
+// state cannot do -- no cached rows looks identical either way.
+const warming = importDecklistSession(
+  db,
+  parseDecklist("1 Sol Ring (C18) 120"),
+  "Warming",
+  "decklist",
+);
+assert.equal(
+  getSession(db, warming.sessionId)?.warmState,
+  "pending",
+  "an upload starts pending, not ready",
+);
+
+setWarmState(db, warming.sessionId, "failed", "out of memory");
+const failed = getSession(db, warming.sessionId)!;
+assert.equal(failed.warmState, "failed");
+assert.equal(failed.warmError, "out of memory", "the reason survives, for the page to show");
+
+setWarmState(db, warming.sessionId, "ready");
+assert.equal(getSession(db, warming.sessionId)?.warmError, null, "a retry clears the old reason");
+
+// Sessions made by anything else -- a fixture, a test -- are simply usable.
+createSession(db, { id: "plain", label: "p", source: "csv", matched: 1, unmatched: 0 });
+assert.equal(getSession(db, "plain")?.warmState, "ready");
+deleteSession(db, "plain");
+deleteSession(db, warming.sessionId);
+
+// ------------------------------------------------------- rate limiting ---
+
+resetRateLimits();
+const LIMIT = { limit: 3, windowMs: 60_000 };
+const t0 = 1_000_000;
+
+for (let i = 0; i < 3; i += 1) {
+  assert.equal(checkRateLimit("a", LIMIT, t0).ok, true, `attempt ${i + 1} allowed`);
+}
+const refused = checkRateLimit("a", LIMIT, t0);
+assert.equal(refused.ok, false, "the fourth is refused");
+assert.equal(refused.retryAfter, 60, "and says how long to wait");
+
+// One address's limit is not another's.
+assert.equal(checkRateLimit("b", LIMIT, t0).ok, true);
+
+// The window expires.
+assert.equal(checkRateLimit("a", LIMIT, t0 + 60_001).ok, true);
+// And the countdown shrinks as the window runs down.
+checkRateLimit("c", LIMIT, t0);
+checkRateLimit("c", LIMIT, t0);
+checkRateLimit("c", LIMIT, t0);
+assert.equal(checkRateLimit("c", LIMIT, t0 + 30_000).retryAfter, 30);
+
+// The key comes from the proxy's account of who called. First entry is the
+// client; the rest are proxies. Forgeable, which is why it is a rate-limit
+// key and never an identity.
+assert.equal(clientAddress("203.0.113.7, 10.0.0.1"), "203.0.113.7");
+assert.equal(clientAddress(null, "198.51.100.4"), "198.51.100.4");
+assert.equal(clientAddress(null, null), "unknown", "no proxy means everyone shares a bucket");
+assert.equal(clientAddress("  203.0.113.7  "), "203.0.113.7");
 
 // ------------------------------------------------- the session cookie ---
 

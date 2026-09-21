@@ -259,6 +259,9 @@ own holdings and a derived daily total.
 | `SQLITE_BUSY_TIMEOUT_MS` | `30000` | How long a write waits for another process's write |
 | `ENABLE_OWNER_IMPORT` | off | Allows `/import`, which **replaces the host's collection**. Set it on a self-hosted instance; never on a public one |
 | `PRIVACY_PASSWORD` | unset | Hides all values until this is typed. Unset means values show and the toggle is an ordinary hide button |
+| `WARM_COMMAND` | `npm run warm:session --` | How an uploaded collection is priced, out of process |
+| `WARM_CONCURRENCY` | `2` | How many collections may be priced at once |
+| `UPLOAD_RATE_LIMIT` | `5` | Uploads allowed per address per minute |
 | `SESSION_TTL_HOURS` | `48` | How long an uploaded collection survives without being looked at |
 | `SESSION_LIMIT` | `200` | How many uploaded collections are kept at once, newest first |
 

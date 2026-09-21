@@ -1,5 +1,6 @@
 "use server";
 
+import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 
 import { db } from "@/db";
@@ -10,8 +11,10 @@ import {
   importCsvSession,
   importDecklistSession,
   ImportRejected,
-  warmSession,
 } from "@/import/session";
+import { checkRateLimit } from "@/lib/rate-limit";
+import { clientAddress } from "@/lib/request";
+import { requestSessionWarm } from "@/lib/session-warm";
 import {
   activeCollection,
   clearSessionCookie,
@@ -38,6 +41,42 @@ export interface UploadResult {
 
 /** A CSV this size is already an implausible collection. */
 const MAX_BYTES = 16 * 1024 * 1024;
+
+/**
+ * Uploads allowed per address per minute.
+ *
+ * Every upload starts a worker that reads tens of millions of price rows, so
+ * this is the one thing on the site a stranger can make expensive on demand.
+ * Five a minute is far more than anyone uploading their own collection needs
+ * and far less than a loop wants.
+ */
+const UPLOAD_LIMIT = Number(process.env.UPLOAD_RATE_LIMIT) || 5;
+const UPLOAD_WINDOW_MS = 60_000;
+
+/**
+ * Counts this attempt, and returns a refusal to show if it is over the limit.
+ *
+ * Checked before the file is read, so a rejected request costs a map lookup
+ * rather than 16 MB of parsing.
+ */
+async function overUploadLimit(): Promise<UploadResult | null> {
+  const store = await headers();
+  const address = clientAddress(
+    store.get("x-forwarded-for"),
+    store.get("x-real-ip"),
+  );
+
+  const { ok, retryAfter } = checkRateLimit(`upload:${address}`, {
+    limit: UPLOAD_LIMIT,
+    windowMs: UPLOAD_WINDOW_MS,
+  });
+  if (ok) return null;
+
+  return {
+    ok: false,
+    message: `That is a lot of uploads at once. Try again in ${retryAfter} second${retryAfter === 1 ? "" : "s"}.`,
+  };
+}
 /** A pasted list beyond this is a file, not a paste. */
 const MAX_TEXT = 1024 * 1024;
 
@@ -45,6 +84,9 @@ export async function uploadCsvAction(
   _previous: UploadResult | null,
   formData: FormData,
 ): Promise<UploadResult> {
+  const limited = await overUploadLimit();
+  if (limited) return limited;
+
   const file = formData.get("file");
 
   if (!(file instanceof File) || file.size === 0) {
@@ -65,9 +107,10 @@ export async function uploadCsvAction(
       cleanLabel(file.name) || "Uploaded collection",
     );
     sessionId = result.sessionId;
-    // Both views the dashboard draws, computed while the reader is still
-    // looking at the upload form rather than at an empty chart.
-    warmSession(db, sessionId);
+    // Handed to a child process. Pricing a collection is seconds of
+    // synchronous work, and doing it here would stop the server answering
+    // anybody at all for the duration.
+    requestSessionWarm(sessionId);
   } catch (error) {
     return { ok: false, message: messageFor(error) };
   }
@@ -80,6 +123,9 @@ export async function pasteListAction(
   _previous: UploadResult | null,
   formData: FormData,
 ): Promise<UploadResult> {
+  const limited = await overUploadLimit();
+  if (limited) return limited;
+
   const text = String(formData.get("list") ?? "");
   const url = String(formData.get("url") ?? "").trim();
 
@@ -103,9 +149,7 @@ export async function pasteListAction(
       "decklist",
     );
     sessionId = result.sessionId;
-    // A list has no acquisition dates, so only the fixed-basket view means
-    // anything and only that one is worth computing.
-    warmSession(db, sessionId, true);
+    requestSessionWarm(sessionId);
   } catch (error) {
     return { ok: false, message: messageFor(error) };
   }
@@ -125,7 +169,7 @@ async function importFromUrl(url: string): Promise<UploadResult> {
       "url",
     );
     sessionId = result.sessionId;
-    warmSession(db, sessionId, true);
+    requestSessionWarm(sessionId);
   } catch (error) {
     return { ok: false, message: messageFor(error) };
   }

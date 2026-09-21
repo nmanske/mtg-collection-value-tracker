@@ -19,3 +19,23 @@ export function isSecureRequest(forwardedProto: string | null): boolean {
   if (!forwardedProto) return false;
   return forwardedProto.split(",")[0].trim().toLowerCase() === "https";
 }
+
+/**
+ * Who the request came from, as well as a proxy will say.
+ *
+ * `x-forwarded-for` is a list, appended to by each hop, and the first entry is
+ * the client as the outermost proxy saw it. Later entries are the proxies
+ * themselves. The client can forge the earlier entries if nothing rewrites the
+ * header, which is a reason to treat this as a rate-limit key and never as
+ * identity or authorisation.
+ *
+ * Falls back to a constant, so a deployment with no proxy limits everybody
+ * together rather than accidentally limiting nobody.
+ */
+export function clientAddress(
+  forwardedFor: string | null,
+  realIp: string | null = null,
+): string {
+  const first = forwardedFor?.split(",")[0]?.trim();
+  return first || realIp?.trim() || "unknown";
+}

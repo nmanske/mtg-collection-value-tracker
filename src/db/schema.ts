@@ -236,9 +236,27 @@ export const collectionSessions = sqliteTable(
     /** Rows that resolved to a printing, and rows the file named but we could not. */
     matched: integer("matched").notNull(),
     unmatched: integer("unmatched").notNull(),
+    /**
+     * How far the out-of-process pricing has got.
+     *
+     * Valuing a collection over five years of prices takes seconds — nearly
+     * nine for a large one — and better-sqlite3 is synchronous, so doing it
+     * inside the upload request froze the whole site for everybody. It runs as
+     * a child process instead, and this is how the page knows whether to show
+     * a dashboard, a wait, or an apology.
+     *
+     * Defaults to `ready` so that anything created outside that flow — a test,
+     * a fixture — is simply usable.
+     */
+    warmState: text("warm_state").$type<WarmState>().notNull().default("ready"),
+    /** Why it failed, for the reader. Null unless `warmState` is `failed`. */
+    warmError: text("warm_error"),
   },
   (t) => [index("collection_sessions_last_seen_idx").on(t.lastSeenAt)],
 );
+
+export const WARM_STATES = ["pending", "ready", "failed"] as const;
+export type WarmState = (typeof WARM_STATES)[number];
 
 export const SESSION_SOURCES = ["csv", "decklist", "url"] as const;
 export type SessionSource = (typeof SESSION_SOURCES)[number];

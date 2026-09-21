@@ -8,6 +8,7 @@ import {
   portfolioMonthly,
   type CollectionSession,
   type SessionSource,
+  type WarmState,
 } from "@/db/schema";
 
 import type { Db } from "./printings";
@@ -41,6 +42,8 @@ export interface SessionInput {
   source: SessionSource;
   matched: number;
   unmatched: number;
+  /** Defaults to `ready`; the upload flow creates sessions `pending`. */
+  warmState?: WarmState;
 }
 
 export function createSession(
@@ -50,6 +53,25 @@ export function createSession(
 ): void {
   db.insert(collectionSessions)
     .values({ ...input, createdAt: now, lastSeenAt: now })
+    .run();
+}
+
+/**
+ * Records how the out-of-process pricing ended.
+ *
+ * The error text is stored rather than only logged, because the page that is
+ * waiting has to say something, and "it failed, look in the container log" is
+ * not something to say to a stranger.
+ */
+export function setWarmState(
+  db: Db,
+  id: string,
+  state: WarmState,
+  error: string | null = null,
+): void {
+  db.update(collectionSessions)
+    .set({ warmState: state, warmError: error })
+    .where(eq(collectionSessions.id, id))
     .run();
 }
 

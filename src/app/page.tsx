@@ -11,7 +11,9 @@ import {
   NAMED_CARD_PREVIEW,
 } from "@/components/card-hover-preview";
 import { LandingPage } from "@/components/landing-page";
-import { SessionBanner } from "@/components/session-banner";
+import { SessionBanner, SessionFailed } from "@/components/session-banner";
+import { SessionWarming } from "@/components/session-warming";
+import { requestSessionWarm } from "@/lib/session-warm";
 import { activeCollection } from "@/lib/session";
 import { PrivacyToggle } from "@/components/privacy-toggle";
 import { ownerImportEnabled, privacyConfig } from "@/lib/privacy";
@@ -98,6 +100,18 @@ export default async function CollectionPage(props: PageProps<"/">) {
   // zeroes.
   const { scope, session, present } = await activeCollection();
   if (!present) return <LandingPage />;
+
+  // An uploaded collection is priced by a child process, so it may not be
+  // ready yet. Asking again on every poll is deliberate: `requestSessionWarm`
+  // declines when the box is already running as many workers as it will, and
+  // this is what picks that session up once a slot frees.
+  if (session && session.warmState !== "ready") {
+    if (session.warmState === "failed") return <SessionFailed session={session} />;
+    requestSessionWarm(session.id);
+    return (
+      <SessionWarming label={session.label} holdings={session.matched} />
+    );
+  }
 
   // searchParams is a Promise in Next 16.
   const { page, range, prices, sort, dir, filter, q } = await props.searchParams;
