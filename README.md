@@ -93,6 +93,39 @@ npm run backfill:mtgjson   # ~90 days of history for cards you hold
 npm run dev
 ```
 
+### Running the two sites
+
+The same build serves both. After `npm run build`:
+
+```powershell
+# Your own collection, on the LAN
+$env:ENABLE_OWNER_IMPORT="true"; $env:PRIVACY_PASSWORD="pass"; $env:ALLOW_INSECURE_COOKIE="true"; npm run start
+
+# Public: the upload prompt, with your collection invisible
+$env:PUBLIC_MODE="true"; $env:CRON_ENABLED="false"; $env:PORT="3001"; npm run start
+```
+
+```bash
+# The same, in a POSIX shell
+ENABLE_OWNER_IMPORT=true PRIVACY_PASSWORD=pass ALLOW_INSECURE_COOKIE=true npm run start
+PUBLIC_MODE=true CRON_ENABLED=false PORT=3001 npm run start
+```
+
+Three things to know:
+
+- **PowerShell keeps those variables for the rest of the session.** Run the
+  public command and then the private one in the same terminal and you are
+  still in public mode. Use two terminals, or `Remove-Item Env:PUBLIC_MODE`.
+  This is the easiest way to confuse yourself here.
+- **Different ports.** Both default to 3000.
+- **`CRON_ENABLED=false` on the public one is required, not tidy.** Only one
+  instance may run the daily ingest. The session sweep still runs on both; it
+  is deliberately not behind that flag.
+
+`.env` is loaded by `next start` as well, so anything set there applies to both.
+For the real deployment these are compose environments rather than shell
+variables — see [DEPLOYMENT.md](DEPLOYMENT.md) §9.
+
 ### Data pipeline
 
 | Command | What it does |
