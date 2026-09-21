@@ -224,14 +224,16 @@ ENABLE_OWNER_IMPORT=true
 
 # Hides every value until this is typed. Drop the line and values simply show.
 PRIVACY_PASSWORD=pass
-
-# The session cookie is dropped over plain HTTP without this, and a LAN
-# instance reached at http://kettlecorn:3010 has no certificate.
-ALLOW_INSECURE_COOKIE=true
 ```
 
-A **public** deployment sets none of those three: no web importer, no password
-in front of a visitor's own numbers, and a `secure` cookie behind TLS.
+A **public** deployment sets neither: no web importer, and no password in
+front of a visitor's own numbers.
+
+The session cookie needs no configuration either way. It is marked `Secure`
+only when the request arrived over HTTPS, which the app reads from
+`x-forwarded-proto`. Over plain HTTP — how a LAN instance is actually reached —
+it is not, because a `Secure` cookie is discarded by the browser there and
+every session would silently end at the next click.
 
 `DATA_DIR` keeps the host path out of the tracked compose file, so `git pull`
 never conflicts. Port 3010 rather than 3000 because 3000 is heavily contested —

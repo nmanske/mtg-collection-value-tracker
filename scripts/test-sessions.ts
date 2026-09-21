@@ -32,6 +32,7 @@ import {
 } from "@/db/schema";
 import { parseDecklist, resolveDecklist } from "@/import/decklist";
 import { isPrivateAddress } from "@/import/remote";
+import { isSecureRequest } from "@/lib/request";
 import {
   importCsvSession,
   importDecklistSession,
@@ -357,6 +358,21 @@ assert.equal(
 touchSession(db, deck.sessionId, now);
 assert.equal(sweepSessions(db, now).expired, 0);
 assert.equal(listSessions(db).length, 1);
+
+// ------------------------------------------------- the session cookie ---
+
+// A `Secure` cookie over plain HTTP is discarded by the browser, and the
+// failure is quiet: the upload appears to work, because the render that
+// follows it still sees the cookie it just set, and then the next navigation
+// has no session and lands back on the front page.
+assert.equal(isSecureRequest("https"), true);
+assert.equal(isSecureRequest("http"), false);
+assert.equal(isSecureRequest(null), false, "no proxy said HTTPS, so assume not");
+// Several proxies deep, the client's own hop comes first.
+assert.equal(isSecureRequest("https, http"), true);
+assert.equal(isSecureRequest("http, https"), false, "the client hop decides");
+assert.equal(isSecureRequest(" HTTPS "), true);
+assert.equal(isSecureRequest(""), false);
 
 // --------------------------------------------------------- SSRF guard ---
 

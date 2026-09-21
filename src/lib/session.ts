@@ -1,7 +1,7 @@
 import "server-only";
 
 import { randomUUID } from "node:crypto";
-import { cookies } from "next/headers";
+import { cookies, headers } from "next/headers";
 
 import { db } from "@/db";
 import { countHoldings } from "@/db/queries/holdings";
@@ -11,6 +11,7 @@ import {
   touchSession,
 } from "@/db/queries/sessions";
 import { OWNER, type CollectionScope } from "@/db/scope";
+import { isSecureRequest } from "@/lib/request";
 import { publicMode } from "@/lib/privacy";
 import type { CollectionSession } from "@/db/schema";
 
@@ -94,10 +95,16 @@ export async function setSessionCookie(id: string): Promise<void> {
     sameSite: "lax",
     path: "/",
     maxAge: COOKIE_MAX_AGE,
-    // Set only where it can be honoured: a `secure` cookie is dropped
-    // wholesale over plain HTTP, which is how a self-hosted instance on a LAN
-    // is reached, and dropping it would log the visitor out on every request.
-    secure: process.env.NODE_ENV === "production" && !allowInsecureCookie(),
+    // Set only where it can be honoured, decided by the request rather than
+    // by configuration.
+    //
+    // A `Secure` cookie is discarded outright by the browser over plain HTTP,
+    // and the failure is quiet and confusing: the upload appears to work,
+    // because the render that follows it can still see the cookie it just set,
+    // and then the very next navigation has no session and lands back on the
+    // front page. Guessing from NODE_ENV got this wrong for a LAN instance
+    // served over http, which is how self-hosting actually looks.
+    secure: isSecureRequest((await headers()).get("x-forwarded-proto")),
   });
 }
 
@@ -105,13 +112,3 @@ export async function clearSessionCookie(): Promise<void> {
   (await cookies()).delete(SESSION_COOKIE);
 }
 
-/**
- * Whether to keep the cookie usable over plain HTTP in production.
- *
- * True for the self-hosted case — a Beelink on a LAN reached at
- * `http://host:3010` has no certificate and never will. A public deployment
- * behind TLS leaves this unset and gets the stricter cookie.
- */
-function allowInsecureCookie(): boolean {
-  return process.env.ALLOW_INSECURE_COOKIE === "true";
-}

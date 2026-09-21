@@ -99,7 +99,7 @@ The same build serves both. After `npm run build`:
 
 ```powershell
 # Your own collection, on the LAN
-$env:ENABLE_OWNER_IMPORT="true"; $env:PRIVACY_PASSWORD="pass"; $env:ALLOW_INSECURE_COOKIE="true"; npm run start
+$env:ENABLE_OWNER_IMPORT="true"; $env:PRIVACY_PASSWORD="pass"; npm run start
 
 # Public: the upload prompt, with your collection invisible
 $env:PUBLIC_MODE="true"; $env:CRON_ENABLED="false"; $env:PORT="3001"; npm run start
@@ -107,7 +107,7 @@ $env:PUBLIC_MODE="true"; $env:CRON_ENABLED="false"; $env:PORT="3001"; npm run st
 
 ```bash
 # The same, in a POSIX shell
-ENABLE_OWNER_IMPORT=true PRIVACY_PASSWORD=pass ALLOW_INSECURE_COOKIE=true npm run start
+ENABLE_OWNER_IMPORT=true PRIVACY_PASSWORD=pass npm run start
 PUBLIC_MODE=true CRON_ENABLED=false PORT=3001 npm run start
 ```
 
@@ -261,7 +261,6 @@ own holdings and a derived daily total.
 | `PRIVACY_PASSWORD` | unset | Hides all values until this is typed. Unset means values show and the toggle is an ordinary hide button |
 | `SESSION_TTL_HOURS` | `48` | How long an uploaded collection survives without being looked at |
 | `SESSION_LIMIT` | `200` | How many uploaded collections are kept at once, newest first |
-| `ALLOW_INSECURE_COOKIE` | off | Keeps the session cookie usable over plain HTTP, for a LAN instance with no certificate |
 
 `ENABLE_OWNER_IMPORT` is default-closed on purpose: there is no login here, so
 that page and its action are a stranger's button for overwriting somebody

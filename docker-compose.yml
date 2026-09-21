@@ -99,7 +99,6 @@ services:
       # importer would defeat that. DEPLOYMENT.md §5 says which to set.
       ENABLE_OWNER_IMPORT: "${ENABLE_OWNER_IMPORT:-}"
       PRIVACY_PASSWORD: "${PRIVACY_PASSWORD:-}"
-      ALLOW_INSECURE_COOKIE: "${ALLOW_INSECURE_COOKIE:-}"
 
   # The public site: uploads only, and the host's collection is invisible.
   public:
