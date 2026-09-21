@@ -104,7 +104,16 @@ export function PortfolioSummaryPanel({
 
   const first = summary.points[0]?.date ?? null;
   const spanDays = first && last ? spanInDays(first, last.date) : 0;
-  const range = resolveRange(requestedRange, spanDays, last?.date ?? null);
+  // "Owned" starts at the first date anything was held. A list has no
+  // acquisition dates, so everything in it is "held" from the first date in
+  // the history and the option is just "All" wearing a different label —
+  // offered, it would be a control that does nothing.
+  const range = resolveRange(
+    requestedRange,
+    spanDays,
+    last?.date ?? null,
+    datesKnown ? undefined : "all",
+  );
 
   // The first date anything was held, taken from the series rather than
   // queried: every point already carries how many holdings it covers, so the
@@ -221,6 +230,7 @@ export function PortfolioSummaryPanel({
           active={range.id}
           spanDays={spanDays}
           lastDate={last?.date ?? null}
+          exclude={datesKnown ? undefined : ["held"]}
           hrefFor={(id) => `/?range=${id}`}
         />
       </div>

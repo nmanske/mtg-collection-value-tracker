@@ -160,7 +160,16 @@ export default async function CollectionPage(props: PageProps<"/">) {
   // "if sold today" line exists on their view and nowhere else.
   const buylistPoints =
     priceSource === "cardkingdom"
-      ? cachedPortfolioSeries(db, { buylist: true, scope }).points
+      ? cachedPortfolioSeries(db, {
+          buylist: true,
+          scope,
+          // The buylist is an as-held series everywhere else, which is right
+          // when acquisition dates are real. For a list they are not: every
+          // holding carries the day it was pasted, so an as-held buylist is
+          // zero for the whole history and the line sat flat on the axis. The
+          // basket answers the same question the value line above it does.
+          constantBasket: !datesKnown,
+        }).points
       : undefined;
   const vendorTotals = collectionByVendor(db, scope);
   const freshness = priceFreshness(db);
