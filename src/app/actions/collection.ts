@@ -12,7 +12,7 @@ import {
   importDecklistSession,
   ImportRejected,
 } from "@/import/session";
-import { checkRateLimit } from "@/lib/rate-limit";
+import { checkRateLimit, peekRateLimit, recordHit } from "@/lib/rate-limit";
 import { clientAddress } from "@/lib/request";
 import { requestSessionWarm } from "@/lib/session-warm";
 import {
@@ -43,38 +43,67 @@ export interface UploadResult {
 const MAX_BYTES = 16 * 1024 * 1024;
 
 /**
- * Uploads allowed per address per minute.
+ * Collections one address may have priced, and how often.
  *
- * Every upload starts a worker that reads tens of millions of price rows, so
- * this is the one thing on the site a stranger can make expensive on demand.
- * Five a minute is far more than anyone uploading their own collection needs
- * and far less than a loop wants.
+ * An upload starts a worker that reads tens of millions of price rows and can
+ * run for two minutes, so this is the one thing on the site a stranger can
+ * make expensive on demand. One every ten minutes is far more than anyone
+ * looking at their own collection needs and far less than a loop wants.
  */
-const UPLOAD_LIMIT = Number(process.env.UPLOAD_RATE_LIMIT) || 5;
-const UPLOAD_WINDOW_MS = 60_000;
+const UPLOAD_LIMIT = Number(process.env.UPLOAD_RATE_LIMIT) || 1;
+const UPLOAD_WINDOW_MS =
+  (Number(process.env.UPLOAD_RATE_WINDOW_MINUTES) || 10) * 60_000;
 
 /**
- * Counts this attempt, and returns a refusal to show if it is over the limit.
+ * Attempts allowed in the same window, whether or not they produce anything.
  *
- * Checked before the file is read, so a rejected request costs a map lookup
- * rather than 16 MB of parsing.
+ * The expensive limit is only charged for an upload that actually starts a
+ * worker, so that a wrong file — the commonest reason anyone tries twice — does
+ * not cost somebody ten minutes. That leaves parsing itself unguarded, which is
+ * cheap but not free at 16 MB a go, so it gets its own generous ceiling.
  */
-async function overUploadLimit(): Promise<UploadResult | null> {
-  const store = await headers();
-  const address = clientAddress(
-    store.get("x-forwarded-for"),
-    store.get("x-real-ip"),
-  );
+const ATTEMPT_LIMIT = UPLOAD_LIMIT * 10;
 
-  const { ok, retryAfter } = checkRateLimit(`upload:${address}`, {
+/** The address this request appears to come from. */
+async function addressOf(): Promise<string> {
+  const store = await headers();
+  return clientAddress(store.get("x-forwarded-for"), store.get("x-real-ip"));
+}
+
+/**
+ * Whether this request may proceed, checked before the file is read so that a
+ * refusal costs a map lookup rather than a parse.
+ */
+async function overUploadLimit(address: string): Promise<UploadResult | null> {
+  const attempts = checkRateLimit(`attempt:${address}`, {
+    limit: ATTEMPT_LIMIT,
+    windowMs: UPLOAD_WINDOW_MS,
+  });
+  if (!attempts.ok) return refusal(attempts.retryAfter);
+
+  const uploads = peekRateLimit(`upload:${address}`, {
     limit: UPLOAD_LIMIT,
     windowMs: UPLOAD_WINDOW_MS,
   });
-  if (ok) return null;
+  return uploads.ok ? null : refusal(uploads.retryAfter);
+}
 
+/** Charged once the upload has actually started a worker. */
+function recordUpload(address: string): void {
+  recordHit(`upload:${address}`, {
+    limit: UPLOAD_LIMIT,
+    windowMs: UPLOAD_WINDOW_MS,
+  });
+}
+
+function refusal(retryAfter: number): UploadResult {
+  const minutes = Math.ceil(retryAfter / 60);
   return {
     ok: false,
-    message: `That is a lot of uploads at once. Try again in ${retryAfter} second${retryAfter === 1 ? "" : "s"}.`,
+    message:
+      retryAfter > 90
+        ? `One collection at a time, please. Try again in ${minutes} minutes.`
+        : `One collection at a time, please. Try again in ${retryAfter} second${retryAfter === 1 ? "" : "s"}.`,
   };
 }
 /** A pasted list beyond this is a file, not a paste. */
@@ -84,7 +113,8 @@ export async function uploadCsvAction(
   _previous: UploadResult | null,
   formData: FormData,
 ): Promise<UploadResult> {
-  const limited = await overUploadLimit();
+  const address = await addressOf();
+  const limited = await overUploadLimit(address);
   if (limited) return limited;
 
   const file = formData.get("file");
@@ -111,6 +141,9 @@ export async function uploadCsvAction(
     // synchronous work, and doing it here would stop the server answering
     // anybody at all for the duration.
     requestSessionWarm(sessionId);
+    // Charged here rather than at the door: only an upload that reached this
+    // point has cost anything worth limiting.
+    recordUpload(address);
   } catch (error) {
     return { ok: false, message: messageFor(error) };
   }
@@ -123,7 +156,8 @@ export async function pasteListAction(
   _previous: UploadResult | null,
   formData: FormData,
 ): Promise<UploadResult> {
-  const limited = await overUploadLimit();
+  const address = await addressOf();
+  const limited = await overUploadLimit(address);
   if (limited) return limited;
 
   const text = String(formData.get("list") ?? "");
@@ -131,7 +165,7 @@ export async function pasteListAction(
 
   // One form, two fields, whichever was filled in. A paste box and a URL box
   // that submit separately would be two buttons for one intent.
-  if (url) return importFromUrl(url);
+  if (url) return importFromUrl(url, address);
 
   if (!text.trim()) {
     return { ok: false, message: "Paste a list, or give a link to one." };
@@ -150,6 +184,7 @@ export async function pasteListAction(
     );
     sessionId = result.sessionId;
     requestSessionWarm(sessionId);
+    recordUpload(address);
   } catch (error) {
     return { ok: false, message: messageFor(error) };
   }
@@ -158,7 +193,10 @@ export async function pasteListAction(
   redirect("/");
 }
 
-async function importFromUrl(url: string): Promise<UploadResult> {
+async function importFromUrl(
+  url: string,
+  address: string,
+): Promise<UploadResult> {
   let sessionId: string;
   try {
     const remote = await fetchRemoteList(url);
@@ -170,6 +208,7 @@ async function importFromUrl(url: string): Promise<UploadResult> {
     );
     sessionId = result.sessionId;
     requestSessionWarm(sessionId);
+    recordUpload(address);
   } catch (error) {
     return { ok: false, message: messageFor(error) };
   }

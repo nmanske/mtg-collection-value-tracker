@@ -46,26 +46,60 @@ function windows(): Map<string, Window> {
  */
 export function checkRateLimit(
   key: string,
-  options: { limit: number; windowMs: number },
+  options: RateLimitOptions,
   now = Date.now(),
 ): RateLimitResult {
-  const map = windows();
+  const result = peekRateLimit(key, options, now);
+  if (result.ok) recordHit(key, options, now);
+  return result;
+}
 
-  // Expired entries are dropped as they are met. A sweep would be tidier, and
-  // this map only grows while requests keep arriving from new addresses.
-  const current = map.get(key);
-  if (!current || current.resetAt <= now) {
-    map.set(key, { count: 1, resetAt: now + options.windowMs });
-    pruneOccasionally(map, now);
-    return { ok: true, retryAfter: 0 };
-  }
+export interface RateLimitOptions {
+  limit: number;
+  windowMs: number;
+}
 
+/**
+ * Whether this key is within its limit, without spending anything.
+ *
+ * Separate from counting because the two happen at different moments for the
+ * expensive limit: an upload is checked before the file is read, so a refusal
+ * stays cheap, but counted only once it has actually started a worker. A file
+ * that turns out to be the wrong CSV is the commonest reason anyone tries
+ * twice in a row, and charging a ten-minute quota for it would punish exactly
+ * the person who most needs another go.
+ */
+export function peekRateLimit(
+  key: string,
+  options: RateLimitOptions,
+  now = Date.now(),
+): RateLimitResult {
+  const current = windows().get(key);
+  if (!current || current.resetAt <= now) return { ok: true, retryAfter: 0 };
   if (current.count >= options.limit) {
     return { ok: false, retryAfter: Math.ceil((current.resetAt - now) / 1000) };
   }
+  return { ok: true, retryAfter: 0 };
+}
+
+/** Spends one against this key. */
+export function recordHit(
+  key: string,
+  options: RateLimitOptions,
+  now = Date.now(),
+): void {
+  const map = windows();
+  const current = map.get(key);
+
+  // Expired entries are dropped as they are met. A sweep would be tidier, and
+  // this map only grows while requests keep arriving from new addresses.
+  if (!current || current.resetAt <= now) {
+    map.set(key, { count: 1, resetAt: now + options.windowMs });
+    pruneOccasionally(map, now);
+    return;
+  }
 
   current.count += 1;
-  return { ok: true, retryAfter: 0 };
 }
 
 /**

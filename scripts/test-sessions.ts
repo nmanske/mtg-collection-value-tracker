@@ -33,7 +33,12 @@ import {
 } from "@/db/schema";
 import { parseDecklist, resolveDecklist } from "@/import/decklist";
 import { isPrivateAddress } from "@/import/remote";
-import { checkRateLimit, resetRateLimits } from "@/lib/rate-limit";
+import {
+  checkRateLimit,
+  peekRateLimit,
+  recordHit,
+  resetRateLimits,
+} from "@/lib/rate-limit";
 import { clientAddress, isSecureRequest } from "@/lib/request";
 import {
   importCsvSession,
@@ -415,6 +420,26 @@ checkRateLimit("c", LIMIT, t0);
 checkRateLimit("c", LIMIT, t0);
 checkRateLimit("c", LIMIT, t0);
 assert.equal(checkRateLimit("c", LIMIT, t0 + 30_000).retryAfter, 30);
+
+// Peeking does not spend. This is what lets a rejected upload -- the wrong
+// file, a list with no cards in it -- cost nothing, so the commonest reason
+// to try again is not also the reason you cannot.
+resetRateLimits();
+const ONE = { limit: 1, windowMs: 600_000 };
+assert.equal(peekRateLimit("u", ONE, t0).ok, true);
+assert.equal(peekRateLimit("u", ONE, t0).ok, true, "peeking twice still allows");
+assert.equal(checkRateLimit("u", ONE, t0).ok, true, "and nothing was spent");
+
+// Once spent, it is spent, and the wait is the rest of the window.
+assert.equal(peekRateLimit("u", ONE, t0).ok, false);
+assert.equal(peekRateLimit("u", ONE, t0).retryAfter, 600);
+assert.equal(peekRateLimit("u", ONE, t0 + 599_000).retryAfter, 1);
+assert.equal(peekRateLimit("u", ONE, t0 + 600_001).ok, true, "the window passes");
+
+// recordHit opens a window of its own when there is none.
+resetRateLimits();
+recordHit("v", ONE, t0);
+assert.equal(peekRateLimit("v", ONE, t0).ok, false);
 
 // The key comes from the proxy's account of who called. First entry is the
 // client; the rest are proxies. Forgeable, which is why it is a rate-limit
