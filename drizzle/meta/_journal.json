@@ -92,6 +92,13 @@
       "when": 1790023078571,
       "tag": "0012_session_warm_progress",
       "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "6",
+      "when": 1790025133307,
+      "tag": "0013_session_warm_detail",
+      "breakpoints": true
     }
   ]
 }

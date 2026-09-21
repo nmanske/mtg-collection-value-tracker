@@ -255,6 +255,8 @@ export const collectionSessions = sqliteTable(
     warmProgress: integer("warm_progress").notNull().default(0),
     /** What it is doing, in words: "Reading prices", "Valuing March 2023". */
     warmStep: text("warm_step"),
+    /** What it is on right now: a card name, or how far through the days. */
+    warmDetail: text("warm_detail"),
   },
   (t) => [index("collection_sessions_last_seen_idx").on(t.lastSeenAt)],
 );

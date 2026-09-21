@@ -21,11 +21,13 @@ export function SessionWarming({
   holdings,
   percent,
   step,
+  detail,
 }: {
   label: string;
   holdings: number;
   percent: number;
   step: string | null;
+  detail: string | null;
 }) {
   const router = useRouter();
 
@@ -59,13 +61,20 @@ export function SessionWarming({
         </div>
 
         <div className="mt-2 flex items-baseline justify-between gap-4 text-sm">
-          <span className="text-neutral-600 dark:text-neutral-400" aria-live="polite">
+          <span className="text-neutral-800 dark:text-neutral-200" aria-live="polite">
             {step ?? "Starting"}
           </span>
           <span className="tabular-nums text-neutral-600 dark:text-neutral-400">
             {percent}%
           </span>
         </div>
+
+        {/* The line that actually moves. A card name during the long read,
+            a day count while valuing — truncated rather than wrapped, so the
+            layout does not jump every time a longer name goes past. */}
+        <p className="mt-1 h-4 truncate text-xs text-neutral-600 dark:text-neutral-400">
+          {detail ?? ""}
+        </p>
 
         <p className="mt-6 text-xs text-neutral-600 dark:text-neutral-400">
           This page updates itself; there is no need to reload.

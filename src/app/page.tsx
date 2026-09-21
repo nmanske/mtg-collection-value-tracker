@@ -114,6 +114,7 @@ export default async function CollectionPage(props: PageProps<"/">) {
         holdings={session.matched}
         percent={session.warmProgress}
         step={session.warmStep}
+        detail={session.warmDetail}
       />
     );
   }

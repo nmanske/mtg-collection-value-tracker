@@ -75,7 +75,9 @@ export function setWarmState(
       warmError: error,
       // A finished session reads as finished, whatever the last partial
       // update said.
-      ...(state === "ready" ? { warmProgress: 100, warmStep: null } : {}),
+      ...(state === "ready"
+        ? { warmProgress: 100, warmStep: null, warmDetail: null }
+        : {}),
     })
     .where(eq(collectionSessions.id, id))
     .run();
@@ -92,9 +94,14 @@ export function setWarmProgress(
   id: string,
   percent: number,
   step: string,
+  detail: string | null = null,
 ): void {
   db.update(collectionSessions)
-    .set({ warmProgress: Math.max(0, Math.min(100, Math.round(percent))), warmStep: step })
+    .set({
+      warmProgress: Math.max(0, Math.min(100, Math.round(percent))),
+      warmStep: step,
+      warmDetail: detail,
+    })
     .where(eq(collectionSessions.id, id))
     .run();
 }

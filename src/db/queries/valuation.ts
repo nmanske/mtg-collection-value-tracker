@@ -217,6 +217,8 @@ export interface ValuationProgress {
   fraction: number;
   /** The date being valued, during `valuing` only. */
   date?: string;
+  /** The card whose prices are being read, during `reading` only. */
+  card?: string;
 }
 
 export function portfolioSeries(
@@ -417,6 +419,24 @@ export function portfolioSeries(
   );
 
   const report = options.onProgress;
+
+  // Card names, so the waiting page can say what is being read rather than
+  // only how much of it. Queried through the holdings join rather than with an
+  // `in (...)` list: a collection at the upload limit has 50,000 printings and
+  // SQLite takes 32,766 parameters. Only when something is watching — a cold
+  // dashboard load pays nothing for it.
+  const names = new Map<number, string>();
+  if (report) {
+    for (const row of sqlite
+      .prepare(
+        `select distinct p.id as id, p.name as name
+           from holdings h join printings p on p.id = h.printing_key
+          where ${collectionSql("h", scope)}`,
+      )
+      .all() as { id: number; name: string }[]) {
+      names.set(row.id, row.name);
+    }
+  }
   // The rows arrive ordered by (printing_key, finish), so a change of series
   // is a step through the work — no counting of rows we do not know the total
   // of, and no cost beyond one comparison per row.
@@ -433,8 +453,12 @@ export function portfolioSeries(
       seriesSeen += 1;
       // Every 64th series: often enough to move a bar smoothly, seldom enough
       // that the callback is not itself part of the measurement.
-      if (report && seriesSeen % 64 === 0) {
-        report({ phase: "reading", fraction: seriesSeen / seriesIndex.size });
+      if (report && seriesSeen % 16 === 0) {
+        report({
+          phase: "reading",
+          fraction: seriesSeen / seriesIndex.size,
+          card: names.get(raw[0]),
+        });
       }
     }
     const column = dateIndex.get(raw[2]);
@@ -446,7 +470,10 @@ export function portfolioSeries(
   // rather than per holding, since many holdings share a printing.
   for (let series = 0; series < seriesIndex.size; series += 1) {
     if (report && series % 64 === 0) {
-      report({ phase: "filling", fraction: series / seriesIndex.size });
+      report({
+        phase: "filling",
+        fraction: series / seriesIndex.size,
+      });
     }
     const base = series * dateCount;
     let carried = NO_PRICE;
@@ -461,7 +488,11 @@ export function portfolioSeries(
 
   const points: ValuePoint[] = dates.map((date, offset) => {
     if (report && offset % 8 === 0) {
-      report({ phase: "valuing", fraction: offset / dates.length, date });
+      report({
+        phase: "valuing",
+        fraction: offset / dates.length,
+        date,
+      });
     }
     const column = firstColumn + offset;
     let valueCents = 0;

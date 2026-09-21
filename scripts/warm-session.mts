@@ -71,12 +71,12 @@ try {
   // cheaper than the work being measured.
   let lastWrite = 0;
   const status = drizzle(statusSqlite);
-  warmSession(db, id, basketOnly, ({ percent, step }) => {
+  warmSession(db, id, basketOnly, ({ percent, step, detail }) => {
     const now = Date.now();
     if (now - lastWrite < 250) return;
     lastWrite = now;
     try {
-      setWarmProgress(status, id, percent, step);
+      setWarmProgress(status, id, percent, step, detail);
     } catch {
       // Progress is decoration. A collection that priced correctly must not be
       // reported as failed because the bar could not be updated.

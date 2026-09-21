@@ -199,7 +199,7 @@ export function warmSession(
         99,
         Math.round(((done + viewFraction(update)) / views) * 100),
       ),
-      step: describe(update),
+      ...describe(update),
     });
   };
 
@@ -217,7 +217,10 @@ export function warmSession(
 export interface WarmProgress {
   /** 0-99. A hundred is written when the session is marked ready. */
   percent: number;
+  /** The phase, in words. Changes rarely. */
   step: string;
+  /** What it is on right now. Changes constantly, which is the point. */
+  detail: string | null;
 }
 
 /**
@@ -241,17 +244,35 @@ const MONTHS = [
 ];
 
 /**
- * What to tell the reader.
+ * What to tell the reader: a phase, and the thing being worked on.
  *
- * The month is only available while valuing, which is the last few percent:
- * the long phase reads prices in storage order, by printing rather than by
- * date, because ordering that read by date turns 228ms into 114 seconds. So
- * the honest label for the long phase is what it is actually doing.
+ * The month only exists while valuing, which is the last few percent — the
+ * long phase reads prices in storage order, by printing rather than by date,
+ * because ordering that read by date turns 228ms into 114 seconds. A bar
+ * showing nothing but a percentage for three quarters of the wait is the
+ * problem the second line solves: during the read it names the card whose
+ * prices are going by, which is both true and moving.
+ *
+ * A card name and nothing else. Counting the cards read was tried twice and
+ * was wrong both ways: per view it ran backwards when the second pass started,
+ * and across the job it claimed 8,000 cards in a 4,000-card collection. The
+ * page already says how many holdings there are, and the bar already says how
+ * far along it is.
  */
-function describe({ phase, date }: ValuationProgress): string {
-  if (phase === "reading") return "Reading five years of prices";
-  if (phase === "filling") return "Filling gaps in the history";
-  if (!date) return "Valuing your collection";
-  const [year, month] = date.split("-");
-  return `Valuing ${MONTHS[Number(month) - 1]} ${year}`;
+function describe({
+  phase,
+  date,
+  card,
+}: ValuationProgress): { step: string; detail: string | null } {
+  if (phase === "reading") {
+    return { step: "Reading five years of prices", detail: card ?? null };
+  }
+  if (phase === "filling") {
+    return { step: "Filling gaps in the history", detail: null };
+  }
+  const [year, month] = (date ?? "").split("-");
+  return {
+    step: date ? `Valuing ${MONTHS[Number(month) - 1]} ${year}` : "Valuing",
+    detail: null,
+  };
 }
