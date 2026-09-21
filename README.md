@@ -261,7 +261,7 @@ own holdings and a derived daily total.
 | `PRIVACY_PASSWORD` | unset | Hides all values until this is typed. Unset means values show and the toggle is an ordinary hide button |
 | `WARM_COMMAND` | `npm run warm:session --` | How an uploaded collection is priced, out of process |
 | `WARM_CONCURRENCY` | `2` | How many collections may be priced at once |
-| `UPLOAD_RATE_LIMIT` | `1` | Collections one address may have priced per window. Charged only when an upload starts a worker, so a rejected file costs nothing |
+| `UPLOAD_RATE_LIMIT` | `3` | Collections one address may have priced per window. Charged only when an upload starts a worker, so a rejected file costs nothing |
 | `UPLOAD_RATE_WINDOW_MINUTES` | `10` | The window that limit applies over |
 | — | 50,000 rows | The upload ceiling, in `src/lib/limits.ts`. About two minutes of background work at the limit |
 | `SESSION_TTL_HOURS` | `48` | How long an uploaded collection survives without being looked at |

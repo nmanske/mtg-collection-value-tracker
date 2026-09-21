@@ -47,10 +47,14 @@ const MAX_BYTES = 16 * 1024 * 1024;
  *
  * An upload starts a worker that reads tens of millions of price rows and can
  * run for two minutes, so this is the one thing on the site a stranger can
- * make expensive on demand. One every ten minutes is far more than anyone
- * looking at their own collection needs and far less than a loop wants.
+ * make expensive on demand.
+ *
+ * Three per ten minutes rather than one, because the key is an address and an
+ * address is not a person: everyone behind one NAT — an office, a household,
+ * a mobile carrier — shares it. One would have had the second person in a
+ * building told to come back later by the first.
  */
-const UPLOAD_LIMIT = Number(process.env.UPLOAD_RATE_LIMIT) || 1;
+const UPLOAD_LIMIT = Number(process.env.UPLOAD_RATE_LIMIT) || 3;
 const UPLOAD_WINDOW_MS =
   (Number(process.env.UPLOAD_RATE_WINDOW_MINUTES) || 10) * 60_000;
 
