@@ -251,6 +251,10 @@ export const collectionSessions = sqliteTable(
     warmState: text("warm_state").$type<WarmState>().notNull().default("ready"),
     /** Why it failed, for the reader. Null unless `warmState` is `failed`. */
     warmError: text("warm_error"),
+    /** 0-100, for the bar on the waiting page. */
+    warmProgress: integer("warm_progress").notNull().default(0),
+    /** What it is doing, in words: "Reading prices", "Valuing March 2023". */
+    warmStep: text("warm_step"),
   },
   (t) => [index("collection_sessions_last_seen_idx").on(t.lastSeenAt)],
 );

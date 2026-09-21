@@ -11,6 +11,7 @@ import {
   PRICE_VENDORS,
   portfolioSeries,
   type PriceVendor,
+  type ValuationProgress,
   type ValuationSeries,
   type ValuePoint,
 } from "./valuation";
@@ -326,6 +327,8 @@ export function cachedPortfolioSeries(
     constantBasket?: boolean;
     buylist?: boolean;
     scope?: CollectionScope;
+    /** Passed to the computation when there is nothing cached to serve. */
+    onProgress?: (update: ValuationProgress) => void;
   } = {},
 ): ValuationSeries {
   const source = options.priceSource ?? "tcgplayer";
@@ -338,7 +341,9 @@ export function cachedPortfolioSeries(
   // correct. Prices move under it during the session, which is the right
   // trade — a visitor looking at a chart for ten minutes wants it to stay
   // still, not to pay a recompute because MTGJSON published.
-  if (scope !== OWNER) return sessionSeries(db, scope, source, basket, buylist);
+  if (scope !== OWNER) {
+    return sessionSeries(db, scope, source, basket, buylist, options.onProgress);
+  }
 
   const fresh = cacheIsFresh(db);
   const points = rowsFor(db, source, basket, buylist, scope);
@@ -400,6 +405,7 @@ function sessionSeries(
   source: PriceVendor,
   basket: boolean,
   buylist: boolean,
+  onProgress?: (update: ValuationProgress) => void,
 ): ValuationSeries {
   const cached = rowsFor(db, source, basket, buylist, scope);
   if (cached.length > 0) {
@@ -415,6 +421,7 @@ function sessionSeries(
     constantBasket: basket,
     buylist,
     scope,
+    onProgress,
   });
   storeView(db, scope, source, basket, buylist, series);
   return series;

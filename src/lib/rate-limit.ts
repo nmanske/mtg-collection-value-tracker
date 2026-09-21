@@ -2,7 +2,7 @@
  * A fixed-window rate limiter, in memory.
  *
  * Uploads are the expensive thing here: each one starts a CPU-bound worker
- * that reads tens of millions of price rows. Nothing else on the site can be
+ * that reads tens of millions of price rows and can run for two minutes. Nothing else on the site can be
  * made to cost that on demand, so nothing else needs limiting.
  *
  * In memory, which means per process. Two things follow, and both are fine for

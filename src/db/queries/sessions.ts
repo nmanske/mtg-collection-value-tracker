@@ -70,7 +70,31 @@ export function setWarmState(
   error: string | null = null,
 ): void {
   db.update(collectionSessions)
-    .set({ warmState: state, warmError: error })
+    .set({
+      warmState: state,
+      warmError: error,
+      // A finished session reads as finished, whatever the last partial
+      // update said.
+      ...(state === "ready" ? { warmProgress: 100, warmStep: null } : {}),
+    })
+    .where(eq(collectionSessions.id, id))
+    .run();
+}
+
+/**
+ * Records how far the pricing has got, for the page waiting on it.
+ *
+ * Written by the worker and read by the web process, which is what the WAL is
+ * for: the reader never blocks on these writes.
+ */
+export function setWarmProgress(
+  db: Db,
+  id: string,
+  percent: number,
+  step: string,
+): void {
+  db.update(collectionSessions)
+    .set({ warmProgress: Math.max(0, Math.min(100, Math.round(percent))), warmStep: step })
     .where(eq(collectionSessions.id, id))
     .run();
 }

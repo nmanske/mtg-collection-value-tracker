@@ -211,6 +211,14 @@ export function priceDates(db: Db, from?: string, to?: string): string[] {
  * Values the collection on every date in the price table between `from` and
  * `to`, inclusive.
  */
+export interface ValuationProgress {
+  phase: "reading" | "filling" | "valuing";
+  /** 0 to 1 within this phase. */
+  fraction: number;
+  /** The date being valued, during `valuing` only. */
+  date?: string;
+}
+
 export function portfolioSeries(
   db: Db,
   options: {
@@ -259,6 +267,19 @@ export function portfolioSeries(
     priceSource?: PriceVendor;
     /** Whose collection to value. Defaults to the host's own. */
     scope?: CollectionScope;
+    /**
+     * Called as the work proceeds, for a page that is waiting on it.
+     *
+     * Three phases, because they cost different amounts and only one of them
+     * knows what date it is on: reading the prices off disk, carrying them
+     * forward across gaps, and valuing the collection date by date. `fraction`
+     * is progress within the current phase; the caller decides what each phase
+     * is worth overall, since that depends on the collection.
+     *
+     * Called often enough to animate and rarely enough not to matter —
+     * throttling is the caller's business, and the worker does it by time.
+     */
+    onProgress?: (update: ValuationProgress) => void;
   } = {},
 ): ValuationSeries {
   const sqlite = clientOf(db);
@@ -395,11 +416,27 @@ export function portfolioSeries(
       order by ps.printing_key, ps.finish, ps.date`,
   );
 
+  const report = options.onProgress;
+  // The rows arrive ordered by (printing_key, finish), so a change of series
+  // is a step through the work — no counting of rows we do not know the total
+  // of, and no cost beyond one comparison per row.
+  let lastSeries = -1;
+  let seriesSeen = 0;
+
   for (const raw of statement.raw(true).iterate(lastDate) as Iterable<
     [number, number, string, number]
   >) {
     const series = seriesIndex.get(seriesKey(raw[0], raw[1]));
     if (series === undefined) continue;
+    if (series !== lastSeries) {
+      lastSeries = series;
+      seriesSeen += 1;
+      // Every 64th series: often enough to move a bar smoothly, seldom enough
+      // that the callback is not itself part of the measurement.
+      if (report && seriesSeen % 64 === 0) {
+        report({ phase: "reading", fraction: seriesSeen / seriesIndex.size });
+      }
+    }
     const column = dateIndex.get(raw[2]);
     if (column === undefined) continue;
     prices[series * dateCount + column] = raw[3];
@@ -408,6 +445,9 @@ export function portfolioSeries(
   // Fill gaps by carrying the last known price forward. Done once per series
   // rather than per holding, since many holdings share a printing.
   for (let series = 0; series < seriesIndex.size; series += 1) {
+    if (report && series % 64 === 0) {
+      report({ phase: "filling", fraction: series / seriesIndex.size });
+    }
     const base = series * dateCount;
     let carried = NO_PRICE;
     for (let column = 0; column < dateCount; column += 1) {
@@ -420,6 +460,9 @@ export function portfolioSeries(
   const firstColumn = options.from ? (dateIndex.get(dates[0]) ?? 0) : 0;
 
   const points: ValuePoint[] = dates.map((date, offset) => {
+    if (report && offset % 8 === 0) {
+      report({ phase: "valuing", fraction: offset / dates.length, date });
+    }
     const column = firstColumn + offset;
     let valueCents = 0;
     let holdingsHeld = 0;

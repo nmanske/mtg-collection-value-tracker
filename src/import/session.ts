@@ -1,9 +1,12 @@
 import { randomUUID } from "node:crypto";
 
 import { cachedPortfolioSeries } from "@/db/queries/portfolio-cache";
+import type { ValuationProgress } from "@/db/queries/valuation";
 import type { Db } from "@/db/queries/printings";
 import { createSession } from "@/db/queries/sessions";
 import { holdings, type SessionSource } from "@/db/schema";
+
+import { MAX_SESSION_ROWS } from "@/lib/limits";
 
 import { resolveDecklist, type DecklistEntry } from "./decklist";
 import { importMoxfieldCsv } from "./moxfield";
@@ -17,9 +20,6 @@ import { importMoxfieldCsv } from "./moxfield";
  * self-hosted collection, because it is the same table and the same queries
  * with a different scope.
  */
-
-/** A ceiling on one upload, so a single file cannot fill the disk. */
-export const MAX_SESSION_ROWS = 20_000;
 
 export class ImportRejected extends Error {}
 
@@ -180,7 +180,78 @@ export function importDecklistSession(
  * Only the views that page draws. The Card Kingdom ones are computed if and
  * when somebody switches to them, which most visitors never will.
  */
-export function warmSession(db: Db, sessionId: string, basketOnly = false): void {
-  if (!basketOnly) cachedPortfolioSeries(db, { scope: sessionId });
-  cachedPortfolioSeries(db, { scope: sessionId, constantBasket: true });
+export function warmSession(
+  db: Db,
+  sessionId: string,
+  basketOnly = false,
+  onProgress?: (update: WarmProgress) => void,
+): void {
+  // One view for a list, two for a collection with real dates. Each is
+  // weighted equally, which is close enough: they do the same work over the
+  // same prices and differ only in whether acquisition dates gate a holding.
+  const views = basketOnly ? 1 : 2;
+  let done = 0;
+
+  const forward = (update: ValuationProgress) => {
+    if (!onProgress) return;
+    onProgress({
+      percent: Math.min(
+        99,
+        Math.round(((done + viewFraction(update)) / views) * 100),
+      ),
+      step: describe(update),
+    });
+  };
+
+  if (!basketOnly) {
+    cachedPortfolioSeries(db, { scope: sessionId, onProgress: forward });
+    done += 1;
+  }
+  cachedPortfolioSeries(db, {
+    scope: sessionId,
+    constantBasket: true,
+    onProgress: forward,
+  });
+}
+
+export interface WarmProgress {
+  /** 0-99. A hundred is written when the session is marked ready. */
+  percent: number;
+  step: string;
+}
+
+/**
+ * How far through one view a phase is.
+ *
+ * The weights come from measuring, not from taste: reading the prices off
+ * disk is about 75% of the time on a real collection, filling gaps is under
+ * 1%, and valuing date by date is about 4%. The rest is setup before the
+ * first callback, which is why reading starts at 0.15 rather than 0 — a bar
+ * that sat at nothing for the first fifth of the wait would read as broken.
+ */
+function viewFraction({ phase, fraction }: ValuationProgress): number {
+  if (phase === "reading") return 0.15 + fraction * 0.7;
+  if (phase === "filling") return 0.85 + fraction * 0.05;
+  return 0.9 + fraction * 0.1;
+}
+
+const MONTHS = [
+  "January", "February", "March", "April", "May", "June",
+  "July", "August", "September", "October", "November", "December",
+];
+
+/**
+ * What to tell the reader.
+ *
+ * The month is only available while valuing, which is the last few percent:
+ * the long phase reads prices in storage order, by printing rather than by
+ * date, because ordering that read by date turns 228ms into 114 seconds. So
+ * the honest label for the long phase is what it is actually doing.
+ */
+function describe({ phase, date }: ValuationProgress): string {
+  if (phase === "reading") return "Reading five years of prices";
+  if (phase === "filling") return "Filling gaps in the history";
+  if (!date) return "Valuing your collection";
+  const [year, month] = date.split("-");
+  return `Valuing ${MONTHS[Number(month) - 1]} ${year}`;
 }

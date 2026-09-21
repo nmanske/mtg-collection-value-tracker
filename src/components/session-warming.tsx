@@ -1,57 +1,72 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 
 /**
  * The wait while an uploaded collection is priced.
  *
  * The work happens in a child process, so this page is genuinely idle: it asks
- * the server again every second and a half, and the server answers instantly
- * because it is not the thing doing the work. That is the whole point of the
- * rearrangement — the wait is now one visitor's, not everybody's.
+ * the server again every second and the server answers instantly, because it
+ * is not the thing doing the work. That is the point of the whole arrangement
+ * — the wait is one visitor's now, not everybody's.
  *
- * `router.refresh()` rather than a full reload, so the poll costs an RSC
- * payload instead of a document, and so the page does not flash.
+ * The bar is fed by the worker, which writes its progress to the session row
+ * as it goes. What it says is what is happening: reading prices for most of
+ * the time, then a sweep through the months at the end. Those proportions are
+ * not a design choice — see `viewFraction`, where they come from measurement.
  */
 export function SessionWarming({
   label,
   holdings,
+  percent,
+  step,
 }: {
   label: string;
   holdings: number;
+  percent: number;
+  step: string | null;
 }) {
   const router = useRouter();
-  const [seconds, setSeconds] = useState(0);
 
   useEffect(() => {
-    const poll = setInterval(() => router.refresh(), 1_500);
-    const clock = setInterval(() => setSeconds((n) => n + 1), 1_000);
-    return () => {
-      clearInterval(poll);
-      clearInterval(clock);
-    };
+    const poll = setInterval(() => router.refresh(), 1_000);
+    return () => clearInterval(poll);
   }, [router]);
 
   return (
     <main className="page-shell py-16">
-      <div className="mx-auto max-w-lg text-center">
-        <div
-          aria-hidden
-          className="mx-auto mb-6 h-8 w-8 animate-spin rounded-full border-2 border-neutral-300 border-t-neutral-900 dark:border-neutral-700 dark:border-t-neutral-100"
-        />
+      <div className="mx-auto max-w-md">
         <h1 className="text-xl font-medium">Pricing {label}</h1>
-        <p
-          className="mt-2 text-sm text-neutral-600 dark:text-neutral-400"
-          role="status"
-          aria-live="polite"
-        >
-          Valuing {holdings.toLocaleString()} holding
-          {holdings === 1 ? "" : "s"} against five years of daily prices.
-          {seconds > 20
-            ? " A large collection takes up to a minute."
-            : " This usually takes a few seconds."}
+        <p className="mt-1 text-sm text-neutral-600 dark:text-neutral-400">
+          {holdings.toLocaleString()} holding{holdings === 1 ? "" : "s"}
         </p>
+
+        <div
+          className="mt-6 h-2 w-full overflow-hidden rounded-full bg-neutral-200 dark:bg-neutral-800"
+          role="progressbar"
+          aria-valuenow={percent}
+          aria-valuemin={0}
+          aria-valuemax={100}
+          aria-label="Pricing progress"
+        >
+          {/* Transitioned over the poll interval, so the bar glides between
+              updates rather than stepping once a second. */}
+          <div
+            className="h-full rounded-full bg-neutral-900 transition-[width] duration-1000 ease-linear dark:bg-neutral-100"
+            style={{ width: `${Math.max(2, percent)}%` }}
+          />
+        </div>
+
+        <div className="mt-2 flex items-baseline justify-between gap-4 text-sm">
+          <span className="text-neutral-600 dark:text-neutral-400" aria-live="polite">
+            {step ?? "Starting"}
+          </span>
+          <span className="tabular-nums text-neutral-600 dark:text-neutral-400">
+            {percent}%
+          </span>
+        </div>
+
         <p className="mt-6 text-xs text-neutral-600 dark:text-neutral-400">
           This page updates itself; there is no need to reload.
         </p>

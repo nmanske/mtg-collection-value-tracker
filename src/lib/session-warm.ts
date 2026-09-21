@@ -4,7 +4,8 @@ import { spawn } from "node:child_process";
  * Prices an uploaded collection out of process.
  *
  * Measured against the real database: 7.4 seconds for 4,000 distinct
- * printings, 39 seconds at the upload limit. better-sqlite3 is synchronous, so
+ * printings, and about two minutes at the upload limit. better-sqlite3 is
+ * synchronous, so
  * every one of those seconds inside a request is a second in which the server
  * answers nobody — not the uploader, not the twenty people reading card pages.
  * On a public URL that is also a denial of service anyone can perform with a
@@ -18,8 +19,16 @@ import { spawn } from "node:child_process";
 /** How the worker is launched. The image overrides this; see docker-compose. */
 const DEFAULT_COMMAND = "npm run warm:session --";
 
-/** A collection at the size limit takes ~39s; this is for one that wedges. */
-const TIMEOUT_MS = 5 * 60 * 1000;
+/**
+ * For a worker that has wedged, not for one that is merely large.
+ *
+ * A collection at the size limit takes about two minutes here, and the box
+ * this runs on is slower than the one that was measured — it also transcodes
+ * video. Five minutes would have killed legitimate uploads on hardware a
+ * couple of times slower, which is the kind of limit that looks fine until
+ * somebody with a real collection tries it.
+ */
+const TIMEOUT_MS = 15 * 60 * 1000;
 
 /**
  * How many may run at once.

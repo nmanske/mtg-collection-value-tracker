@@ -109,7 +109,12 @@ export default async function CollectionPage(props: PageProps<"/">) {
     if (session.warmState === "failed") return <SessionFailed session={session} />;
     requestSessionWarm(session.id);
     return (
-      <SessionWarming label={session.label} holdings={session.matched} />
+      <SessionWarming
+        label={session.label}
+        holdings={session.matched}
+        percent={session.warmProgress}
+        step={session.warmStep}
+      />
     );
   }
 
