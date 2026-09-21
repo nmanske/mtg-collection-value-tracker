@@ -393,23 +393,20 @@ the file ever moves to the NAS, this arrangement stops being safe — not slower
 *unsafe*, with corruption as the failure mode. Both containers must also run on
 the same host.
 
-```yaml
-# docker-compose.override.yml — untracked, merged automatically
-services:
-  app:                      # the personal site, as before
-    environment:
-      ENABLE_OWNER_IMPORT: "true"
-      PRIVACY_PASSWORD: "pass"
-      ALLOW_INSECURE_COOKIE: "true"
-      CRON_ENABLED: "true"  # this one does the ingesting
+Both services are in the tracked compose file. The public one sits behind a
+profile, so a plain `docker compose up -d` still means exactly what it did
+before.
 
-  public:
-    extends: app
-    ports: ["3011:3000"]
-    environment:
-      PUBLIC_MODE: "true"   # your collection is invisible here
-      CRON_ENABLED: "false" # exactly one instance ingests
+```bash
+docker compose up -d                    # personal site only, on PORT
+docker compose --profile public up -d   # both
+docker compose up -d public             # public site only
+docker compose down --remove-orphans    # both, whatever is running
 ```
+
+Ports come from `.env`: `PORT` for the personal site (3010 here) and
+`PUBLIC_PORT` for the public one (3011 by default). Only the public one needs
+to be reachable from outside.
 
 Three rules make this work, and each one is a real failure if broken:
 
@@ -422,6 +419,15 @@ Three rules make this work, and each one is a real failure if broken:
 3. **`PUBLIC_MODE=true` is what hides your collection**, and it also forces
    `ENABLE_OWNER_IMPORT` off whatever else is set. Without it, an empty owner
    collection is what triggers the upload page — and yours is not empty.
+
+All three are set by the compose file itself rather than left to `.env`, so
+the two services cannot be misconfigured into agreeing with each other.
+
+**Do not run the two as separate compose projects.** They will fight over the
+port, `docker compose down` in one directory will not stop the other, and
+nothing warns you: the symptom is `Bind for 0.0.0.0:3010 failed: port is
+already allocated` while `docker ps` shows a healthy container you thought you
+had stopped. `docker compose ls -a` lists every project if you suspect this.
 
 Writes from the two processes are serialised by SQLite. In WAL mode readers
 never block, so the public site's pages are unaffected by an ingest in

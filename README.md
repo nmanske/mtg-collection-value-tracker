@@ -123,8 +123,17 @@ Three things to know:
   is deliberately not behind that flag.
 
 `.env` is loaded by `next start` as well, so anything set there applies to both.
-For the real deployment these are compose environments rather than shell
-variables — see [DEPLOYMENT.md](DEPLOYMENT.md) §9.
+
+Under Docker the two are services in one project, and the public one is behind
+a profile so the default command is unchanged:
+
+```bash
+docker compose up -d                    # personal site, on PORT
+docker compose --profile public up -d   # both
+docker compose up -d public             # public site only, on PUBLIC_PORT
+```
+
+See [DEPLOYMENT.md](DEPLOYMENT.md) §9 for why only one of them ingests.
 
 ### Data pipeline
 

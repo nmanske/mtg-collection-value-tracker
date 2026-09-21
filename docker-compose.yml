@@ -1,57 +1,115 @@
+# Two sites, one database.
+#
+#   docker compose up -d                     # the personal site, on PORT
+#   docker compose --profile public up -d    # both
+#   docker compose up -d public              # the public site only
+#
+# `app` shows the host's own collection; `public` hides it and only ever shows
+# collections a visitor uploaded. They share the image, the bind mount and the
+# SQLite file, because the 568 million price rows they read are identical and a
+# second copy would have to be kept in step. See DEPLOYMENT.md §9.
+#
+# `public` sits behind a profile so that a plain `docker compose up -d` still
+# means what it always did, and so an instance can never acquire a second
+# public-facing port by surprise.
+
+# Everything that is the same either way. YAML anchors rather than `extends`,
+# so the two services cannot drift apart when one is edited.
+x-app: &app
+  build: .
+  image: mtg-collection-value-tracker
+  restart: unless-stopped
+  volumes:
+    # A bind mount rather than a named volume: the whole point of SQLite here
+    # is that backing up the collection is copying one file, which is a lot
+    # easier when you can see it.
+    #
+    # Linux hosts only, in practice. SQLite depends on POSIX advisory locking,
+    # and a bind mount from a Windows or macOS host crosses a filesystem
+    # translation layer where that is emulated rather than native — slow for a
+    # 25 GB database, and not something to trust a WAL to. Develop on the host
+    # with `npm run dev` and run the container where the data actually lives;
+    # if you must run it on a desktop, use a named volume instead.
+    #
+    # Both services mount the same directory. That is the arrangement, not an
+    # oversight: one database, two views of it.
+    #
+    # DATA_DIR keeps the host path out of this tracked file, so a deployment
+    # that stores its database somewhere else does not have to edit compose
+    # and then resolve a conflict on every `git pull`. Set it in .env.
+    - ${DATA_DIR:-./data}:/app/data
+  healthcheck:
+    test:
+      [
+        "CMD",
+        "node",
+        "-e",
+        "fetch('http://127.0.0.1:3000/').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+      ]
+    interval: 1m
+    timeout: 10s
+    # The first run downloads and ingests ~108,000 printings, which takes a
+    # couple of minutes; do not report unhealthy while that is happening.
+    start_period: 5m
+    retries: 3
+
+x-env: &env
+  # The SQLite file. Keep it inside the mounted volume or the collection is
+  # lost when the container is replaced.
+  DATABASE_PATH: /app/data/mtg.db
+  CRON_SCHEDULE: "${CRON_SCHEDULE:-0 10 * * *}"
+  CRON_TIMEZONE: "${CRON_TIMEZONE:-UTC}"
+  # How the price ingest is launched. The image sets a working default;
+  # override to point at a different runtime, or set it empty to skip
+  # prices here and run `ingest:today` from outside the container.
+  INGEST_COMMAND: "${INGEST_COMMAND:-node_modules/.bin/tsx scripts/ingest-today.mts --rebuild-cache}"
+  # Kills a wedged ingest rather than letting it hold the write lock until
+  # the next day's run collides with it.
+  INGEST_TIMEOUT_MS: "${INGEST_TIMEOUT_MS:-1800000}"
+  # Two processes write to one file now, so a write waits out another
+  # process's write rather than failing. See src/db/client.ts.
+  SQLITE_BUSY_TIMEOUT_MS: "${SQLITE_BUSY_TIMEOUT_MS:-30000}"
+
 services:
+  # The personal site: your own collection, on your own network.
   app:
-    build: .
-    image: mtg-collection-value-tracker
-    restart: unless-stopped
+    <<: *app
     ports:
       - "${PORT:-3000}:3000"
     environment:
-      # The SQLite file. Keep it inside the mounted volume or the collection is
-      # lost when the container is replaced.
-      DATABASE_PATH: /app/data/mtg.db
+      <<: *env
       # Daily refresh: Scryfall metadata, then MTGJSON prices. 10:00 UTC is
       # overnight across the Americas, so the ingest has the write lock to
       # itself, and it sits just under an hour after Scryfall's ~09:05 UTC
       # build. UTC rather than a local zone, so that gap does not move with
       # daylight saving. MTGJSON's build time varies, and a run arriving before
       # it finds the same version and skips.
+      #
+      # This is the instance that ingests. Exactly one may.
       CRON_ENABLED: "true"
-      CRON_SCHEDULE: "${CRON_SCHEDULE:-0 10 * * *}"
-      CRON_TIMEZONE: "${CRON_TIMEZONE:-UTC}"
-      # How the price ingest is launched. The image sets a working default;
-      # override to point at a different runtime, or set it empty to skip
-      # prices here and run `ingest:today` from outside the container.
-      INGEST_COMMAND: "${INGEST_COMMAND:-node_modules/.bin/tsx scripts/ingest-today.mts --rebuild-cache}"
-      # Kills a wedged ingest rather than letting it hold the write lock until
-      # the next day's run collides with it.
-      INGEST_TIMEOUT_MS: "${INGEST_TIMEOUT_MS:-1800000}"
-    volumes:
-      # A bind mount rather than a named volume: the whole point of SQLite here
-      # is that backing up the collection is copying one file, which is a lot
-      # easier when you can see it.
+      # Passed through from .env rather than defaulted here. Both are
+      # default-closed in the code, and a tracked file that quietly opens the
+      # importer would defeat that. DEPLOYMENT.md §5 says which to set.
+      ENABLE_OWNER_IMPORT: "${ENABLE_OWNER_IMPORT:-}"
+      PRIVACY_PASSWORD: "${PRIVACY_PASSWORD:-}"
+      ALLOW_INSECURE_COOKIE: "${ALLOW_INSECURE_COOKIE:-}"
+
+  # The public site: uploads only, and the host's collection is invisible.
+  public:
+    <<: *app
+    profiles: ["public"]
+    ports:
+      - "${PUBLIC_PORT:-3011}:3000"
+    environment:
+      <<: *env
+      # Not a display filter: the host's collection is never resolved as a
+      # scope here, so no page has a view of it to leak. It also forces
+      # ENABLE_OWNER_IMPORT off whatever else is set.
+      PUBLIC_MODE: "true"
+      # `app` does the ingesting. Two daily jobs would parse the same 50 MB
+      # file twice and fight over the write lock for no benefit.
       #
-      # Linux hosts only, in practice. SQLite depends on POSIX advisory locking,
-      # and a bind mount from a Windows or macOS host crosses a filesystem
-      # translation layer where that is emulated rather than native — slow for a
-      # 25 GB database, and not something to trust a WAL to. Develop on the host
-      # with `npm run dev` and run the container where the data actually lives;
-      # if you must run it on a desktop, use a named volume instead.
-      #
-      # DATA_DIR keeps the host path out of this tracked file, so a deployment
-      # that stores its database somewhere else does not have to edit compose
-      # and then resolve a conflict on every `git pull`. Set it in .env.
-      - ${DATA_DIR:-./data}:/app/data
-    healthcheck:
-      test:
-        [
-          "CMD",
-          "node",
-          "-e",
-          "fetch('http://127.0.0.1:3000/').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
-        ]
-      interval: 1m
-      timeout: 10s
-      # The first run downloads and ingests ~108,000 printings, which takes a
-      # couple of minutes; do not report unhealthy while that is happening.
-      start_period: 5m
-      retries: 3
+      # The session sweep still runs here, because it is deliberately not
+      # behind this flag: an instance that accepts uploads expires them itself
+      # rather than depending on its neighbour being up.
+      CRON_ENABLED: "false"
