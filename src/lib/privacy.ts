@@ -43,5 +43,31 @@ export function privacyConfig(): PrivacyConfig {
  * owns the database.
  */
 export function ownerImportEnabled(): boolean {
+  // Public mode wins. Two instances share one database and one .env is easy
+  // to copy between them; if both flags are ever set at once, the safe reading
+  // of that contradiction is the one that does not hand the internet a button
+  // for overwriting the host's cards.
+  if (publicMode()) return false;
   return process.env.ENABLE_OWNER_IMPORT === "true";
+}
+
+/**
+ * Whether this instance has a collection of its own at all.
+ *
+ * One database can serve two sites: a personal one on the LAN that shows the
+ * host's collection, and a public one on the internet that must never show it.
+ * The price tables are 568 million rows and identical for everybody, so
+ * copying them per site would be absurd; what differs is a single flag.
+ *
+ * With `PUBLIC_MODE=true` the host's collection is simply invisible. Not
+ * filtered out of a page — never resolved as a scope in the first place, so
+ * there is no view of it to leak through a stale cookie, a direct URL, or a
+ * page nobody remembered to check.
+ *
+ * It is also the honest way to preview the public experience locally: the
+ * front door appears because this instance genuinely has no collection, not
+ * because something was stubbed for a demo.
+ */
+export function publicMode(): boolean {
+  return process.env.PUBLIC_MODE === "true";
 }

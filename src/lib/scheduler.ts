@@ -208,22 +208,51 @@ export async function startScheduler(): Promise<void> {
 
   migrateOnStart();
 
+  const schedule = process.env.CRON_SCHEDULE ?? DEFAULT_SCHEDULE;
+  const timezone = process.env.CRON_TIMEZONE ?? DEFAULT_TIMEZONE;
+
+  const { schedule: scheduleTask, validate } = await import("node-cron");
+
+  // The sweep comes first, and deliberately does not sit behind CRON_ENABLED.
+  //
+  // Ingesting and sweeping are different jobs for different reasons. Where two
+  // instances share one database, only one of them should ingest — two daily
+  // jobs would duplicate a 50 MB parse and fight over the write lock — but
+  // *every* instance that accepts uploads has to expire them. Tying the sweep
+  // to the ingest flag would leave a public instance with CRON_ENABLED=false
+  // holding strangers' collections forever, and depending on its neighbour
+  // being up to clean them.
+  //
+  // Hourly, because the TTL is idle time and a daily sweep would turn 48 hours
+  // into up to 72. It costs one indexed read of a table capped at a couple of
+  // hundred rows.
+  try {
+    scheduleTask(SWEEP_SCHEDULE, () => sweepNow(), {
+      timezone,
+      name: "session-sweep",
+      noOverlap: true,
+    });
+    log(`scheduled session sweep at "${SWEEP_SCHEDULE}" (${timezone})`);
+  } catch (error) {
+    log(`could not schedule the session sweep: ${(error as Error).message}`);
+  }
+
+  // Once at boot too: an instance that was down over the weekend comes back
+  // holding collections whose owners left days ago.
+  sweepNow();
+
   const enabled =
     process.env.CRON_ENABLED === "true" ||
     (process.env.CRON_ENABLED !== "false" &&
       process.env.NODE_ENV === "production");
 
   if (!enabled) {
-    log("scheduler disabled (set CRON_ENABLED=true to run it)");
+    log("ingest disabled (set CRON_ENABLED=true to run it)");
     return;
   }
 
-  const schedule = process.env.CRON_SCHEDULE ?? DEFAULT_SCHEDULE;
-  const timezone = process.env.CRON_TIMEZONE ?? DEFAULT_TIMEZONE;
-
-  const { schedule: scheduleTask, validate } = await import("node-cron");
   if (!validate(schedule)) {
-    log(`invalid CRON_SCHEDULE "${schedule}"; scheduler not started`);
+    log(`invalid CRON_SCHEDULE "${schedule}"; ingest not scheduled`);
     return;
   }
 
@@ -246,25 +275,6 @@ export async function startScheduler(): Promise<void> {
     );
     return;
   }
-
-  // Uploaded collections expire on idle time, so the sweep has to run more
-  // often than once a day or a 48-hour TTL means "up to 72 hours". Hourly is
-  // cheap: it reads one indexed column on a table capped at a couple of
-  // hundred rows.
-  try {
-    scheduleTask(SWEEP_SCHEDULE, () => sweepNow(), {
-      timezone,
-      name: "session-sweep",
-      noOverlap: true,
-    });
-    log(`scheduled session sweep at "${SWEEP_SCHEDULE}" (${timezone})`);
-  } catch (error) {
-    log(`could not schedule the session sweep: ${(error as Error).message}`);
-  }
-
-  // Once at boot as well. A container that was down over the weekend comes
-  // back holding collections whose owners are long gone.
-  sweepNow();
 
   // A fresh container has no cards at all, so the app would render an empty
   // shell until the first scheduled run. Fill it immediately instead.

@@ -11,6 +11,7 @@ import {
   touchSession,
 } from "@/db/queries/sessions";
 import { OWNER, type CollectionScope } from "@/db/scope";
+import { publicMode } from "@/lib/privacy";
 import type { CollectionSession } from "@/db/schema";
 
 /**
@@ -60,10 +61,13 @@ export async function activeCollection(): Promise<ActiveCollection> {
     }
   }
 
+  // On a public instance the host's collection is not merely hidden, it is
+  // never resolved: `present` is false whatever the table holds, so no page
+  // has a scope through which it could appear.
   return {
     scope: OWNER,
     session: null,
-    present: countHoldings(db, OWNER) > 0,
+    present: !publicMode() && countHoldings(db, OWNER) > 0,
   };
 }
 

@@ -380,6 +380,60 @@ sudo mv data/backup.db /mnt/nas_headless_backup/other/mtg/mtg-$(date +%F).db
 container keeps running. It also reports fragmentation for free: if that file is
 meaningfully smaller than the live database, the difference is wasted space.
 
+## 9. Two sites, one database
+
+A personal site on the LAN and a public one on the internet can run as two
+containers over the same `mtg.db`. They differ by one flag; the 568 million
+price rows they both read are identical, and copying them per site would mean
+a second 27 GB file that has to be kept in step.
+
+**The precondition is already met here: the database is on local disk.** SQLite
+needs POSIX advisory locking, which NFS and SMB do not implement reliably. If
+the file ever moves to the NAS, this arrangement stops being safe — not slower,
+*unsafe*, with corruption as the failure mode. Both containers must also run on
+the same host.
+
+```yaml
+# docker-compose.override.yml — untracked, merged automatically
+services:
+  app:                      # the personal site, as before
+    environment:
+      ENABLE_OWNER_IMPORT: "true"
+      PRIVACY_PASSWORD: "pass"
+      ALLOW_INSECURE_COOKIE: "true"
+      CRON_ENABLED: "true"  # this one does the ingesting
+
+  public:
+    extends: app
+    ports: ["3011:3000"]
+    environment:
+      PUBLIC_MODE: "true"   # your collection is invisible here
+      CRON_ENABLED: "false" # exactly one instance ingests
+```
+
+Three rules make this work, and each one is a real failure if broken:
+
+1. **Only one instance ingests.** Two daily jobs would parse the same 50 MB
+   file twice and fight over the write lock for no benefit. `CRON_ENABLED=false`
+   on the public one.
+2. **The session sweep runs on both regardless**, because it is not behind that
+   flag. Any instance that accepts uploads expires them itself rather than
+   depending on its neighbour being up.
+3. **`PUBLIC_MODE=true` is what hides your collection**, and it also forces
+   `ENABLE_OWNER_IMPORT` off whatever else is set. Without it, an empty owner
+   collection is what triggers the upload page — and yours is not empty.
+
+Writes from the two processes are serialised by SQLite. In WAL mode readers
+never block, so the public site's pages are unaffected by an ingest in
+progress; only its *writes* — an upload, a sweep — wait, for up to
+`SQLITE_BUSY_TIMEOUT_MS` (30s by default, against an ingest that holds the lock
+for about nine seconds).
+
+On an upgrade, bring them up one at a time. Both run migrations at boot, and
+there is no reason to have two processes discover that simultaneously.
+
+---
+
 ## Troubleshooting
 
 | Symptom | Cause | Fix |

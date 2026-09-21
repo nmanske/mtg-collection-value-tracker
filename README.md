@@ -10,9 +10,11 @@ time, plus per-card price history. It runs two ways from one codebase:
   they uploaded is deleted after two days idle — or immediately, on request.
   There are no accounts.
 
-Which one you get is not a setting. A collection scope of `''` is the host's
-own; an instance whose own collection is empty shows the upload page instead of
-a dashboard of zeroes.
+Which one you get is not a setting in the usual sense: a collection scope of
+`''` is the host's own, and an instance whose own collection is empty shows the
+upload page instead of a dashboard of zeroes. `PUBLIC_MODE=true` makes that
+explicit, hiding the host's collection even where one exists — which is how one
+database serves both sites at once.
 
 ## Status
 
@@ -211,6 +213,8 @@ own holdings and a derived daily total.
 | `REBUILD_COMMAND` | `npm run cache:portfolio` | How a stale value history is rebuilt, in the background. Empty disables it |
 | `DATA_DIR` | `./data` | Host directory holding the database, bind-mounted into the container |
 | `PORT` | `3000` | Host port the container publishes |
+| `PUBLIC_MODE` | off | Hides the host's own collection, so only uploads are ever shown. Forces `ENABLE_OWNER_IMPORT` off |
+| `SQLITE_BUSY_TIMEOUT_MS` | `30000` | How long a write waits for another process's write |
 | `ENABLE_OWNER_IMPORT` | off | Allows `/import`, which **replaces the host's collection**. Set it on a self-hosted instance; never on a public one |
 | `PRIVACY_PASSWORD` | unset | Hides all values until this is typed. Unset means values show and the toggle is an ordinary hide button |
 | `SESSION_TTL_HOURS` | `48` | How long an uploaded collection survives without being looked at |
