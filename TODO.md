@@ -73,12 +73,15 @@ database: 22.4s and 1.4s. `test:cache` asserts it.
 
 **Docker: deployed 2026-09-18.** See item 7.
 
-### 3. Click a card to zoom — done
+### 3. Click a card to zoom — removed
 
-Clicking a card image on the search or card page opens it full size; Escape or
-the backdrop closes it.
+Built, then taken out once card art was large by default: the overlay was a
+modal, a focus trap, a scroll lock and a body-scroll restore in exchange for a
+slightly bigger picture. Hovering a card name shows the art instead, which
+costs none of that.
 
-`image_uri_large` is stored rather than derived. Scryfall's size variants differ
+`image_uri_large` is still stored rather than derived, and still worth it — it
+is what the card page shows at full width. Scryfall's size variants differ
 only by a path segment today, but the docs call image URIs opaque and the newer
 variants already disagree on file extension, so substitution would rely on a
 coincidence upstream never promised.
@@ -212,6 +215,21 @@ second user's worth of work rather than another full table scan.
 Not done yet: it is the most important query in the app and the deployment was
 in progress. The row counts match exactly, so the risk is low.
 
+**Related, and now the thing that caps the upload limit.** The same function
+builds one dense `Int32Array` of series x dates to value from. That is 157 MB
+at 20,000 printings and 392 MB at 50,000, which is why `MAX_SESSION_ROWS` sits
+where it does and why `WARM_CONCURRENCY` is 2 — not time, memory. Time is
+merely linear: 64s for one view at 50,000.
+
+The matrix is convenience rather than necessity. The read is already ordered by
+`(printing_key, finish, date)`, which is exactly the order needed to stream one
+series at a time, carry prices forward, and accumulate into per-date totals.
+That would drop the memory to O(dates) — a few megabytes at any collection size
+— and is likely faster as well, since it stops allocating and filling a
+98-million-cell array with poor locality. It is the change that would allow
+500,000 rows. Worth measuring before claiming the speedup; the memory result is
+arithmetic.
+
 ### 9. Serve a stale value history rather than recomputing — done
 
 Anything that changes holdings or prices invalidates the portfolio cache, and
@@ -234,6 +252,85 @@ already did, via `--rebuild-cache`.
 
 Worth knowing: the spawned child inherits `DATABASE_PATH`, so the cache tests
 set `REBUILD_COMMAND` empty — one of them was rebuilding the real database.
+
+### 10. Public site: uploaded collections — shipped
+
+`lastfmstats`-style: no accounts, nothing kept. A visitor uploads a Moxfield
+export, pastes a decklist or gives an Archidekt link, and gets the whole
+dashboard for that browser. Rows live under a session id and a sweep deletes
+them after 48 hours idle, or immediately on Forget.
+
+No mode switch. Holdings carry a scope: `''` is the host's own collection, and
+anything else is somebody's upload. An instance whose own collection is empty
+shows the front door instead of a dashboard of zeroes, and `PUBLIC_MODE=true`
+makes that explicit so one database can serve the personal site and the public
+one at once — see DEPLOYMENT.md §9.
+
+Two defaults closed on the way, both written when there was only ever one user:
+`/import` rewrites the host's collection and now needs `ENABLE_OWNER_IMPORT`,
+checked in the action rather than only on the page; and the password blur is
+configuration rather than a hard-coded constant.
+
+The measurement that shaped it: valuing a collection is synchronous, CPU-bound
+work — 8.5s for 3,868 holdings, 39s at 20,000, 64s at 50,000 — and
+better-sqlite3 blocks the event loop for every second of it. On the request
+path that was not one visitor waiting but all of them, and on a public URL a
+denial of service anyone could perform with a text file. It runs as a child
+process now; the request writes its rows and returns in 232ms.
+
+### 11. Before 3011 faces the internet
+
+Ordered by what bites first. The top two are network, not code.
+
+1. **A reverse proxy that overwrites `x-forwarded-for`.** The upload limiter
+   keys on it, and a client that can set the header itself gets a fresh bucket
+   per request — the limit becomes decoration. Caddy does this by default;
+   nginx needs `proxy_set_header X-Forwarded-For $remote_addr`, not
+   `$proxy_add_x_forwarded_for`.
+
+2. **TLS, and preferably a tunnel.** The risk of self-hosting this publicly is
+   not load, it is that the internet reaches a box on the home LAN that also
+   runs Plex and the personal collection. A Cloudflare Tunnel avoids port
+   forwarding and putting a home IP in DNS, and once HTTPS arrives the session
+   cookie tightens on its own — `isSecureRequest` reads `x-forwarded-proto`, so
+   there is nothing to configure.
+
+3. **`mem_limit` and `cpus` on the `public` service.** Two workers at the size
+   limit hold roughly 800 MB, on a box that transcodes video.
+
+4. **`error.tsx` and `not-found.tsx`.** There are none, so an unexpected throw
+   shows Next's default page.
+
+5. **Security headers.** None configured: no CSP, `X-Content-Type-Options` or
+   `Referrer-Policy`.
+
+6. **Attribution and fan content.** The footer credits MTGJSON and Scryfall.
+   Worth re-reading Scryfall's image guidance at public traffic rather than one
+   user, and deciding on the usual "not affiliated with Wizards of the Coast"
+   line.
+
+7. **`robots.txt`**, once there is a view on indexing.
+
+Items 4, 5 and 7 are code and are perhaps twenty minutes. 1, 2 and 3 are the
+network and have to be done wherever this ends up hosted.
+
+**Hosting.** Staying on the Beelink until it earns a move is the right call —
+the hardware is paid for and reads cost 11-220ms. What breaks first, in order:
+uploads queueing at `WARM_CONCURRENCY`, which degrades gracefully because the
+page keeps polling; `SESSION_LIMIT` evicting somebody's collection while they
+are reading it; then CPU contention with Plex. Worth naming a migration
+trigger now rather than at 2am. When it moves, the 27 GB database is the whole
+problem: a public instance does not need 5.7 years of both vendors' history,
+and trimming it first is what makes every cheap host viable.
+
+### 12. A Ko-fi button
+
+Somewhere unobtrusive — the landing page footer beside the attribution, and
+perhaps the dashboard footer. Nothing about the app changes; it is a link.
+
+Worth deciding first whether it appears on the personal instance too, or only
+where `PUBLIC_MODE` is set. Asking yourself for money on your own dashboard is
+odd, and the flag already exists to tell the two apart.
 
 ## Known issues
 
@@ -258,9 +355,13 @@ set `REBUILD_COMMAND` empty — one of them was rebuilding the real database.
   `source(none)` and an explicit `@source`; anything added outside `src/` must
   be listed there.
 
-- **A cold cache is still computed in the request.** Item 9 made a *stale* cache
-  serve immediately, but an empty one has nothing to serve and pays 20-35s. Only
-  happens on a first run or after the cache table is cleared.
+- **A cold cache is computed in the request that finds it.** Item 9 made a
+  *stale* cache serve immediately; an empty one has nothing to serve and pays
+  20-35s. It now asks for a background rebuild first, so only the request that
+  finds it empty pays — before that it recomputed on *every* request, forever,
+  which is how migration 0010 (it drops both cache tables) left the dashboard
+  hanging rather than merely slow. Run `cache:portfolio` after a migration that
+  clears them.
 
 ## Housekeeping
 
