@@ -29,6 +29,7 @@ import { FINISH_CODES } from "@/db/codec";
 import { FINISHES, type Finish } from "@/db/schema";
 import { FINISH_LABEL, formatUsd, printingCode } from "@/lib/format";
 import { rangeStart, resolveRange, spanInDays } from "@/lib/ranges";
+import { currentScope } from "@/lib/session";
 
 export const dynamic = "force-dynamic";
 
@@ -106,7 +107,10 @@ export default async function CardPage(props: PageProps<"/cards/[scryfallId]">) 
   const from = last ? rangeStart(range, last) : null;
   const visible = from ? points.filter((point) => point.date >= from) : points;
   const stats = priceStats(visible, Math.max(visible.length - 1, 1));
-  const owned = holdingsForPrinting(db, printing.id);
+  // Scoped: "you hold 2 of these" has to mean the collection on screen, not
+  // the host's. A card page is also reachable with no collection at all, in
+  // which case this is simply empty and the page says nothing about holdings.
+  const owned = holdingsForPrinting(db, printing.id, await currentScope());
   const quotes = vendorQuotes(db, printing.id, finish);
   const others = otherPrintings(db, printing.oracleId, printing.scryfallId);
   // Other printings are priced from `price_snapshots`, which is TCGplayer

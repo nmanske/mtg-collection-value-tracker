@@ -57,6 +57,32 @@ export default function FaqPage() {
         </Link>
       </header>
 
+      <Q id="kept" question="What happens to the file I upload?">
+        It is read, matched against card data, and held on the server for as
+        long as you are looking at it. There is no account and nothing is
+        linked to you — your browser gets an opaque id in a cookie, and the
+        collection behind it is deleted after two days idle, or the moment you
+        press <Term>Forget this collection</Term>. Nothing is shared, sold, or
+        kept.
+      </Q>
+
+      <Q id="which-printing" question="How is a plain decklist priced?">
+        A line naming a set and number — <code>1 Sol Ring (C18) 120</code> — is
+        that exact printing. A line with only a name is ambiguous, and Sol Ring
+        alone spans three orders of magnitude, so the <Term>cheapest</Term>
+        printing with a price is used: a list without set information is a list
+        of cards to acquire, and what it is worth is what it would cost.
+      </Q>
+
+      <Q id="list-value" question="Why does a pasted list have no “as held” line?">
+        Because a list says nothing about when anything was acquired. Drawing
+        one would mean pretending you bought every card the moment you pasted
+        it. What is shown instead is the same cards valued backwards through
+        time — what that list would have been worth — which is the only
+        question a list without dates can answer. A Moxfield collection export
+        does carry dates, so it gets the real line.
+      </Q>
+
       <Q id="two-lines" question="What are the two lines on the chart?">
         <Term>As held</Term> is what your collection was worth each day — it
         rises when prices rise and when you buy. <Term>Price change only</Term> values

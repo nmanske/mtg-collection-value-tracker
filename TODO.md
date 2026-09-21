@@ -270,10 +270,12 @@ set `REBUILD_COMMAND` empty — one of them was rebuilding the real database.
   worth it only if NAS space ever matters, which at 16 TB it does not.
 - **`refs/original/` still holds the pre-rewrite history** with the old work
   email. Local only, never pushed. Purge when the remote is trusted.
-- **The price blur is on by default and gated by a password.** Added
-  2026-09-18 to stop people on the LAN reading the totals over a shoulder.
-  Staying until at least late October 2026 — deliberate, not a leftover, so
-  do not revert it without being asked. `PRIVACY_PASSWORD` in `src/components/privacy-toggle.tsx` ships in
+- **The price blur is configuration now, not a hack.** It hides everything and
+  asks for a password only when `PRIVACY_PASSWORD` is set; unset, values show
+  and the toggle is an ordinary hide button. The Beelink should set
+  `PRIVACY_PASSWORD=pass` to keep the behaviour added on 2026-09-18, which is
+  wanted until at least late October 2026. A public instance sets neither that
+  nor `ENABLE_OWNER_IMPORT`. `PRIVACY_PASSWORD` in `src/components/privacy-toggle.tsx` ships in
   the client bundle and the figures are in the HTML regardless — the blur is
   CSS. It is a screen cover, not a security control. Reverting means: default
   the `PrivacyScript` check back to `=== "1"` and drop the password form.

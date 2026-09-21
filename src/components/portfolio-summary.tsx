@@ -83,6 +83,7 @@ export function PortfolioSummaryPanel({
   range: requestedRange,
   priceSource,
   staleHoldings,
+  datesKnown = true,
 }: {
   summary: PortfolioSummary;
   /** What the collection would fetch if sold, when a buylist exists. */
@@ -91,6 +92,13 @@ export function PortfolioSummaryPanel({
   priceSource: PriceVendor;
   /** Holdings this vendor last quoted too long ago to count as current. */
   staleHoldings: number;
+  /**
+   * False for a list with no acquisition dates, where the series being drawn
+   * is the fixed basket. The figures are already computed from it; this only
+   * changes what the chart is called and drops the tile that would now be a
+   * duplicate of "all time".
+   */
+  datesKnown?: boolean;
 }) {
   const last = summary.points.at(-1);
 
@@ -127,7 +135,7 @@ export function PortfolioSummaryPanel({
       <div className="mb-5 flex flex-wrap items-end justify-between gap-4">
         <div>
           <h2 id="portfolio-heading" className="text-xs text-neutral-600 dark:text-neutral-400">
-            Collection value
+            {datesKnown ? "Collection value" : "List value"}
             {summary.currentDate ? ` · ${summary.currentDate}` : ""}
           </h2>
           {/* Hero figure: the one number the dashboard leads with. */}
@@ -144,8 +152,14 @@ export function PortfolioSummaryPanel({
           <ChangeTile label="Month" change={summary.month} />
           <ChangeTile label="All time" change={summary.allTime} />
           {/* Separated by a rule: this one answers a different question from
-              the three beside it — prices only, with buying held out. */}
-          <div className="border-l border-neutral-200 pl-8 dark:border-neutral-800">
+              the three beside it — prices only, with buying held out.
+              Dropped entirely for a list with no dates, where nothing was
+              bought and it would repeat "all time" exactly. */}
+          <div
+            className={`border-l border-neutral-200 pl-8 dark:border-neutral-800 ${
+              datesKnown ? "" : "hidden"
+            }`}
+          >
             <ChangeTile
               label="Price change only"
               change={summary.marketOnly}
@@ -211,7 +225,11 @@ export function PortfolioSummaryPanel({
         />
       </div>
 
-      <PortfolioChart points={visible} buylistPoints={visibleBuylist} />
+      <PortfolioChart
+        points={visible}
+        buylistPoints={visibleBuylist}
+        valueLabel={datesKnown ? "As held" : "List value"}
+      />
 
       {/* One line of footnotes, not four paragraphs. Each states the fact and
           the consequence; the reasoning lives on /faq. */}

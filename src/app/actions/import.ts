@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { db } from "@/db";
 import { rebuildPortfolioCache } from "@/db/queries/portfolio-cache";
 import { importMoxfieldCsv, type ImportReport } from "@/import/moxfield";
+import { ownerImportEnabled } from "@/lib/privacy";
 
 export interface ImportActionResult {
   ok: boolean;
@@ -21,6 +22,17 @@ export async function importMoxfieldAction(
   _previous: ImportActionResult | null,
   formData: FormData,
 ): Promise<ImportActionResult> {
+  // The real gate. Hiding the page that calls this would not hide this: a
+  // server action is an endpoint, and one that rewrites the host's collection
+  // has to refuse on its own account rather than trust that nobody found it.
+  if (!ownerImportEnabled()) {
+    return {
+      ok: false,
+      message: "Importing into the host collection is disabled on this instance.",
+      report: null,
+    };
+  }
+
   const file = formData.get("file");
   const dryRun = formData.get("dryRun") === "on";
 

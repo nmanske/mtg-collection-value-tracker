@@ -118,7 +118,9 @@ function PortfolioChartBody({
   buylistPoints,
   width,
   plotClass,
+  valueLabel = "As held",
 }: {
+  valueLabel?: string;
   width: number;
   /** Height classes for the plot element; see ChartFrame. */
   plotClass: string;
@@ -203,7 +205,7 @@ function PortfolioChartBody({
               aria-hidden
               className="inline-block h-0.5 w-4 rounded-full bg-[var(--viz-series)]"
             />
-            <span className="text-[var(--viz-text)]">As held</span>
+            <span className="text-[var(--viz-text)]">{valueLabel}</span>
           </span>
           {hasBuylist ? (
             <span className="flex items-center gap-1.5">
@@ -400,7 +402,7 @@ function PortfolioChartBody({
                   Date
                 </th>
                 <th scope="col" className="py-1 pr-4 text-right font-medium">
-                  As held
+                  {valueLabel}
                 </th>
                 {/* The table carries every series the chart draws, or it is
                     not an alternative to it. Same label as the legend. */}
@@ -466,6 +468,8 @@ function PortfolioChartBody({
 export function PortfolioChart(props: {
   points: ValuePoint[];
   buylistPoints?: ValuePoint[];
+  /** What the value line is called. A list without dates is not "as held". */
+  valueLabel?: string;
 }) {
   return (
     <ChartFrame label="of collection value over time">

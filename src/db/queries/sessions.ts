@@ -121,13 +121,16 @@ export function sweepSessions(db: Db, now = new Date()): SweepResult {
     .map((row) => row.id);
 
   // Newest kept: an id beyond the limit is the least recently used.
+  //
+  // Ordered and sliced here rather than with LIMIT/OFFSET. Drizzle drops a
+  // limit of -1 and emits a bare OFFSET, which SQLite will not parse, and this
+  // table is capped at `SESSION_LIMIT` rows anyway — there is nothing to save.
   const overflow = db
     .select({ id: collectionSessions.id })
     .from(collectionSessions)
     .orderBy(sql`${collectionSessions.lastSeenAt} desc`)
-    .limit(-1)
-    .offset(SESSION_LIMIT)
     .all()
+    .slice(SESSION_LIMIT)
     .map((row) => row.id);
 
   const doomed = new Set([...expired, ...overflow]);

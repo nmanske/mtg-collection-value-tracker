@@ -612,6 +612,17 @@ export function portfolioSummary(
   db: Db,
   priceSource: PriceVendor = "tcgplayer",
   scope: CollectionScope = OWNER,
+  /**
+   * Whether acquisition dates are real.
+   *
+   * False for a pasted decklist, which carries no dates at all. The as-held
+   * series for one of those is zero until the moment it was pasted and then
+   * jumps to the full value — a chart of when somebody visited this site,
+   * drawn as though it were a collection's history. The fixed basket is the
+   * only honest answer available, so it becomes the series, and the caller
+   * relabels the chart to say what is being shown.
+   */
+  datesKnown = true,
 ): PortfolioSummary {
   // Through the cache: this is the dashboard's hot path, and recomputing both
   // series per request is what took 5.6 seconds over 930 dates. A stale cache
@@ -623,8 +634,8 @@ export function portfolioSummary(
     priceSource,
     scope,
   });
-  const points = held.points;
   const basketPoints = basket.points;
+  const points = datesKnown ? held.points : basketPoints;
   const last = points.at(-1);
 
   const allTime: Change =

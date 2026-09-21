@@ -12,7 +12,10 @@ import {
   CardHoverPreview,
   NAMED_CARD_PREVIEW,
 } from "@/components/card-hover-preview";
+import { LandingPage } from "@/components/landing-page";
 import { PrivacyToggle } from "@/components/privacy-toggle";
+import { privacyConfig } from "@/lib/privacy";
+import { activeCollection } from "@/lib/session";
 import { InfoTip } from "@/components/info-tip";
 import { FINISH_LABEL, formatUsd, printingCode } from "@/lib/format";
 import type { Finish } from "@/db/schema";
@@ -166,7 +169,12 @@ function SpreadList({ spreads }: { spreads: Spread[] }) {
 }
 
 export default async function StatsPage() {
-  const stats = collectionStats(db);
+  const { scope, present } = await activeCollection();
+  // Reachable directly, so it needs the same answer the dashboard gives when
+  // there is no collection to describe.
+  if (!present) return <LandingPage />;
+
+  const stats = collectionStats(db, scope);
 
   const sellRatio =
     stats.buylistRetailCents > 0
@@ -184,7 +192,7 @@ export default async function StatsPage() {
         <div className="flex flex-wrap items-center gap-4">
           {/* The preference is global, so it has to be reachable from the page
               it is hiding things on — not only from the dashboard. */}
-          <PrivacyToggle />
+          <PrivacyToggle password={privacyConfig().password} />
           <Link
             href="/faq"
             className="text-sm text-neutral-600 dark:text-neutral-400 underline-offset-4 hover:underline"

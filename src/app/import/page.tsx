@@ -1,14 +1,20 @@
 import Link from "next/link";
+import { notFound } from "next/navigation";
 
 import { InfoTip } from "@/components/info-tip";
 
 import { ImportForm } from "@/components/import-form";
+import { ownerImportEnabled } from "@/lib/privacy";
 
 export const metadata = { title: "Import collection" };
 
 export const dynamic = "force-dynamic";
 
 export default function ImportPage() {
+  // Writing to the host's collection is a host's privilege, and this app has
+  // no way to tell a host from a visitor. See `ownerImportEnabled`.
+  if (!ownerImportEnabled()) notFound();
+
   return (
     <main className="mx-auto w-full max-w-3xl px-6 py-10">
       <header className="mb-8 flex items-baseline justify-between gap-4">

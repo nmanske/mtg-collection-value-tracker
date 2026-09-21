@@ -3,7 +3,8 @@ import Link from "next/link";
 
 import { db } from "@/db";
 import { EXPORTS, EXPORT_ORDER, exportSizes } from "@/export/datasets";
-import { currentScope } from "@/lib/session";
+import { LandingPage } from "@/components/landing-page";
+import { activeCollection } from "@/lib/session";
 
 export const metadata = { title: "Export" };
 
@@ -21,7 +22,10 @@ function formatBytes(bytes: number): string {
 }
 
 export default async function ExportPage() {
-  const scope = await currentScope();
+  // Reachable directly, and an export of nothing is not a page worth showing.
+  const { scope, present } = await activeCollection();
+  if (!present) return <LandingPage />;
+
   const sizes = new Map(exportSizes(db, scope).map((row) => [row.id, row.rows]));
 
   return (

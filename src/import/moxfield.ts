@@ -1,4 +1,5 @@
 import { and, eq, sql } from "drizzle-orm";
+import { OWNER, type CollectionScope } from "@/db/scope";
 
 import {
   addHolding,
@@ -209,6 +210,16 @@ export interface ImportOptions {
    * `Last Modified` is missing or unparseable.
    */
   dateAdded?: string;
+  /**
+   * Which collection to write into. Defaults to the host's own.
+   *
+   * A session scope changes the write from a reconciliation to a plain
+   * insert: an uploaded collection is new by definition, so there is nothing
+   * to compare against, nothing to adopt, and nothing that could be deleted.
+   * The parsing above is identical, which is the reason this is an option
+   * here rather than a second importer that would drift from this one.
+   */
+  scope?: CollectionScope;
 }
 
 function tally<T>(counts: Map<string, number>, map: (raw: string) => T | null) {
@@ -278,6 +289,8 @@ export function importMoxfieldCsv(
   options: ImportOptions = {},
 ): ImportReport {
   const dryRun = options.dryRun ?? false;
+  const scope = options.scope ?? OWNER;
+  const now = new Date();
   const today = new Date().toISOString().slice(0, 10);
   const fallbackDate = options.dateAdded ?? today;
   const dateSource: DateSource | "fixed" = options.dateAdded
@@ -516,6 +529,23 @@ export function importMoxfieldCsv(
   } else {
     db.transaction(() => {
       apply();
+
+      if (scope !== OWNER) {
+        for (let i = 0; i < desired.length; i += 500) {
+          db.insert(holdings)
+            .values(
+              desired.slice(i, i + 500).map((holding) => ({
+                ...holding,
+                source: "moxfield" as const,
+                sessionId: scope,
+                createdAt: now,
+              })),
+            )
+            .run();
+        }
+        return;
+      }
+
       if (options.adopt) report.adopted = adoptHoldings(db, "moxfield");
       if (mode === "replace") {
         report.reconciled = reconcileHoldings(db, desired, "moxfield");

@@ -7,6 +7,7 @@ import { dirname } from "node:path";
 import { sql } from "drizzle-orm";
 
 import { DB_PATH, openDatabase } from "@/db/client";
+import { sweepSessions } from "@/db/queries/sessions";
 import { printings } from "@/db/schema";
 import { ingestScryfallBulk } from "@/ingest/scryfall";
 import { recordDailyRun, runDailyPriceIngest } from "@/lib/daily-ingest";
@@ -50,6 +51,9 @@ const DEFAULT_SCHEDULE = "0 10 * * *";
  * which is why the scheduling call below is guarded.
  */
 const DEFAULT_TIMEZONE = "UTC";
+
+/** Every hour, on the hour. See the note where this is scheduled. */
+const SWEEP_SCHEDULE = "0 * * * *";
 
 /**
  * Guards against double registration. Next calls `register` once per server
@@ -158,6 +162,31 @@ export async function runIngest(reason: string): Promise<void> {
  * start is not what anyone wants. Set `CRON_ENABLED=true` to override, or
  * `false` in production to run the ingest from outside the container instead.
  */
+/**
+ * Deletes uploaded collections nobody is looking at any more.
+ *
+ * Synchronous and in-process, unlike the ingest: this is a handful of indexed
+ * deletes against small tables, not a 50 MB parse, so the reason the ingest is
+ * a child process does not apply. Failures are logged and swallowed — a sweep
+ * that throws must not take the scheduler with it.
+ */
+function sweepNow(): void {
+  const sqlite = openDatabase(DB_PATH);
+  try {
+    const result = sweepSessions(drizzle(sqlite));
+    const total = result.expired + result.overflow + result.orphans;
+    if (total > 0) {
+      log(
+        `swept ${result.expired} expired, ${result.overflow} over the limit, ${result.orphans} orphaned row(s)`,
+      );
+    }
+  } catch (error) {
+    log(`session sweep failed: ${(error as Error).message}`);
+  } finally {
+    sqlite.close();
+  }
+}
+
 export async function startScheduler(): Promise<void> {
   if (globalForCron.mtgCronStarted) return;
   globalForCron.mtgCronStarted = true;
@@ -217,6 +246,25 @@ export async function startScheduler(): Promise<void> {
     );
     return;
   }
+
+  // Uploaded collections expire on idle time, so the sweep has to run more
+  // often than once a day or a 48-hour TTL means "up to 72 hours". Hourly is
+  // cheap: it reads one indexed column on a table capped at a couple of
+  // hundred rows.
+  try {
+    scheduleTask(SWEEP_SCHEDULE, () => sweepNow(), {
+      timezone,
+      name: "session-sweep",
+      noOverlap: true,
+    });
+    log(`scheduled session sweep at "${SWEEP_SCHEDULE}" (${timezone})`);
+  } catch (error) {
+    log(`could not schedule the session sweep: ${(error as Error).message}`);
+  }
+
+  // Once at boot as well. A container that was down over the weekend comes
+  // back holding collections whose owners are long gone.
+  sweepNow();
 
   // A fresh container has no cards at all, so the app would render an empty
   // shell until the first scheduled run. Fill it immediately instead.

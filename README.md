@@ -1,7 +1,18 @@
 # MTG Collection Value Tracker
 
-A free, self-hosted web app for tracking the value of a Magic: The Gathering
-collection over time, plus per-card price history.
+A free web app for tracking the value of a Magic: The Gathering collection over
+time, plus per-card price history. It runs two ways from one codebase:
+
+- **Self-hosted**, where the database holds your own collection, a daily job
+  prices it, and the dashboard is the front page.
+- **Public**, where nothing is stored: a visitor uploads a collection or pastes
+  a decklist, gets the whole dashboard for that browser session, and everything
+  they uploaded is deleted after two days idle — or immediately, on request.
+  There are no accounts.
+
+Which one you get is not a setting. A collection scope of `''` is the host's
+own; an instance whose own collection is empty shows the upload page instead of
+a dashboard of zeroes.
 
 ## Status
 
@@ -200,6 +211,15 @@ own holdings and a derived daily total.
 | `REBUILD_COMMAND` | `npm run cache:portfolio` | How a stale value history is rebuilt, in the background. Empty disables it |
 | `DATA_DIR` | `./data` | Host directory holding the database, bind-mounted into the container |
 | `PORT` | `3000` | Host port the container publishes |
+| `ENABLE_OWNER_IMPORT` | off | Allows `/import`, which **replaces the host's collection**. Set it on a self-hosted instance; never on a public one |
+| `PRIVACY_PASSWORD` | unset | Hides all values until this is typed. Unset means values show and the toggle is an ordinary hide button |
+| `SESSION_TTL_HOURS` | `48` | How long an uploaded collection survives without being looked at |
+| `SESSION_LIMIT` | `200` | How many uploaded collections are kept at once, newest first |
+| `ALLOW_INSECURE_COOKIE` | off | Keeps the session cookie usable over plain HTTP, for a LAN instance with no certificate |
+
+`ENABLE_OWNER_IMPORT` is default-closed on purpose: there is no login here, so
+that page and its action are a stranger's button for overwriting somebody
+else's collection. The CLI importer is unaffected.
 
 ## License
 

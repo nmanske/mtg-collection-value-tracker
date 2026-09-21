@@ -216,7 +216,22 @@ Edit `.env`:
 ```
 DATA_DIR=/srv/mtg/data
 PORT=3010
+
+# This instance holds your own collection, so the web importer is wanted.
+# Default-closed, because on a public instance it is a stranger's button for
+# overwriting somebody else's cards.
+ENABLE_OWNER_IMPORT=true
+
+# Hides every value until this is typed. Drop the line and values simply show.
+PRIVACY_PASSWORD=pass
+
+# The session cookie is dropped over plain HTTP without this, and a LAN
+# instance reached at http://kettlecorn:3010 has no certificate.
+ALLOW_INSECURE_COOKIE=true
 ```
+
+A **public** deployment sets none of those three: no web importer, no password
+in front of a visitor's own numbers, and a `secure` cookie behind TLS.
 
 `DATA_DIR` keeps the host path out of the tracked compose file, so `git pull`
 never conflicts. Port 3010 rather than 3000 because 3000 is heavily contested —
@@ -304,6 +319,22 @@ docker builder prune -f      # optional, reclaims build cache
 ```
 
 Migrations run automatically at startup, so a newer schema upgrades in place.
+
+**Upgrading past 0010 (uploaded collections)** needs two one-off steps:
+
+```bash
+# 1. The migration drops the portfolio cache, because both cache tables gained
+#    a column in their primary key. Rebuild it, or the first page load pays a
+#    20-35s recompute. The next daily ingest would do it anyway.
+docker compose exec app node_modules/.bin/tsx scripts/rebuild-cache.ts
+
+# 2. Set ENABLE_OWNER_IMPORT=true in .env, or /import returns 404 -- it is
+#    default-closed now. Then: docker compose up -d
+```
+
+Nothing else changes for a self-hosted instance. The host's collection is the
+rows whose scope is `''`, which is what every existing row became, and the
+dashboard is still the front page as long as that collection is not empty.
 
 ---
 

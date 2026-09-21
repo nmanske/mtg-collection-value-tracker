@@ -10,20 +10,20 @@ import { useEffect, useRef, useState } from "react";
  * vendor tabs, pagination — and forgetting one would un-hide the totals
  * mid-navigation, which is the one moment it must not.
  *
- * Hidden by default: a browser that has never been told otherwise shows
- * nothing, which is the whole point on a shared network. Revealing takes a
- * password; hiding again does not.
+ * Whether values start hidden, and whether revealing them takes a password,
+ * is decided by the server — see `privacyConfig`. A self-hosted instance on a
+ * shared network sets a password and starts hidden; a public one does neither,
+ * because the numbers belong to whoever uploaded the file a minute ago and
+ * hiding them from that person would be absurd.
  *
- * TEMPORARY. The password below is in the client bundle and the figures are
- * in the HTML either way — the blur is CSS. This stops someone reading the
- * screen, not someone reading the page source, and is not a security control.
+ * Where a password is set, it reaches the browser in order to be checked
+ * there, and the figures are in the HTML either way — the blur is CSS. This
+ * covers a screen from the person walking past it. It is not a security
+ * control and must not be mistaken for one.
  */
 
 export const PRIVACY_KEY = "mtg:hide-money";
 export const PRIVACY_CLASS = "hide-money";
-
-/** What the reveal prompt accepts. See the warning above. */
-const PRIVACY_PASSWORD = "pass";
 
 function setHidden(hidden: boolean, button?: HTMLButtonElement | null) {
   document.documentElement.classList.toggle(PRIVACY_CLASS, hidden);
@@ -38,7 +38,7 @@ function setHidden(hidden: boolean, button?: HTMLButtonElement | null) {
   }
 }
 
-export function PrivacyToggle() {
+export function PrivacyToggle({ password }: { password?: string | null }) {
   // Whether the password field is open, not whether values are hidden — that
   // stays on the class, so the label needs no hydration and cannot flicker.
   const [asking, setAsking] = useState(false);
@@ -59,10 +59,15 @@ export function PrivacyToggle() {
           const hiding = document.documentElement.classList.contains(
             PRIVACY_CLASS,
           );
-          // Hiding is free. Only revealing is gated.
+          // Hiding is free. Only revealing is gated, and only where a
+          // password exists to gate it with.
           if (!hiding) {
             setHidden(true, buttonRef.current);
             setAsking(false);
+            return;
+          }
+          if (!password) {
+            setHidden(false, buttonRef.current);
             return;
           }
           setWrong(false);
@@ -76,12 +81,12 @@ export function PrivacyToggle() {
         <span className="when-hiding">Show values</span>
       </button>
 
-      {asking ? (
+      {asking && password ? (
         <form
           onSubmit={(event) => {
             event.preventDefault();
             const entered = inputRef.current?.value ?? "";
-            if (entered !== PRIVACY_PASSWORD) {
+            if (entered !== password) {
               setWrong(true);
               inputRef.current?.select();
               return;
@@ -129,14 +134,26 @@ export function PrivacyToggle() {
  * Without this the page renders with the totals visible and hides them a frame
  * later, which defeats the point. Inlined in `<head>` and deliberately tiny.
  *
- * Hides unless this browser has been told not to, so a machine that has never
- * entered the password never shows a figure at all.
+ * `defaultHidden` decides what happens for a browser that has expressed no
+ * preference. Where it is set, a machine that has never entered the password
+ * never shows a figure at all — including when storage throws, which is the
+ * safe direction for a host who asked for this.
  */
-export function PrivacyScript() {
+export function PrivacyScript({
+  defaultHidden = false,
+}: {
+  defaultHidden?: boolean;
+}) {
+  const key = JSON.stringify(PRIVACY_KEY);
+  const cls = JSON.stringify(PRIVACY_CLASS);
+  const add = `document.documentElement.classList.add(${cls})`;
+
   return (
     <script
       dangerouslySetInnerHTML={{
-        __html: `try{if(localStorage.getItem(${JSON.stringify(PRIVACY_KEY)})!=="0"){document.documentElement.classList.add(${JSON.stringify(PRIVACY_CLASS)})}}catch(e){document.documentElement.classList.add(${JSON.stringify(PRIVACY_CLASS)})}`,
+        __html: defaultHidden
+          ? `try{if(localStorage.getItem(${key})!=="0"){${add}}}catch(e){${add}}`
+          : `try{if(localStorage.getItem(${key})==="1"){${add}}}catch(e){}`,
       }}
     />
   );

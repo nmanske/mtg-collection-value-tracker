@@ -10,7 +10,11 @@ import {
   CardHoverPreview,
   NAMED_CARD_PREVIEW,
 } from "@/components/card-hover-preview";
+import { LandingPage } from "@/components/landing-page";
+import { SessionBanner } from "@/components/session-banner";
+import { activeCollection } from "@/lib/session";
 import { PrivacyToggle } from "@/components/privacy-toggle";
+import { ownerImportEnabled, privacyConfig } from "@/lib/privacy";
 import {
   collectionHref,
   nextDir,
@@ -87,6 +91,14 @@ function SortHeader({
 }
 
 export default async function CollectionPage(props: PageProps<"/">) {
+  // Which collection this browser is looking at: an uploaded one, the host's
+  // own, or none at all. `present` is what decides between the dashboard and
+  // the front door — a public instance has no host collection, so a visitor
+  // who has not uploaded anything gets the front door rather than a page of
+  // zeroes.
+  const { scope, session, present } = await activeCollection();
+  if (!present) return <LandingPage />;
+
   // searchParams is a Promise in Next 16.
   const { page, range, prices, sort, dir, filter, q } = await props.searchParams;
   const priceSource: PriceVendor =
@@ -117,16 +129,20 @@ export default async function CollectionPage(props: PageProps<"/">) {
     // The table follows the vendor toggle, as the chart above it does.
     vendor: priceSource,
     buylist: priceSource === "cardkingdom",
+    scope,
   });
   const showBuylist = priceSource === "cardkingdom";
-  const summary = portfolioSummary(db, priceSource);
+  // A pasted list has no acquisition dates, so there is no honest as-held
+  // series for one: the fixed basket is what gets drawn and labelled.
+  const datesKnown = !session || session.source === "csv";
+  const summary = portfolioSummary(db, priceSource, scope, datesKnown);
   // Card Kingdom is the only vendor here that publishes a buy price, so the
   // "if sold today" line exists on their view and nowhere else.
   const buylistPoints =
     priceSource === "cardkingdom"
-      ? cachedPortfolioSeries(db, { buylist: true }).points
+      ? cachedPortfolioSeries(db, { buylist: true, scope }).points
       : undefined;
-  const vendorTotals = collectionByVendor(db);
+  const vendorTotals = collectionByVendor(db, scope);
   const freshness = priceFreshness(db);
 
   return (
@@ -134,6 +150,9 @@ export default async function CollectionPage(props: PageProps<"/">) {
       {/* Above the header: if prices have stopped arriving, that outranks
           every number on the page, because every number is derived from them. */}
       <PriceFreshnessBanner freshness={freshness} />
+
+      {/* Whose collection this is, when it is not the host's own. */}
+      {session ? <SessionBanner session={session} /> : null}
 
       <header className="mb-8 flex flex-wrap items-baseline justify-between gap-4">
         <div>
@@ -154,7 +173,7 @@ export default async function CollectionPage(props: PageProps<"/">) {
           >
             How it works
           </Link>
-          <PrivacyToggle />
+          <PrivacyToggle password={privacyConfig().password} />
           <Link
             href="/search"
             className="rounded-md border border-neutral-300 px-4 py-2 text-sm font-medium hover:bg-neutral-50 dark:border-neutral-700 dark:hover:bg-neutral-900"
@@ -176,17 +195,21 @@ export default async function CollectionPage(props: PageProps<"/">) {
           >
             Export
           </Link>
-          <Link
-            href="/import"
-            className="rounded-md border border-neutral-300 px-4 py-2 text-sm font-medium hover:bg-neutral-50 dark:border-neutral-700 dark:hover:bg-neutral-900"
-          >
-            Import CSV
-          </Link>
+          {/* Only where that page exists to be linked to. */}
+          {ownerImportEnabled() ? (
+            <Link
+              href="/import"
+              className="rounded-md border border-neutral-300 px-4 py-2 text-sm font-medium hover:bg-neutral-50 dark:border-neutral-700 dark:hover:bg-neutral-900"
+            >
+              Import CSV
+            </Link>
+          ) : null}
         </div>
       </header>
 
       <PortfolioSummaryPanel
         summary={summary}
+        datesKnown={datesKnown}
         buylistPoints={buylistPoints}
         range={typeof range === "string" ? range : undefined}
         priceSource={priceSource}
@@ -225,11 +248,16 @@ export default async function CollectionPage(props: PageProps<"/">) {
             Nothing here yet.{" "}
             <Link href="/search" className="underline underline-offset-4">
               Search for a card
-            </Link>{" "}
-            or{" "}
-            <Link href="/import" className="underline underline-offset-4">
-              import a Moxfield CSV
             </Link>
+            {ownerImportEnabled() ? (
+              <>
+                {" "}
+                or{" "}
+                <Link href="/import" className="underline underline-offset-4">
+                  import a Moxfield CSV
+                </Link>
+              </>
+            ) : null}
             .
           </p>
         </div>
